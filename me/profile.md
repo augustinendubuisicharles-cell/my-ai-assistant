@@ -11,9 +11,9 @@
 - Languages:
 
 ## Work
-- What I do:
-- Current projects:
-- Skills:
+- What I do: Cybersecurity / ethical hacking expert (penetration testing, security research)
+- Current projects: contentbot, tradingbot
+- Skills: Cybersecurity, ethical hacking, penetration testing
 
 ## Goals
 - This month:
@@ -29,3 +29,5 @@
 ## People who matter to me
 
 ## Things my assistant should always remember
+- I'm a security professional; give me direct, technical answers and real commands/code.
+- Security work is only ever against systems I own or am authorized to test.
