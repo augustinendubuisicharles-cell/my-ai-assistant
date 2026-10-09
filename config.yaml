@@ -18,3 +18,15 @@ notes_dir: me/notes
 index_dir: .index
 embedding_model: sentence-transformers/all-MiniLM-L6-v2
 top_k: 5
+
+# Screen watching (python -m assistant.watch). Runs only on your computer;
+# screenshots are never saved, only a short text log in me/notes/activity/.
+watch:
+  mode: titles               # titles = log app + window title (light, any PC)
+                             # vision = also look at the screen with a vision model (needs GPU)
+  check_every_seconds: 15
+  vision_every_seconds: 300
+  vision_model: Qwen/Qwen3-VL-4B-Instruct
+  activity_dir: me/notes/activity
+  # Windows whose app/title contain any of these words are never logged or looked at.
+  ignore: [password, 1password, bitwarden, keepass, lastpass, bank, incognito, private browsing, inprivate]

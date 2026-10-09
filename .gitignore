@@ -4,3 +4,5 @@ outputs/
 __pycache__/
 *.pyc
 .venv/
+me/notes/activity/
+me/.watch-paused

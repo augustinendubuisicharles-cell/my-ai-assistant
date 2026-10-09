@@ -48,6 +48,7 @@ In chat:
 |---|---|
 | `/read report.pdf` | Reads a PDF, Word doc (.docx), text/code file or web page and explains it simply |
 | `/read https://example.com/article what does this mean for my trading?` | Add a question after the file or link to ask something specific |
+| `/today` | Recap of what you did on your computer today (needs screen watching, below) |
 | `/remember I prefer short answers` | Saves a new fact about you |
 | `/reindex` | Re-reads `me/` after you edit files |
 | `/reset`, `/quit` | Clear the conversation, exit |
@@ -55,7 +56,22 @@ In chat:
 After `/read`, keep asking follow-up questions about the document in normal chat.
 Scanned PDFs (photos of pages) have no text to read, so they won't work yet.
 
-## 5. Training (fine-tuning)
+## 5. Screen watching (optional)
+
+Let the assistant see what you do each day so it can recap your day, notice where your time goes, and answer things like "what was that site I was on this morning?".
+
+```bash
+python -m assistant.watch          # leave running in its own terminal; Ctrl+C to stop
+python -m assistant.watch pause    # pause any time (e.g. private stuff), then: resume
+```
+
+- **titles mode (default):** logs which app and window you're on and for how long, e.g. `- 14:05 [chrome] TradingView BTCUSD (25 min)`. Very light, works on any PC.
+- **vision mode:** set `watch.mode: vision` in `config.yaml`. Every 5 minutes it also looks at a screenshot with a local vision model (Qwen3-VL-4B) and writes one sentence about what you're doing. Needs an NVIDIA GPU with ~10GB free.
+
+Privacy: everything stays on your computer. Screenshots are never saved, only the text log in `me/notes/activity/`, which is also kept out of git. Password managers, banking and private-browsing windows are skipped; add your own words to `watch.ignore`.
+On macOS, allow your terminal under System Settings > Privacy & Security > Accessibility and Screen Recording.
+
+## 6. Training (fine-tuning)
 
 Memory already makes the assistant *know* you. Fine-tuning changes *how it talks*: your tone, format and habits.
 

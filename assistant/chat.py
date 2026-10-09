@@ -2,6 +2,7 @@
 
 Commands:  /read <file or URL> [question]
                               read a PDF, Word doc, text file or web page and explain it
+           /today [question]  recap of what you did today (from the screen-watching log)
            /remember <fact>   save a new fact about you
            /reindex           re-read me/ after editing files
            /reset             clear the conversation
@@ -60,10 +61,27 @@ def explain(cfg: dict, memory: Memory, tok, model, arg: str) -> tuple[str, str]:
     return f"[I shared '{title}' with you] {question}", reply
 
 
+def today(cfg: dict, memory: Memory, tok, model, question: str) -> tuple[str, str]:
+    from datetime import date
+
+    path = cfg["watch"]["activity_dir"] / f"{date.today().isoformat()}.md"
+    question = question.strip() or (
+        "Give me a recap of my day: what I spent time on, roughly how long, "
+        "and one or two suggestions based on my goals."
+    )
+    if not path.exists():
+        return question, "No activity logged today. Start it with: python -m assistant.watch"
+    log = path.read_text(encoding="utf-8")[-40_000:]
+    system = build_system(cfg, memory, question)
+    user = f"Here is my computer activity log for today:\n\n{log}\n\n{question}"
+    reply = generate(tok, model, [{"role": "system", "content": system}, {"role": "user", "content": user}], cfg)
+    return f"[I shared today's activity log] {question}", reply
+
+
 def main() -> None:
     cfg = load_config()
     memory = Memory(cfg)
-    memory.load()
+    memory.build()  # picks up new notes and activity logs
     print("Loading model (first run downloads it)...")
     tok, model = load_model(cfg)
     history: list[dict] = []
@@ -83,9 +101,12 @@ def main() -> None:
         if msg == "/reindex":
             print(f"indexed {memory.build()} chunks")
             continue
-        if msg.startswith("/read "):
+        if msg.startswith("/read ") or msg.split(" ")[0] == "/today":
             try:
-                asked, reply = explain(cfg, memory, tok, model, msg[len("/read "):])
+                if msg.startswith("/read "):
+                    asked, reply = explain(cfg, memory, tok, model, msg[len("/read "):])
+                else:
+                    asked, reply = today(cfg, memory, tok, model, msg[len("/today"):])
             except Exception as e:  # bad path, network error, unreadable file
                 print(f"Couldn't read that: {e}")
                 continue
