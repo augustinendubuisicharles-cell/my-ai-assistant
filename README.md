@@ -36,35 +36,20 @@ Slow or low on RAM? Set `cpu_model_id: Qwen/Qwen3-1.7B` (~3.5 GB). Want smarter 
 
 ## 4. Chat
 
-**The app (recommended):**
-
 ```bash
 python app.py
 ```
 
-It opens in your web browser (only on your computer, at http://127.0.0.1:7860) with:
-- a chat window
-- **Explain something:** drop in a PDF / Word file or paste a link, then press *Explain it*
-- **My day:** *Recap my day*, plus Start / Pause / Resume / Stop for screen watching
-- **Remember:** type a fact and save it
-- **Voice:** press the mic, speak, press stop; it answers in text and out loud (turn off with *Read replies out loud*). Speech recognition runs locally with Whisper, so your voice never leaves your computer.
-- an **About me** tab to edit your profile and drop in notes
+It opens in your browser (only on your computer, at http://127.0.0.1:7860). By default it's
+always listening: just say **"Signal, ..."** followed by what you want, hands-free, and it
+answers out loud. (In Chrome/Edge this sends your speech to the browser's own speech-to-text
+service to turn it into text -- it never leaves your computer otherwise. Turn off "Listening"
+in the app if you'd rather not, and use the mic or keyboard in "More" instead.)
 
-**Or in the terminal:** `python -m assistant.chat`
-
-Terminal commands:
-
-| Command | What it does |
-|---|---|
-| `/read report.pdf` | Reads a PDF, Word doc (.docx), text/code file or web page and explains it simply |
-| `/read https://example.com/article what does this mean for my trading?` | Add a question after the file or link to ask something specific |
-| `/today` | Recap of what you did on your computer today (needs screen watching, below) |
-| `/remember I prefer short answers` | Saves a new fact about you |
-| `/reindex` | Re-reads `me/` after you edit files |
-| `/reset`, `/quit` | Clear the conversation, exit |
-
-After `/read`, keep asking follow-up questions about the document in normal chat.
-Scanned PDFs (photos of pages) have no text to read, so they won't work yet.
+Two switches at the top: **Listening** (always-on mic) and **Speaks** (reads replies aloud).
+Everything else -- typing, push-to-talk, explaining files/links, your day's recap, screen
+watching, remembering facts, your profile -- is tucked under **More** so the main screen stays
+just you and it talking.
 
 ## 5. Screen watching (optional)
 

@@ -1,6 +1,10 @@
 """Desktop-style app for your assistant. Opens in your web browser, runs only on your computer.
 
     python app.py
+
+By default it listens continuously and answers whenever you say its name
+("Signal, ...") -- no typing or button-pressing needed. Say "Signal" followed
+by what you want, and it replies in the chat and out loud.
 """
 import atexit
 import shutil
@@ -38,6 +42,14 @@ def history_for_model(chat: list[dict]) -> list[dict]:
     return [{"role": m["role"], "content": text_of(m["content"])} for m in chat if text_of(m["content"])]
 
 
+def send(msg: str, chat: list[dict]):
+    msg = msg.strip()
+    if not msg:
+        return "", chat
+    reply = chat_reply(cfg, memory, tok, model, history_for_model(chat), msg)
+    return "", chat + [{"role": "user", "content": msg}, {"role": "assistant", "content": reply}]
+
+
 _whisper = None
 
 
@@ -56,32 +68,13 @@ def transcribe(recording) -> str:
 
 
 def voice_send(recording, chat: list[dict]):
+    """Fallback push-to-talk mic (used if the browser can't do always-on listening)."""
     text = transcribe(recording)
     if not text:
         gr.Warning("I didn't catch that. Try again?")
         return None, chat
     _, chat = send(text, chat)
     return None, chat
-
-
-# Reads the newest reply out loud with the computer's built-in voices (stays on your device).
-SPEAK_JS = """(chat, on) => {
-  if (!on || !chat || !chat.length) return;
-  const last = chat[chat.length - 1];
-  if (last.role !== "assistant") return;
-  const c = last.content;
-  const text = typeof c === "string" ? c : (c || []).map(p => p.text || "").join(" ");
-  window.speechSynthesis.cancel();
-  window.speechSynthesis.speak(new SpeechSynthesisUtterance(text.replace(/[*#`_>]/g, "")));
-}"""
-
-
-def send(msg: str, chat: list[dict]):
-    msg = msg.strip()
-    if not msg:
-        return "", chat
-    reply = chat_reply(cfg, memory, tok, model, history_for_model(chat), msg)
-    return "", chat + [{"role": "user", "content": msg}, {"role": "assistant", "content": reply}]
 
 
 def explain_it(file, link: str, question: str, chat: list[dict]):
@@ -131,13 +124,11 @@ def add_notes(files):
 def watch_status() -> str:
     running = watcher is not None and watcher.poll() is None
     if not running:
-        return "Screen watching is **off**."
-    if PAUSE_FILE.exists():
-        return "Screen watching is **paused**."
-    return f"Screen watching is **on** ({cfg['watch']['mode']} mode)."
+        return "off"
+    return "paused" if PAUSE_FILE.exists() else "on"
 
 
-def toggle_watch(action: str) -> str:
+def toggle_watch(action: str) -> None:
     global watcher
     running = watcher is not None and watcher.poll() is None
     if action == "start" and not running:
@@ -150,56 +141,164 @@ def toggle_watch(action: str) -> str:
         PAUSE_FILE.touch()
     elif action == "resume":
         PAUSE_FILE.unlink(missing_ok=True)
-    return watch_status()
+
+
+def set_watch(choice: str) -> str:
+    """One three-way control (Off/On/Paused) instead of four separate buttons."""
+    if choice == "On":
+        toggle_watch("start" if watch_status() == "off" else "resume")
+    elif choice == "Paused":
+        if watch_status() == "off":
+            toggle_watch("start")
+        toggle_watch("pause")
+    else:
+        toggle_watch("stop")
+    return f"Screen watching: **{choice}**" + (f" ({cfg['watch']['mode']} mode)" if choice == "On" else "")
+
+
+_WATCH_LABEL = {"off": "Off", "on": "On", "paused": "Paused"}
+
+# Reads the newest reply out loud with the computer's built-in voice (stays on your device),
+# and pauses the always-listening mic while speaking so it doesn't hear itself.
+SPEAK_JS = """(chat, on) => {
+  if (!chat || !chat.length) return;
+  const last = chat[chat.length - 1];
+  if (last.role !== "assistant") return;
+  const c = last.content;
+  const text = typeof c === "string" ? c : (c || []).map(p => p.text || "").join(" ");
+  const sig = window.__signal;
+  if (sig && sig.recognition) { try { sig.recognition.stop(); } catch (e) {} }
+  if (!on) { if (sig && sig.enabled) setTimeout(() => sig.resume && sig.resume(), 200); return; }
+  window.speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(text.replace(/[*#`_>]/g, ""));
+  utter.onend = () => { if (sig && sig.enabled) setTimeout(() => sig.resume && sig.resume(), 200); };
+  window.speechSynthesis.speak(utter);
+}"""
+
+# Always-on listening: uses the browser's built-in speech recognition (continuous),
+# waits for the assistant's name, then sends whatever follows it, hands-free.
+# Note: in Chrome this sends your speech to Google to be turned into text; it never
+# leaves your computer otherwise. There's a push-to-talk mic in "More" if you'd rather not.
+WAKE_JS = (
+    """() => {
+  const NAME = "%s";
+  const statusEl = () => document.querySelector('#listen_status');
+  const setStatus = (s) => { const e = statusEl(); if (e) e.textContent = s; };
+
+  function hiddenInput(elemId) {
+    const wrap = document.querySelector('#' + elemId);
+    return wrap ? wrap.querySelector('textarea, input') : null;
+  }
+  function submitHidden(text) {
+    const inp = hiddenInput('wake_box');
+    const btn = document.querySelector('#wake_submit');
+    if (!inp || !btn) return;
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value').set;
+    setter.call(inp, text);
+    inp.dispatchEvent(new Event('input', { bubbles: true }));
+    btn.click();
+  }
+
+  const sig = window.__signal = window.__signal || { enabled: true, recognition: null };
+
+  function start() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) { setStatus('Always-on listening needs Chrome or Edge. Use the mic in "More" instead.'); return; }
+    const r = new SR();
+    sig.recognition = r;
+    r.continuous = true;
+    r.interimResults = true;
+    r.lang = 'en-US';
+    r.onresult = (e) => {
+      let finalText = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        if (e.results[i].isFinal) finalText += e.results[i][0].transcript;
+      }
+      if (!finalText) return;
+      const idx = finalText.toLowerCase().indexOf(NAME);
+      if (idx === -1) return;
+      const said = finalText.slice(idx + NAME.length).replace(/^[,:\\s]+/, '').trim();
+      if (!said) { setStatus('Yes?'); return; }
+      setStatus('Thinking...');
+      submitHidden(said);
+    };
+    r.onend = () => { if (sig.enabled) { try { r.start(); } catch (e) {} } };
+    r.onerror = () => {};
+    try { r.start(); setStatus('Listening for "' + NAME + '"...'); } catch (e) {}
+  }
+  sig.resume = start;
+
+  const toggle = document.querySelector('#listen_toggle input');
+  if (toggle) {
+    toggle.addEventListener('change', () => {
+      sig.enabled = toggle.checked;
+      if (sig.enabled) start();
+      else { if (sig.recognition) try { sig.recognition.stop(); } catch (e) {} setStatus('Muted'); }
+    });
+  }
+  start();
+}"""
+    % NAME.lower()
+)
 
 
 with gr.Blocks(title=NAME) as demo:
-    gr.Markdown(f"# {NAME}\nYour personal assistant. Runs privately on this computer.")
-    with gr.Tab("Chat"):
-        with gr.Row():
-            with gr.Column(scale=3):
-                chatbot = gr.Chatbot(height=520, label=NAME)
-                box = gr.Textbox(placeholder="Message " + NAME + "...", show_label=False, autofocus=True)
-                with gr.Row():
-                    send_btn = gr.Button("Send", variant="primary")
-                    clear_btn = gr.Button("New chat")
-                with gr.Row():
-                    mic = gr.Audio(sources=["microphone"], type="numpy", label="Talk to " + NAME)
-                    speak_on = gr.Checkbox(value=True, label="Read replies out loud")
-            with gr.Column(scale=2):
-                gr.Markdown("### Explain something")
-                file_in = gr.File(label="Drop a PDF, Word doc or text file",
-                                  file_types=[".pdf", ".docx", ".txt", ".md", ".csv", ".py", ".json"])
-                link_in = gr.Textbox(label="...or paste a web link")
-                q_in = gr.Textbox(label="Question (optional)", placeholder="Explain it simply")
-                explain_btn = gr.Button("Explain it")
-                gr.Markdown("### My day")
-                recap_btn = gr.Button("Recap my day")
-                status = gr.Markdown(watch_status())
-                with gr.Row():
-                    for label, action in [("Start", "start"), ("Pause", "pause"), ("Resume", "resume"), ("Stop", "stop")]:
-                        gr.Button(label, size="sm").click(lambda a=action: toggle_watch(a), None, status)
-                gr.Markdown("### Remember")
-                fact_in = gr.Textbox(show_label=False, placeholder="e.g. My exam is on 3 November")
-                remember_btn = gr.Button("Remember this")
+    gr.Markdown(f"# {NAME}")
+    with gr.Row():
+        listen_toggle = gr.Checkbox(value=True, label="Listening", elem_id="listen_toggle", scale=0, min_width=120, interactive=True)
+        speak_on = gr.Checkbox(value=True, label="Speaks", scale=0, min_width=120)
+    listen_status = gr.Markdown(f'<span id="listen_status">Just say "{NAME}" any time.</span>')
 
-        box.submit(send, [box, chatbot], [box, chatbot])
-        send_btn.click(send, [box, chatbot], [box, chatbot])
-        clear_btn.click(lambda: [], None, chatbot)
-        mic.stop_recording(voice_send, [mic, chatbot], [mic, chatbot])
-        chatbot.change(None, [chatbot, speak_on], None, js=SPEAK_JS)
-        explain_btn.click(explain_it, [file_in, link_in, q_in, chatbot], [chatbot, file_in, link_in, q_in])
-        recap_btn.click(recap, chatbot, chatbot)
-        remember_btn.click(remember, fact_in, fact_in)
-        fact_in.submit(remember, fact_in, fact_in)
+    chatbot = gr.Chatbot(height=560, label=NAME, show_label=False)
 
-    with gr.Tab("About me"):
-        gr.Markdown("Everything here is what " + NAME + " knows about you on every message.")
-        profile_box = gr.Textbox(value=load_profile, lines=28, show_label=False)
-        gr.Button("Save profile", variant="primary").click(save_profile, profile_box, None)
-        gr.Markdown("### Add notes\nJournals, project docs, saved chats: anything it should know.")
-        notes_in = gr.File(file_count="multiple", file_types=[".md", ".txt"], label="Drop .md or .txt files")
-        notes_in.upload(add_notes, notes_in, notes_in)
+    # Hidden plumbing the wake-word JS uses to hand text to Python, same as pressing Send.
+    wake_box = gr.Textbox(elem_id="wake_box", elem_classes=["hidden-io"])
+    wake_submit = gr.Button(elem_id="wake_submit", elem_classes=["hidden-io"])
+    wake_submit.click(send, [wake_box, chatbot], [wake_box, chatbot])
+
+    with gr.Accordion("More", open=False), gr.Tabs():
+        with gr.Tab("Type / push-to-talk"):
+            box = gr.Textbox(placeholder=f"Message {NAME}...", show_label=False)
+            with gr.Row():
+                send_btn = gr.Button("Send", variant="primary", size="sm")
+                clear_btn = gr.Button("New chat", size="sm")
+            mic = gr.Audio(sources=["microphone"], type="numpy", label="Or hold to talk")
+
+        with gr.Tab("Explain something"):
+            file_in = gr.File(label="Drop a PDF, Word doc or text file",
+                              file_types=[".pdf", ".docx", ".txt", ".md", ".csv", ".py", ".json"])
+            link_in = gr.Textbox(label="...or paste a web link")
+            q_in = gr.Textbox(label="Question (optional)", placeholder="Explain it simply")
+            explain_btn = gr.Button("Explain it")
+
+        with gr.Tab("My day"):
+            recap_btn = gr.Button("Recap my day")
+            gr.Markdown("**Screen watching** (keeps a private log of what you do, see README)")
+            watch_radio = gr.Radio(["Off", "On", "Paused"], value=_WATCH_LABEL[watch_status()], show_label=False)
+            watch_status_md = gr.Markdown("")
+
+        with gr.Tab("Remember / profile"):
+            fact_in = gr.Textbox(label="Remember something", placeholder="e.g. My exam is on 3 November")
+            remember_btn = gr.Button("Remember this")
+            gr.Markdown("---\n**Your profile** -- what " + NAME + " knows about you on every message.")
+            profile_box = gr.Textbox(value=load_profile, lines=16, show_label=False)
+            gr.Button("Save profile").click(save_profile, profile_box, None)
+            notes_in = gr.File(file_count="multiple", file_types=[".md", ".txt"],
+                               label="Add notes (.md/.txt) for it to learn from")
+            notes_in.upload(add_notes, notes_in, notes_in)
+
+    box.submit(send, [box, chatbot], [box, chatbot])
+    send_btn.click(send, [box, chatbot], [box, chatbot])
+    clear_btn.click(lambda: [], None, chatbot)
+    mic.stop_recording(voice_send, [mic, chatbot], [mic, chatbot])
+    chatbot.change(None, [chatbot, speak_on], None, js=SPEAK_JS)
+    explain_btn.click(explain_it, [file_in, link_in, q_in, chatbot], [chatbot, file_in, link_in, q_in])
+    recap_btn.click(recap, chatbot, chatbot)
+    watch_radio.change(set_watch, watch_radio, watch_status_md)
+    remember_btn.click(remember, fact_in, fact_in)
+    fact_in.submit(remember, fact_in, fact_in)
+
+    demo.load(None, None, None, js=WAKE_JS)
 
 if __name__ == "__main__":
-    demo.launch(server_name="127.0.0.1", inbrowser=True)
+    demo.launch(server_name="127.0.0.1", inbrowser=True, css=".hidden-io {display: none !important;}")
