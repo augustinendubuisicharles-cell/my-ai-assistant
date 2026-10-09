@@ -1,0 +1,74 @@
+# My AI Assistant
+
+A private, personal AI assistant that runs on an open-source model and learns about you.
+
+- **Brain:** [Qwen3-8B](https://huggingface.co/Qwen/Qwen3-8B), a top open-weight model (Apache 2.0) that fits on consumer hardware. Swap it in `config.yaml`.
+- **Memory (RAG):** everything in `me/` (your profile and notes) is indexed and the most relevant facts are fed to the model on every message. Update a file and it knows instantly, no retraining.
+- **Training (optional):** a LoRA fine-tuning script that teaches it your style and personality from example conversations.
+
+> Keep this repository **private**: `me/` holds personal information.
+> The model weights (several GB) are downloaded locally into `models/` and never committed.
+
+## 1. Install
+
+```bash
+git clone https://github.com/<you>/my-ai-assistant && cd my-ai-assistant
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+## 2. Download the model
+
+```bash
+python scripts/download_model.py                  # Qwen3-8B (~16 GB)
+python scripts/download_model.py Qwen/Qwen3-4B    # lighter (~8 GB), set model_id in config.yaml too
+```
+
+| Your hardware | Recommended model | config |
+|---|---|---|
+| NVIDIA GPU 12GB+ | Qwen/Qwen3-8B | `load_in_4bit: true` |
+| NVIDIA GPU 6-8GB | Qwen/Qwen3-4B | `load_in_4bit: true` |
+| Mac (M1-M4, 16GB+) / CPU only | Qwen/Qwen3-4B | `load_in_4bit: false` (slower) |
+
+## 3. Tell it about yourself
+
+1. Fill in `me/profile.md`.
+2. Add any notes, journals or project docs to `me/notes/`.
+3. `python scripts/build_memory.py`
+
+## 4. Chat
+
+```bash
+python -m assistant.chat
+```
+
+In chat: `/remember I prefer short answers` saves a new fact, `/reindex` re-reads `me/`, `/reset`, `/quit`.
+
+## 5. Training (fine-tuning)
+
+Memory already makes the assistant *know* you. Fine-tuning changes *how it talks*: your tone, format and habits.
+
+1. Write example conversations in `training/examples.jsonl` (one JSON per line, the reply exactly as you'd want it). 100+ examples give a noticeable effect.
+2. `python training/make_dataset.py` (adds Q&A pairs from your profile)
+3. `python training/finetune_lora.py`
+4. Set `adapter_dir: outputs/lora-adapter` in `config.yaml` and chat again.
+
+### Training: where to get a GPU
+
+Real fine-tuning needs an NVIDIA GPU. Options, cheapest first:
+
+- **Google Colab (free T4, 16GB):** enough for Qwen3-4B. Upload the repo, `pip install -r requirements.txt`, run the two training scripts, download `outputs/lora-adapter`.
+- **Colab Pro / Kaggle (free P100/T4 x2):** more hours per week.
+- **Rented GPU (RunPod, Vast.ai, Lambda):** an A10/L4/A100 for roughly $0.30-$1.50 per hour; a training run on a few hundred examples takes well under an hour for the 8B model.
+- **Your own PC** with an RTX 3090/4090 (24GB).
+
+## Layout
+
+```
+config.yaml              model + memory settings
+assistant/               chat app, memory (RAG), model loading
+scripts/                 download_model.py, build_memory.py
+me/profile.md            who you are (edit this!)
+me/notes/                anything else it should know
+training/                dataset builder + LoRA fine-tuning
+```

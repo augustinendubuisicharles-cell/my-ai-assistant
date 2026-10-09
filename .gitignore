@@ -1,0 +1,6 @@
+models/
+outputs/
+.index/
+__pycache__/
+*.pyc
+.venv/

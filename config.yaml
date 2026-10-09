@@ -1,0 +1,20 @@
+# Which open model to use. Qwen3-8B is a strong, freely licensed (Apache 2.0) model
+# that runs on a 16GB GPU, or on a smaller GPU / Apple Silicon with 4-bit loading.
+# Lighter option for laptops: Qwen/Qwen3-4B
+model_id: Qwen/Qwen3-8B
+model_dir: models/base
+
+# If you have trained a LoRA adapter (training/finetune_lora.py), point to it here.
+adapter_dir: null            # e.g. outputs/lora-adapter
+
+load_in_4bit: true           # needs an NVIDIA GPU + bitsandbytes; set false on CPU / Mac
+max_new_tokens: 768
+temperature: 0.7
+
+# Personal memory (RAG)
+assistant_name: Signal
+profile_file: me/profile.md
+notes_dir: me/notes
+index_dir: .index
+embedding_model: sentence-transformers/all-MiniLM-L6-v2
+top_k: 5
