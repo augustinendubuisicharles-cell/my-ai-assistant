@@ -2,8 +2,6 @@ torch>=2.3
 transformers>=4.57
 accelerate>=0.30
 huggingface_hub>=0.23
-# Fast CPU engine (runs the model on a normal computer, no GPU needed)
-llama-cpp-python>=0.3
 sentence-transformers>=3.0
 numpy
 pyyaml

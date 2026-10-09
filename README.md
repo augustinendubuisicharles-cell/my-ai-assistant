@@ -19,15 +19,14 @@ pip install -r requirements.txt
 
 ## 2. The model
 
-The app picks the right engine for your computer automatically (`engine: auto` in `config.yaml`):
+The app picks the right model for your computer automatically (`config.yaml`):
 
 | Your hardware | What runs | Setup |
 |---|---|---|
-| **No NVIDIA GPU** (most laptops/desktops) | A small, fast model (Qwen2.5-3B, ~2 GB) via llama.cpp | Nothing — it downloads on first run |
-| **NVIDIA GPU** | The full Qwen3-8B via transformers, 4-bit | `python scripts/download_model.py` (~16 GB) |
+| **No NVIDIA GPU** (most laptops/desktops) | `cpu_model_id`: Qwen2.5-3B-Instruct (~6 GB) | Nothing, it downloads on first run |
+| **NVIDIA GPU** | `model_id`: Qwen3-8B, 4-bit | `python scripts/download_model.py` (~16 GB) |
 
-To force one, set `engine: llama_cpp` or `engine: transformers` in `config.yaml`.
-For a better CPU model, change `gguf.repo` to `Qwen/Qwen2.5-7B-Instruct-GGUF` (~4.7 GB).
+Slow or low on RAM? Set `cpu_model_id: Qwen/Qwen3-1.7B` (~3.5 GB). Want smarter answers and have 16 GB+ RAM? Try `Qwen/Qwen3-4B`.
 
 ## 3. Tell it about yourself
 

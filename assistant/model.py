@@ -1,12 +1,11 @@
 """Loads the local open model and generates replies.
 
-Two engines:
-- llama_cpp: fast on a normal CPU, small quantized download (GGUF). Default when
-  you have no NVIDIA GPU, so the assistant runs on a regular laptop/desktop.
-- transformers: the full Hugging Face model, optional 4-bit on an NVIDIA GPU, and
-  what LoRA fine-tuning (training/) plugs into.
-
-Pick one with `engine:` in config.yaml, or leave it on `auto`.
+Engines (`engine:` in config.yaml, default `auto`):
+- transformers: Hugging Face models. With an NVIDIA GPU it loads `model_id` (4-bit);
+  without one it loads the smaller `cpu_model_id` straight into RAM. Needs no extra
+  install, and is what LoRA fine-tuning (training/) plugs into.
+- llama_cpp: optional faster CPU engine (GGUF). Needs `pip install llama-cpp-python`,
+  which has to compile on Windows, so it is never chosen automatically.
 """
 import re
 
@@ -17,15 +16,7 @@ def _strip_think(text: str) -> str:
 
 
 def _use_llama_cpp(cfg: dict) -> bool:
-    engine = cfg.get("engine", "auto")
-    if engine in ("llama_cpp", "transformers"):
-        return engine == "llama_cpp"
-    try:  # auto: use the fast CPU engine unless an NVIDIA GPU is available
-        import torch
-
-        return not torch.cuda.is_available()
-    except Exception:
-        return True
+    return cfg.get("engine", "auto") == "llama_cpp"
 
 
 def load_model(cfg: dict):
@@ -43,10 +34,14 @@ def load_model(cfg: dict):
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
 
-    src = str(cfg["model_dir"]) if cfg["model_dir"].exists() else cfg["model_id"]
+    gpu = torch.cuda.is_available()
+    if gpu:
+        src = str(cfg["model_dir"]) if cfg["model_dir"].exists() else cfg["model_id"]
+    else:  # no NVIDIA GPU: use the small model so it fits in RAM and stays quick
+        src = cfg.get("cpu_model_id", cfg["model_id"])
     tok = AutoTokenizer.from_pretrained(src)
-    kwargs = {"torch_dtype": "auto"}
-    if torch.cuda.is_available():
+    kwargs = {"torch_dtype": torch.bfloat16 if not gpu else "auto"}
+    if gpu:
         kwargs["device_map"] = "auto"
         if cfg.get("load_in_4bit"):
             from transformers import BitsAndBytesConfig
@@ -56,8 +51,6 @@ def load_model(cfg: dict):
                 bnb_4bit_quant_type="nf4",
                 bnb_4bit_compute_dtype=torch.bfloat16,
             )
-    else:  # CPU: load straight into RAM rather than spilling to disk
-        kwargs["low_cpu_mem_usage"] = True
     model = AutoModelForCausalLM.from_pretrained(src, **kwargs)
     if cfg.get("adapter_dir"):
         from peft import PeftModel
