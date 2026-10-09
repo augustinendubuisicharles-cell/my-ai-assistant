@@ -79,13 +79,14 @@ def voice_send(recording, chat: list[dict]):
     return None, chat
 
 
-def explain_it(file, link: str, question: str, chat: list[dict]):
+def explain_it(file, link: str, question: str, chat: list[dict], progress=gr.Progress()):
     src = file if file else link.strip()
     if not src:
         gr.Warning("Drop a file or paste a link first.")
         return chat, None, link, question
+    progress(0, desc="Reading...")
     try:
-        asked, reply = explain(cfg, memory, tok, model, f'"{src}" {question}')
+        asked, reply = explain(cfg, memory, tok, model, f'"{src}" {question}', progress=progress)
     except Exception as e:
         gr.Warning(f"Couldn't read that: {e}")
         return chat, file, link, question

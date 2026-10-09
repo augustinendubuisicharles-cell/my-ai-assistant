@@ -39,14 +39,22 @@ def build_system(cfg: dict, memory: Memory, user_msg: str) -> str:
     return SYSTEM.format(name=cfg["assistant_name"], profile=profile[:6000], memories=memories)
 
 
-def explain(cfg: dict, memory: Memory, tok, model, arg: str) -> tuple[str, str]:
-    """Read a file/URL and explain it. Returns (what the user asked, the explanation)."""
+def explain(cfg: dict, memory: Memory, tok, model, arg: str, progress=None) -> tuple[str, str]:
+    """Read a file/URL and explain it. Returns (what the user asked, the explanation).
+    `progress`, if given, is called as progress(fraction, desc=...) -- e.g. gr.Progress()."""
+    def report(frac: float, desc: str) -> None:
+        if progress:
+            progress(frac, desc=desc)
+        else:
+            print(f"({desc})")
+
     arg = arg.strip()
     if arg[:1] in "\"'":  # quoted path with spaces: /read "My Report.pdf" question
         src, _, question = arg[1:].partition(arg[0])
     else:
         src, _, question = arg.partition(" ")
     question = question.strip() or "Explain this to me in simple terms: what it says, the key points, and what matters for me."
+    report(0.05, "Opening the file...")
     title, text = read_source(src)
     if not text:
         return question, "I couldn't find any readable text in that (it may be a scanned image)."
@@ -54,10 +62,12 @@ def explain(cfg: dict, memory: Memory, tok, model, arg: str) -> tuple[str, str]:
     if len(parts) > 1:  # too long to read at once: take notes on each part first
         notes = []
         for i, part in enumerate(parts, 1):
+            report(0.1 + 0.7 * (i - 1) / len(parts), f"Reading part {i} of {len(parts)}...")
             notes.append(generate(tok, model, [{"role": "user", "content":
                 f"Part {i} of {len(parts)} of '{title}'. Write detailed notes of the key facts, "
                 f"numbers and arguments, keeping anything relevant to: {question}\n\n{part}"}], cfg))
         text = "\n\n".join(f"[Notes on part {i}]\n{n}" for i, n in enumerate(notes, 1))
+    report(0.85, "Writing the explanation...")
     system = build_system(cfg, memory, question)
     user = f"Here is '{title}':\n\n<document>\n{text}\n</document>\n\n{question}"
     reply = generate(tok, model, [{"role": "system", "content": system}, {"role": "user", "content": user}], cfg)

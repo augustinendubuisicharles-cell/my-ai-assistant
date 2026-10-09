@@ -16,8 +16,20 @@ def read_source(src: str) -> tuple[str, str]:
     suffix = path.suffix.lower()
     if suffix == ".pdf":
         from pypdf import PdfReader
+        from pypdf.errors import PdfReadError
 
-        text = "\n\n".join(page.extract_text() or "" for page in PdfReader(path).pages)
+        try:
+            reader = PdfReader(path)
+        except PdfReadError as e:
+            raise ValueError(f"That PDF looks damaged or isn't a real PDF ({e}).") from e
+        if reader.is_encrypted:
+            try:
+                reader.decrypt("")  # some PDFs are "encrypted" with no real password
+            except Exception:
+                pass
+        if reader.is_encrypted:
+            raise ValueError("That PDF is password-protected -- remove the password first.")
+        text = "\n\n".join(page.extract_text() or "" for page in reader.pages)
     elif suffix == ".docx":
         import docx
 
