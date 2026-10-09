@@ -30,3 +30,8 @@ watch:
   activity_dir: me/notes/activity
   # Windows whose app/title contain any of these words are never logged or looked at.
   ignore: [password, 1password, bitwarden, keepass, lastpass, bank, incognito, private browsing, inprivate]
+
+# Voice in the app: speech-to-text model (tiny, base, small, medium, large-v3).
+# Bigger = more accurate but slower. Replies are spoken by your computer's built-in voice.
+voice:
+  whisper_model: small

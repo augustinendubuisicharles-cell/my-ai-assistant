@@ -49,6 +49,7 @@ It opens in your web browser (only on your computer, at http://127.0.0.1:7860) w
 - **Explain something:** drop in a PDF / Word file or paste a link, then press *Explain it*
 - **My day:** *Recap my day*, plus Start / Pause / Resume / Stop for screen watching
 - **Remember:** type a fact and save it
+- **Voice:** press the mic, speak, press stop; it answers in text and out loud (turn off with *Read replies out loud*). Speech recognition runs locally with Whisper, so your voice never leaves your computer.
 - an **About me** tab to edit your profile and drop in notes
 
 **Or in the terminal:** `python -m assistant.chat`

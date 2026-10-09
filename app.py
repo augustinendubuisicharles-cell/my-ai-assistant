@@ -26,8 +26,52 @@ watcher: subprocess.Popen | None = None
 atexit.register(lambda: watcher and watcher.poll() is None and watcher.terminate())
 
 
+def text_of(content) -> str:
+    """Gradio 6 returns message content as a list of parts; older versions as a string."""
+    if isinstance(content, str):
+        return content
+    return "".join(p.get("text", "") for p in content or [] if isinstance(p, dict))
+
+
 def history_for_model(chat: list[dict]) -> list[dict]:
-    return [{"role": m["role"], "content": m["content"]} for m in chat if isinstance(m.get("content"), str)]
+    return [{"role": m["role"], "content": text_of(m["content"])} for m in chat if text_of(m["content"])]
+
+
+_whisper = None
+
+
+def transcribe(audio_path: str | None) -> str:
+    """Speech to text, locally, with faster-whisper."""
+    global _whisper
+    if not audio_path:
+        return ""
+    if _whisper is None:
+        from faster_whisper import WhisperModel
+
+        _whisper = WhisperModel(cfg.get("voice", {}).get("whisper_model", "small"), compute_type="int8")
+    segments, _ = _whisper.transcribe(audio_path)
+    return " ".join(seg.text.strip() for seg in segments)
+
+
+def voice_send(audio_path, chat: list[dict]):
+    text = transcribe(audio_path)
+    if not text:
+        gr.Warning("I didn't catch that. Try again?")
+        return None, chat
+    _, chat = send(text, chat)
+    return None, chat
+
+
+# Reads the newest reply out loud with the computer's built-in voices (stays on your device).
+SPEAK_JS = """(chat, on) => {
+  if (!on || !chat || !chat.length) return;
+  const last = chat[chat.length - 1];
+  if (last.role !== "assistant") return;
+  const c = last.content;
+  const text = typeof c === "string" ? c : (c || []).map(p => p.text || "").join(" ");
+  window.speechSynthesis.cancel();
+  window.speechSynthesis.speak(new SpeechSynthesisUtterance(text.replace(/[*#`_>]/g, "")));
+}"""
 
 
 def send(msg: str, chat: list[dict]):
@@ -117,6 +161,9 @@ with gr.Blocks(title=NAME) as demo:
                 with gr.Row():
                     send_btn = gr.Button("Send", variant="primary")
                     clear_btn = gr.Button("New chat")
+                with gr.Row():
+                    mic = gr.Audio(sources=["microphone"], type="filepath", label="Talk to " + NAME)
+                    speak_on = gr.Checkbox(value=True, label="Read replies out loud")
             with gr.Column(scale=2):
                 gr.Markdown("### Explain something")
                 file_in = gr.File(label="Drop a PDF, Word doc or text file",
@@ -137,6 +184,8 @@ with gr.Blocks(title=NAME) as demo:
         box.submit(send, [box, chatbot], [box, chatbot])
         send_btn.click(send, [box, chatbot], [box, chatbot])
         clear_btn.click(lambda: [], None, chatbot)
+        mic.stop_recording(voice_send, [mic, chatbot], [mic, chatbot])
+        chatbot.change(None, [chatbot, speak_on], None, js=SPEAK_JS)
         explain_btn.click(explain_it, [file_in, link_in, q_in, chatbot], [chatbot, file_in, link_in, q_in])
         recap_btn.click(recap, chatbot, chatbot)
         remember_btn.click(remember, fact_in, fact_in)

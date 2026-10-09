@@ -21,3 +21,5 @@ pywinctl
 pillow
 # Graphical app (python app.py)
 gradio>=5
+# Voice input in the app (speech to text, runs locally)
+faster-whisper>=1.0
