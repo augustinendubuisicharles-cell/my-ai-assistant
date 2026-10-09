@@ -171,8 +171,42 @@ SPEAK_JS = """(chat, on) => {
   if (!on) { if (sig && sig.enabled) setTimeout(() => sig.resume && sig.resume(), 200); return; }
   window.speechSynthesis.cancel();
   const utter = new SpeechSynthesisUtterance(text.replace(/[*#`_>]/g, ""));
+  const chosen = (window.speechSynthesis.getVoices() || []).find((v) => v.name === (sig && sig.voiceName));
+  if (chosen) { try { utter.voice = chosen; } catch (e) {} }
   utter.onend = () => { if (sig && sig.enabled) setTimeout(() => sig.resume && sig.resume(), 200); };
   window.speechSynthesis.speak(utter);
+}"""
+
+# Picks the most natural-sounding voice your computer already has (no download, no cloning)
+# and lets you override it from the dropdown in More -> Voice.
+VOICE_JS = """() => {
+  const sig = window.__signal = window.__signal || { enabled: true, recognition: null };
+  function populate() {
+    const voices = window.speechSynthesis.getVoices();
+    if (!voices.length) return;
+    const select = document.querySelector('#voice_select');
+    if (select && !select.dataset.filled) {
+      select.dataset.filled = '1';
+      voices.filter((v) => v.lang.startsWith('en')).forEach((v) => {
+        const opt = document.createElement('option');
+        opt.value = v.name;
+        opt.textContent = v.name + (v.localService ? '' : ' (online)');
+        select.appendChild(opt);
+      });
+      select.addEventListener('change', () => { sig.voiceName = select.value; });
+    }
+    if (!sig.voiceName) {
+      const best = voices.find((v) => v.name.includes('Natural'))
+        || voices.find((v) => v.lang === 'en-US' && !v.localService)
+        || voices.find((v) => v.lang.startsWith('en'))
+        || voices[0];
+      if (best) { sig.voiceName = best.name; if (select) select.value = best.name; }
+    }
+  }
+  populate();
+  window.speechSynthesis.onvoiceschanged = populate;
+  // The dropdown lives inside More -> Voice, which Gradio only mounts once opened.
+  new MutationObserver(populate).observe(document.body, { childList: true, subtree: true });
 }"""
 
 # Always-on listening: uses the browser's built-in speech recognition (continuous),
@@ -277,6 +311,14 @@ with gr.Blocks(title=NAME) as demo:
             watch_radio = gr.Radio(["Off", "On", "Paused"], value=_WATCH_LABEL[watch_status()], show_label=False)
             watch_status_md = gr.Markdown("")
 
+        with gr.Tab("Voice"):
+            gr.Markdown(
+                f"{NAME} already picked the most natural voice your computer has. "
+                "Prefer a different one? Choose it here -- it's used from then on."
+            )
+            gr.HTML('<select id="voice_select" style="width:100%;padding:8px;'
+                    'border-radius:8px;border:1px solid var(--border-color-primary,#ccc);"></select>')
+
         with gr.Tab("Remember / profile"):
             fact_in = gr.Textbox(label="Remember something", placeholder="e.g. My exam is on 3 November")
             remember_btn = gr.Button("Remember this")
@@ -299,6 +341,7 @@ with gr.Blocks(title=NAME) as demo:
     fact_in.submit(remember, fact_in, fact_in)
 
     demo.load(None, None, None, js=WAKE_JS)
+    demo.load(None, None, None, js=VOICE_JS)
 
 if __name__ == "__main__":
     demo.launch(server_name="127.0.0.1", inbrowser=True, css=".hidden-io {display: none !important;}")

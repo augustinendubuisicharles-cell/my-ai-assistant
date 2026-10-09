@@ -47,6 +47,10 @@ service to turn it into text -- it never leaves your computer otherwise. Turn of
 in the app if you'd rather not, and use the mic or keyboard in "More" instead.)
 
 Two switches at the top: **Listening** (always-on mic) and **Speaks** (reads replies aloud).
+It automatically picks the most natural voice your computer already has; to use a different one,
+go to **More -> Voice**. (Real voice cloning -- speaking in your actual voice -- needs a heavier
+model and a GPU to run fast; ask if you want to try it.)
+
 Everything else -- typing, push-to-talk, explaining files/links, your day's recap, screen
 watching, remembering facts, your profile -- is tucked under **More** so the main screen stays
 just you and it talking.
