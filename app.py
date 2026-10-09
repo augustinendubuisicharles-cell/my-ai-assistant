@@ -10,6 +10,7 @@ from pathlib import Path
 
 import gradio as gr
 
+from assistant.audio import to_whisper_input
 from assistant.chat import chat_reply, explain, today
 from assistant.config import ROOT, load_config
 from assistant.memory import Memory
@@ -40,21 +41,22 @@ def history_for_model(chat: list[dict]) -> list[dict]:
 _whisper = None
 
 
-def transcribe(audio_path: str | None) -> str:
-    """Speech to text, locally, with faster-whisper."""
+def transcribe(recording) -> str:
+    """Speech to text, locally, with faster-whisper. `recording` is (sample_rate, samples)."""
     global _whisper
-    if not audio_path:
+    if recording is None:
         return ""
     if _whisper is None:
         from faster_whisper import WhisperModel
 
         _whisper = WhisperModel(cfg.get("voice", {}).get("whisper_model", "small"), compute_type="int8")
-    segments, _ = _whisper.transcribe(audio_path)
+    sample_rate, data = recording
+    segments, _ = _whisper.transcribe(to_whisper_input(sample_rate, data))
     return " ".join(seg.text.strip() for seg in segments)
 
 
-def voice_send(audio_path, chat: list[dict]):
-    text = transcribe(audio_path)
+def voice_send(recording, chat: list[dict]):
+    text = transcribe(recording)
     if not text:
         gr.Warning("I didn't catch that. Try again?")
         return None, chat
@@ -162,7 +164,7 @@ with gr.Blocks(title=NAME) as demo:
                     send_btn = gr.Button("Send", variant="primary")
                     clear_btn = gr.Button("New chat")
                 with gr.Row():
-                    mic = gr.Audio(sources=["microphone"], type="filepath", label="Talk to " + NAME)
+                    mic = gr.Audio(sources=["microphone"], type="numpy", label="Talk to " + NAME)
                     speak_on = gr.Checkbox(value=True, label="Read replies out loud")
             with gr.Column(scale=2):
                 gr.Markdown("### Explain something")

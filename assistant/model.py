@@ -4,8 +4,8 @@ Engines (`engine:` in config.yaml, default `auto`):
 - transformers: Hugging Face models. With an NVIDIA GPU it loads `model_id` (4-bit);
   without one it loads the smaller `cpu_model_id` straight into RAM. Needs no extra
   install, and is what LoRA fine-tuning (training/) plugs into.
-- llama_cpp: optional faster CPU engine (GGUF). Needs `pip install llama-cpp-python`,
-  which has to compile on Windows, so it is never chosen automatically.
+- llama_cpp: optional faster CPU engine (GGUF). Needs `pip install llama-cpp-python`
+  (it can fail to build on Windows). `auto` uses it when it's installed and there's no GPU.
 """
 import re
 
@@ -16,7 +16,19 @@ def _strip_think(text: str) -> str:
 
 
 def _use_llama_cpp(cfg: dict) -> bool:
-    return cfg.get("engine", "auto") == "llama_cpp"
+    engine = cfg.get("engine", "auto")
+    if engine != "auto":
+        return engine == "llama_cpp"
+    try:  # auto: the fast CPU engine if it's installed and there's no NVIDIA GPU
+        import torch
+
+        if torch.cuda.is_available():
+            return False
+        import llama_cpp  # noqa: F401
+
+        return True
+    except ImportError:
+        return False
 
 
 def load_model(cfg: dict):

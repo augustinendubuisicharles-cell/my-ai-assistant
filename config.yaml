@@ -1,6 +1,7 @@
 # How the model runs:
-#   auto / transformers = Hugging Face models: model_id on an NVIDIA GPU, cpu_model_id without one
-#   llama_cpp           = optional faster CPU engine (needs `pip install llama-cpp-python`, see gguf below)
+#   auto         = NVIDIA GPU: transformers + model_id. No GPU: llama_cpp if installed, else transformers + cpu_model_id
+#   transformers = always Hugging Face models
+#   llama_cpp    = fast CPU engine (needs `pip install llama-cpp-python`, uses the gguf model below)
 engine: auto
 
 # Used when you have NO NVIDIA GPU (most laptops/desktops). ~6GB download, ~6GB RAM.
