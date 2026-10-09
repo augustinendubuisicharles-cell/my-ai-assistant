@@ -19,3 +19,5 @@ beautifulsoup4
 mss
 pywinctl
 pillow
+# Graphical app (python app.py)
+gradio>=5

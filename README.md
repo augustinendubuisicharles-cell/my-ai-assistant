@@ -38,11 +38,22 @@ python scripts/download_model.py Qwen/Qwen3-4B    # lighter (~8 GB), set model_i
 
 ## 4. Chat
 
+**The app (recommended):**
+
 ```bash
-python -m assistant.chat
+python app.py
 ```
 
-In chat:
+It opens in your web browser (only on your computer, at http://127.0.0.1:7860) with:
+- a chat window
+- **Explain something:** drop in a PDF / Word file or paste a link, then press *Explain it*
+- **My day:** *Recap my day*, plus Start / Pause / Resume / Stop for screen watching
+- **Remember:** type a fact and save it
+- an **About me** tab to edit your profile and drop in notes
+
+**Or in the terminal:** `python -m assistant.chat`
+
+Terminal commands:
 
 | Command | What it does |
 |---|---|

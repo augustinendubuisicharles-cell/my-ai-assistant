@@ -48,7 +48,6 @@ def explain(cfg: dict, memory: Memory, tok, model, arg: str) -> tuple[str, str]:
         return question, "I couldn't find any readable text in that (it may be a scanned image)."
     parts = split_text(text)
     if len(parts) > 1:  # too long to read at once: take notes on each part first
-        print(f"(long document: reading it in {len(parts)} parts)")
         notes = []
         for i, part in enumerate(parts, 1):
             notes.append(generate(tok, model, [{"role": "user", "content":
@@ -70,12 +69,18 @@ def today(cfg: dict, memory: Memory, tok, model, question: str) -> tuple[str, st
         "and one or two suggestions based on my goals."
     )
     if not path.exists():
-        return question, "No activity logged today. Start it with: python -m assistant.watch"
+        return question, "No activity logged today. Turn on screen watching (the Start button in the app, or: python -m assistant.watch)."
     log = path.read_text(encoding="utf-8")[-40_000:]
     system = build_system(cfg, memory, question)
     user = f"Here is my computer activity log for today:\n\n{log}\n\n{question}"
     reply = generate(tok, model, [{"role": "system", "content": system}, {"role": "user", "content": user}], cfg)
     return f"[I shared today's activity log] {question}", reply
+
+
+def chat_reply(cfg: dict, memory: Memory, tok, model, history: list[dict], msg: str) -> str:
+    messages = [{"role": "system", "content": build_system(cfg, memory, msg)}]
+    messages += history[-12:] + [{"role": "user", "content": msg}]
+    return generate(tok, model, messages, cfg)
 
 
 def main() -> None:
@@ -117,9 +122,7 @@ def main() -> None:
             memory.remember(msg[len("/remember "):])
             print("saved to me/notes/remembered.md")
             continue
-        messages = [{"role": "system", "content": build_system(cfg, memory, msg)}]
-        messages += history[-12:] + [{"role": "user", "content": msg}]
-        reply = generate(tok, model, messages, cfg)
+        reply = chat_reply(cfg, memory, tok, model, history, msg)
         history += [{"role": "user", "content": msg}, {"role": "assistant", "content": reply}]
         print(f"\n{cfg['assistant_name']}> {reply}\n")
 
