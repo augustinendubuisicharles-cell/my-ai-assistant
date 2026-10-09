@@ -17,18 +17,17 @@ python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\act
 pip install -r requirements.txt
 ```
 
-## 2. Download the model
+## 2. The model
 
-```bash
-python scripts/download_model.py                  # Qwen3-8B (~16 GB)
-python scripts/download_model.py Qwen/Qwen3-4B    # lighter (~8 GB), set model_id in config.yaml too
-```
+The app picks the right engine for your computer automatically (`engine: auto` in `config.yaml`):
 
-| Your hardware | Recommended model | config |
+| Your hardware | What runs | Setup |
 |---|---|---|
-| NVIDIA GPU 12GB+ | Qwen/Qwen3-8B | `load_in_4bit: true` |
-| NVIDIA GPU 6-8GB | Qwen/Qwen3-4B | `load_in_4bit: true` |
-| Mac (M1-M4, 16GB+) / CPU only | Qwen/Qwen3-4B | `load_in_4bit: false` (slower) |
+| **No NVIDIA GPU** (most laptops/desktops) | A small, fast model (Qwen2.5-3B, ~2 GB) via llama.cpp | Nothing — it downloads on first run |
+| **NVIDIA GPU** | The full Qwen3-8B via transformers, 4-bit | `python scripts/download_model.py` (~16 GB) |
+
+To force one, set `engine: llama_cpp` or `engine: transformers` in `config.yaml`.
+For a better CPU model, change `gguf.repo` to `Qwen/Qwen2.5-7B-Instruct-GGUF` (~4.7 GB).
 
 ## 3. Tell it about yourself
 

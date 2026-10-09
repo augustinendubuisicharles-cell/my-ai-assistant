@@ -1,3 +1,16 @@
+# How the model runs:
+#   auto         = fast CPU engine (llama.cpp) if you have no NVIDIA GPU, else transformers
+#   llama_cpp    = force the fast CPU engine (small quantized download, runs on any PC)
+#   transformers = force the full Hugging Face model (use with a GPU, and for training)
+engine: auto
+
+# Fast CPU engine (llama.cpp): a small quantized model downloaded automatically on first run.
+# Qwen2.5-3B is ~2GB and snappy on a normal PC. For more quality try Qwen/Qwen2.5-7B-Instruct-GGUF.
+gguf:
+  repo: Qwen/Qwen2.5-3B-Instruct-GGUF
+  file: "*q4_k_m.gguf"
+  context: 8192
+
 # Which open model to use. Qwen3-8B is a strong, freely licensed (Apache 2.0) model
 # that runs on a 16GB GPU, or on a smaller GPU / Apple Silicon with 4-bit loading.
 # Lighter option for laptops: Qwen/Qwen3-4B
