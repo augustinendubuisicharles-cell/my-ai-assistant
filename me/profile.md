@@ -5,8 +5,8 @@
      important stuff and put longer material in me/notes/. -->
 
 ## Basics
-- Name:
-- What people call me:
+- Name: Ndubuisi
+- What people call me: Ndubuisi
 - Location / time zone:
 - Languages:
 
