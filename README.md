@@ -42,7 +42,18 @@ python scripts/download_model.py Qwen/Qwen3-4B    # lighter (~8 GB), set model_i
 python -m assistant.chat
 ```
 
-In chat: `/remember I prefer short answers` saves a new fact, `/reindex` re-reads `me/`, `/reset`, `/quit`.
+In chat:
+
+| Command | What it does |
+|---|---|
+| `/read report.pdf` | Reads a PDF, Word doc (.docx), text/code file or web page and explains it simply |
+| `/read https://example.com/article what does this mean for my trading?` | Add a question after the file or link to ask something specific |
+| `/remember I prefer short answers` | Saves a new fact about you |
+| `/reindex` | Re-reads `me/` after you edit files |
+| `/reset`, `/quit` | Clear the conversation, exit |
+
+After `/read`, keep asking follow-up questions about the document in normal chat.
+Scanned PDFs (photos of pages) have no text to read, so they won't work yet.
 
 ## 5. Training (fine-tuning)
 
