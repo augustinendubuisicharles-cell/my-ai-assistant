@@ -28,13 +28,20 @@ The app picks the right model for your computer automatically (`config.yaml`):
 
 Slow or low on RAM? Set `cpu_model_id: Qwen/Qwen3-1.7B` (~3.5 GB). Want smarter answers and have 16 GB+ RAM? Try `Qwen/Qwen3-4B`.
 
-## 3. Tell it about yourself
+## 3. Memory: it gets smarter the more you use it
+
+Every conversation is saved to `me/notes/conversations/` (kept out of git -- it's personal and
+grows over time) and folded into its memory automatically each time you start the app, so later
+chats can recall what you've talked about before, not just your profile. To pick up today's
+conversation without restarting, press **Reindex memory now** under More -> Remember / profile.
+
+## 4. Tell it about yourself
 
 1. Fill in `me/profile.md`.
 2. Add any notes, journals or project docs to `me/notes/`.
 3. `python scripts/build_memory.py`
 
-## 4. Chat
+## 5. Chat
 
 ```bash
 python app.py
@@ -55,7 +62,7 @@ Everything else -- typing, push-to-talk, explaining files/links, your day's reca
 watching, remembering facts, your profile -- is tucked under **More** so the main screen stays
 just you and it talking.
 
-## 5. Screen watching (optional)
+## 6. Screen watching (optional)
 
 Let the assistant see what you do each day so it can recap your day, notice where your time goes, and answer things like "what was that site I was on this morning?".
 
@@ -70,7 +77,7 @@ python -m assistant.watch pause    # pause any time (e.g. private stuff), then: 
 Privacy: everything stays on your computer. Screenshots are never saved, only the text log in `me/notes/activity/`, which is also kept out of git. Password managers, banking and private-browsing windows are skipped; add your own words to `watch.ignore`.
 On macOS, allow your terminal under System Settings > Privacy & Security > Accessibility and Screen Recording.
 
-## 6. Training (fine-tuning)
+## 7. Training (fine-tuning)
 
 Memory already makes the assistant *know* you. Fine-tuning changes *how it talks*: your tone, format and habits.
 

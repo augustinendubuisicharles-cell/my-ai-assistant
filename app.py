@@ -16,6 +16,7 @@ import gradio as gr
 
 from assistant.audio import to_whisper_input
 from assistant.chat import chat_reply, explain, today
+from assistant.conversation_log import log_exchange
 from assistant.config import ROOT, load_config
 from assistant.memory import Memory
 from assistant.model import load_model
@@ -47,6 +48,7 @@ def send(msg: str, chat: list[dict]):
     if not msg:
         return "", chat
     reply = chat_reply(cfg, memory, tok, model, history_for_model(chat), msg)
+    log_exchange(cfg, msg, reply)
     return "", chat + [{"role": "user", "content": msg}, {"role": "assistant", "content": reply}]
 
 
@@ -87,6 +89,7 @@ def explain_it(file, link: str, question: str, chat: list[dict]):
     except Exception as e:
         gr.Warning(f"Couldn't read that: {e}")
         return chat, file, link, question
+    log_exchange(cfg, asked, reply)
     return chat + [{"role": "user", "content": asked}, {"role": "assistant", "content": reply}], None, "", ""
 
 
@@ -328,6 +331,12 @@ with gr.Blocks(title=NAME) as demo:
             notes_in = gr.File(file_count="multiple", file_types=[".md", ".txt"],
                                label="Add notes (.md/.txt) for it to learn from")
             notes_in.upload(add_notes, notes_in, notes_in)
+            gr.Markdown("---\n**Memory** -- every conversation is saved automatically. "
+                        "Today's talk joins memory next time the app starts, or press this:")
+            reindex_btn = gr.Button("Reindex memory now")
+            reindex_status = gr.Markdown("")
+            reindex_btn.click(lambda: f"Indexed {memory.build()} pieces, including today's conversation.",
+                              None, reindex_status)
 
     box.submit(send, [box, chatbot], [box, chatbot])
     send_btn.click(send, [box, chatbot], [box, chatbot])
