@@ -7,6 +7,7 @@ By default it listens continuously and answers whenever you say its name
 by what you want, and it replies in the chat and out loud.
 """
 import atexit
+import os
 import shutil
 import subprocess
 import sys
@@ -21,6 +22,10 @@ from assistant.config import ROOT, load_config
 from assistant.memory import Memory
 from assistant.model import load_model
 from assistant.watch import PAUSE_FILE
+
+# True when running as a Hugging Face Space: screen watching makes no sense there
+# (it would watch the server's screen, not yours), and Spaces needs its own launch setup.
+ON_SPACES = bool(os.environ.get("SPACE_ID"))
 
 cfg = load_config()
 memory = Memory(cfg)
@@ -311,9 +316,18 @@ with gr.Blocks(title=NAME) as demo:
 
         with gr.Tab("My day"):
             recap_btn = gr.Button("Recap my day")
-            gr.Markdown("**Screen watching** (keeps a private log of what you do, see README)")
-            watch_radio = gr.Radio(["Off", "On", "Paused"], value=_WATCH_LABEL[watch_status()], show_label=False)
-            watch_status_md = gr.Markdown("")
+            if ON_SPACES:
+                gr.Markdown(
+                    "**Screen watching** only works on your own computer, not here in the cloud "
+                    "(it would be watching this server, not you). Run `python -m assistant.watch` "
+                    "locally if you want that -- it writes to the same memory this app reads."
+                )
+                watch_radio = gr.Radio(["Off", "On", "Paused"], value="Off", visible=False)
+                watch_status_md = gr.Markdown("", visible=False)
+            else:
+                gr.Markdown("**Screen watching** (keeps a private log of what you do, see README)")
+                watch_radio = gr.Radio(["Off", "On", "Paused"], value=_WATCH_LABEL[watch_status()], show_label=False)
+                watch_status_md = gr.Markdown("")
 
         with gr.Tab("Voice"):
             gr.Markdown(
@@ -354,4 +368,7 @@ with gr.Blocks(title=NAME) as demo:
     demo.load(None, None, None, js=VOICE_JS)
 
 if __name__ == "__main__":
-    demo.launch(server_name="127.0.0.1", inbrowser=True, css=".hidden-io {display: none !important;}")
+    if ON_SPACES:
+        demo.launch(css=".hidden-io {display: none !important;}")
+    else:
+        demo.launch(server_name="127.0.0.1", inbrowser=True, css=".hidden-io {display: none !important;}")
