@@ -35,9 +35,10 @@ sent_jobs = Table(
 
 def _url() -> str:
     url = os.environ.get("DATABASE_URL") or "sqlite:///job_alerts.db"
-    # Neon/Heroku-style URLs say postgres://; SQLAlchemy wants postgresql+psycopg2://
-    if url.startswith("postgres://"):
-        url = "postgresql://" + url[len("postgres://"):]
+    # Use the psycopg (v3) driver whether the URL says postgres:// or postgresql://
+    for prefix in ("postgres://", "postgresql://"):
+        if url.startswith(prefix):
+            url = "postgresql+psycopg://" + url[len(prefix):]
     return url
 
 
