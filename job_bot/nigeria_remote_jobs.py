@@ -179,16 +179,23 @@ def _from_remotive() -> list[dict]:
 
 
 def _link_is_live(url: str) -> bool:
-    """Check 5: the listing still loads and doesn't say it's closed."""
+    """Check 5: the listing still exists and doesn't say it's closed.
+
+    Job boards often block automated visits (403/429) -- that isn't evidence the
+    job is gone, so only a "not found"/"gone" answer or a "closed" notice fails it.
+    """
     try:
         r = requests.get(url, headers=HEADERS, timeout=TIMEOUT, allow_redirects=True)
-        if r.status_code >= 400:
-            return False
-        page = r.text[:300_000].lower()
-        return not any(w in page for w in CLOSED_SIGNS)
     except Exception as e:
-        print(f"[link check] {url}: {e}")
+        print(f"[link check] FAIL {url}: {e}")
         return False
+    if r.status_code in (404, 410):
+        print(f"[link check] FAIL {url}: {r.status_code}")
+        return False
+    page = r.text[:300_000].lower() if r.ok else ""
+    closed = next((w for w in CLOSED_SIGNS if w in page), None)
+    print(f"[link check] {'FAIL' if closed else 'ok'} {url}: {r.status_code}{f' says {closed!r}' if closed else ''}")
+    return not closed
 
 
 def find_top_jobs(n: int = 5) -> list[dict]:
