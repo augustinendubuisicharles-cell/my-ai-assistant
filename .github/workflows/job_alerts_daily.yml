@@ -22,6 +22,23 @@ jobs:
       - run: python -m job_alerts.search "virtual assistant, public relations" Nigeria entry
       - run: python -m job_alerts.search "data analyst" "United Kingdom" any
 
+  db-check:
+    # On PRs, prove the database secret works (skips until JOB_ALERTS_DATABASE_URL is set)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    env:
+      DATABASE_URL: ${{ secrets.JOB_ALERTS_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r job_alerts/requirements.txt
+      - name: Check the database
+        run: |
+          if [ -z "$DATABASE_URL" ]; then echo "JOB_ALERTS_DATABASE_URL not set yet -- skipping."; exit 0; fi
+          python -m job_alerts.check_db
+
   send:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
