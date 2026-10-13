@@ -23,14 +23,3 @@ jobs:
           FORCE_RUN: ${{ github.event_name == 'workflow_dispatch' && '1' || '0' }}
         working-directory: job_bot
         run: python run.py
-      # TEMPORARY one-off: send the first weekly Nigeria email today (reverted in the next commit)
-      - name: One-off weekly email
-        if: github.event_name == 'workflow_dispatch'
-        env:
-          EMAIL_USER: ${{ secrets.EMAIL_USER }}
-          EMAIL_APP_PASSWORD: ${{ secrets.EMAIL_APP_PASSWORD }}
-          EMAIL_TO: ${{ secrets.EMAIL_TO }}
-          FORCE_RUN: "1"
-          DRY_RUN: "0"
-        working-directory: job_bot
-        run: python run_weekly.py
