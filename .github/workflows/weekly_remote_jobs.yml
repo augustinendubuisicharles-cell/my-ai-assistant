@@ -1,0 +1,36 @@
+name: Weekly remote PR & PA jobs (Nigeria)
+
+on:
+  schedule:
+    - cron: "0 7 * * 1"   # Mondays 8am Lagos time (WAT, no daylight saving)
+  workflow_dispatch:       # run by hand from the Actions tab
+    inputs:
+      dry_run:
+        description: "Only print the jobs found, don't send the email"
+        type: boolean
+        default: true
+  pull_request:            # dry run whenever the search code changes, to catch breakage early
+    paths:
+      - "job_bot/nigeria_remote_jobs.py"
+      - "job_bot/run_weekly.py"
+      - "job_bot/email_notify.py"
+      - ".github/workflows/weekly_remote_jobs.yml"
+
+jobs:
+  search-and-email:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r job_bot/requirements.txt
+      - name: Search, verify and email
+        env:
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_APP_PASSWORD: ${{ secrets.EMAIL_APP_PASSWORD }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          FORCE_RUN: ${{ github.event_name != 'schedule' && '1' || '0' }}
+          DRY_RUN: ${{ (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.dry_run)) && '1' || '0' }}
+        working-directory: job_bot
+        run: python run_weekly.py
