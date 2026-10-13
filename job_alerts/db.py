@@ -2,10 +2,10 @@
 Neon database); falls back to a local SQLite file for development."""
 import os
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import (Boolean, Column, DateTime, ForeignKey, Integer, MetaData, String, Table, Text,
-                        UniqueConstraint, create_engine, delete, insert, select, update)
+                        UniqueConstraint, create_engine, delete, func, insert, inspect, select, text, update)
 
 metadata = MetaData()
 
@@ -15,7 +15,8 @@ subscribers = Table(
     Column("email", String(320), nullable=False, unique=True),
     Column("keywords", Text, nullable=False),          # comma-separated job titles/skills
     Column("country", String(80), nullable=False, default=""),  # "" = anywhere
-    Column("remote_only", Boolean, nullable=False, default=True),
+    Column("remote_only", Boolean, nullable=False, default=True),  # False = on-site/hybrid near `city`
+    Column("city", String(120), nullable=False, default=""),       # preferred area for on-site jobs
     Column("level", String(20), nullable=False, default="any"),  # any | entry | mid
     Column("token", String(64), nullable=False, unique=True),     # for confirm/manage/unsubscribe links
     Column("confirmed", Boolean, nullable=False, default=False),
@@ -47,18 +48,31 @@ engine = create_engine(_url(), pool_pre_ping=True)
 
 def init_db() -> None:
     metadata.create_all(engine)
+    # Columns added after the first release (create_all doesn't alter existing tables).
+    if "city" not in {c["name"] for c in inspect(engine).get_columns("subscribers")}:
+        with engine.begin() as conn:
+            conn.execute(text("ALTER TABLE subscribers ADD COLUMN city VARCHAR(120) NOT NULL DEFAULT ''"))
+
+
+def stats() -> dict:
+    """Real numbers for the home page: confirmed subscribers, and jobs emailed in the last 30 days."""
+    with engine.begin() as conn:
+        users = conn.execute(select(func.count()).select_from(subscribers).where(subscribers.c.confirmed.is_(True))).scalar()
+        jobs = conn.execute(select(func.count()).select_from(sent_jobs)
+                            .where(sent_jobs.c.sent_at >= now() - timedelta(days=30))).scalar()
+    return {"users": users or 0, "jobs_30d": jobs or 0}
 
 
 def now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def upsert_subscriber(email: str, keywords: str, country: str, remote_only: bool, level: str) -> dict:
+def upsert_subscriber(email: str, keywords: str, country: str, remote_only: bool, level: str, city: str = "") -> dict:
     """Creates a subscriber (unconfirmed) or updates the preferences of an existing one."""
     email = email.strip().lower()
     with engine.begin() as conn:
         row = conn.execute(select(subscribers).where(subscribers.c.email == email)).mappings().first()
-        values = {"keywords": keywords, "country": country, "remote_only": remote_only, "level": level}
+        values = {"keywords": keywords, "country": country, "remote_only": remote_only, "level": level, "city": city}
         if row:
             conn.execute(update(subscribers).where(subscribers.c.id == row["id"]).values(**values))
         else:
@@ -85,10 +99,10 @@ def confirm(token: str) -> dict | None:
     return by_token(token)
 
 
-def update_prefs(token: str, keywords: str, country: str, remote_only: bool, level: str) -> None:
+def update_prefs(token: str, keywords: str, country: str, remote_only: bool, level: str, city: str = "") -> None:
     with engine.begin() as conn:
         conn.execute(update(subscribers).where(subscribers.c.token == token).values(
-            keywords=keywords, country=country, remote_only=remote_only, level=level))
+            keywords=keywords, country=country, remote_only=remote_only, level=level, city=city))
 
 
 def remove(token: str) -> bool:

@@ -12,7 +12,7 @@ def main() -> None:
     print(f"Connecting to {db.engine.url.render_as_string(hide_password=True)}")
     db.init_db()
     email = f"db-check-{secrets.token_hex(4)}@example.invalid"
-    sub = db.upsert_subscriber(email, "db check", "Nigeria", True, "entry")
+    sub = db.upsert_subscriber(email, "db check", "Nigeria", True, "entry", city="")
     print(f"Inserted test subscriber {sub['id']}")
     assert db.by_email(email)["keywords"] == "db check"
     db.confirm(sub["token"])

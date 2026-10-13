@@ -22,7 +22,8 @@ def main() -> None:
     sent = failed = 0
     for sub in subs:
         try:
-            jobs = find_jobs(sub["keywords"], sub["country"], sub["remote_only"], sub["level"], db.already_sent(sub["id"]))
+            jobs = find_jobs(sub["keywords"], sub["country"], sub["remote_only"], sub["level"], db.already_sent(sub["id"]),
+                             city=sub.get("city") or "")
             if not jobs:
                 print(f"- subscriber {sub['id']}: no new matches, nothing sent")
                 continue
