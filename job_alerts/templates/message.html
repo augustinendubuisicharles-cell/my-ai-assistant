@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>{{ heading }}</h1>
+<div class="card"><p {% if ok %}class="ok"{% endif %}>{{ message }}</p>
+{% if link %}<p><a href="{{ link }}">{{ link_text }}</a></p>{% endif %}</div>
+{% endblock %}

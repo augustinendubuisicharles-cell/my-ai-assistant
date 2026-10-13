@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>{{ heading }}</h1>
+<p class="lead">{{ lead }}</p>
+<form class="card" method="post" action="{{ action }}">
+  {% if not sub %}
+  <label for="email">Your email</label>
+  <input id="email" name="email" type="email" required maxlength="320" placeholder="you@example.com">
+  {% endif %}
+  <label for="keywords">What jobs do you want? <span class="hint">Up to 5 job titles or skills, separated by commas</span></label>
+  <input id="keywords" name="keywords" type="text" required maxlength="200"
+         placeholder="virtual assistant, public relations, customer support" value="{{ sub.keywords if sub else '' }}">
+  <label for="country">Where do you live?</label>
+  <select id="country" name="country">
+    <option value="">Anywhere / don't filter</option>
+    {% for c in countries %}<option value="{{ c }}" {% if sub and sub.country == c %}selected{% endif %}>{{ c }}</option>{% endfor %}
+  </select>
+  <div class="row">
+    <input id="remote_only" name="remote_only" type="checkbox" value="1" {% if not sub or sub.remote_only %}checked{% endif %}>
+    <label for="remote_only" style="margin:0">Remote jobs only</label>
+  </div>
+  <label for="level">Experience level</label>
+  <select id="level" name="level">
+    <option value="any" {% if sub and sub.level == 'any' %}selected{% endif %}>Any level</option>
+    <option value="entry" {% if not sub or sub.level == 'entry' %}selected{% endif %}>Entry level / junior</option>
+    <option value="mid" {% if sub and sub.level == 'mid' %}selected{% endif %}>Mid level (no director/head roles)</option>
+  </select>
+  <input class="hp" name="website" tabindex="-1" autocomplete="off">
+  <button type="submit">{{ button }}</button>
+  <p class="small">One email a day with up to 5 new matches, only on days we find some. We skip senior roles if you choose a lower level, and we filter out unpaid roles and listings with common scam signs. Every email has a one-click unsubscribe link. We only store your email and these preferences, never share them, and delete them when you unsubscribe.</p>
+</form>
+{% if sub %}<p class="small"><a href="{{ base_url }}/unsubscribe/{{ sub.token }}">Unsubscribe and delete my details</a></p>{% endif %}
+{% endblock %}

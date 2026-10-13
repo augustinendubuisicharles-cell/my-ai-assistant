@@ -1,0 +1,61 @@
+name: Job alerts -- daily emails to subscribers
+
+on:
+  schedule:
+    - cron: "0 6 * * *"   # 7am Lagos / 7am London (winter)
+  workflow_dispatch:
+  pull_request:             # smoke test: preview a live search when the service code changes (no emails)
+    paths:
+      - "job_alerts/**"
+      - ".github/workflows/job_alerts_daily.yml"
+
+jobs:
+  preview:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r job_alerts/requirements.txt
+      - run: python -m job_alerts.search "virtual assistant, public relations" Nigeria entry
+      - run: python -m job_alerts.search "data analyst" "United Kingdom" any
+
+  send:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the service is set up
+        id: check
+        env:
+          DATABASE_URL: ${{ secrets.JOB_ALERTS_DATABASE_URL }}
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "JOB_ALERTS_DATABASE_URL secret not set yet -- skipping (see job_alerts/README.md)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.check.outputs.ready == 'true'
+        uses: actions/checkout@v4
+      - if: steps.check.outputs.ready == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - if: steps.check.outputs.ready == 'true'
+        run: pip install -r job_alerts/requirements.txt
+      - if: steps.check.outputs.ready == 'true'
+        name: Find matches and email everyone
+        env:
+          DATABASE_URL: ${{ secrets.JOB_ALERTS_DATABASE_URL }}
+          BASE_URL: ${{ secrets.JOB_ALERTS_BASE_URL }}
+          SMTP_HOST: ${{ secrets.SMTP_HOST }}
+          SMTP_PORT: ${{ secrets.SMTP_PORT }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+          FROM_EMAIL: ${{ secrets.FROM_EMAIL }}
+          ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
+          ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
+          REED_API_KEY: ${{ secrets.REED_API_KEY }}
+        run: python -m job_alerts.send_daily
