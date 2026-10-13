@@ -28,13 +28,16 @@ board's expiry date, and its link doesn't come back "not found".
    `FROM_EMAIL` = your verified sender. Don't use a personal Gmail for real
    users: Gmail caps sending and flags bulk mail to strangers.
 3. **Website: Render** (render.com). New → Blueprint → pick this repo; it reads
-   `render.yaml`. Fill in the environment variables from steps 1 and 2. Once
+   `render.yaml`. Fill in the environment variables from steps 1 and 2. Render's
+   free plan blocks outgoing SMTP, so also set `BREVO_API_KEY` (Brevo → SMTP & API
+   → API Keys); the site then sends through Brevo's web API. Once
    it's live, set `BASE_URL` to the site's address (e.g. `https://job-alerts.onrender.com`).
    The free plan sleeps when idle, so the first visit after a while takes ~30s.
 4. **Daily emails: GitHub** → Settings → Secrets and variables → Actions. Add
    `JOB_ALERTS_DATABASE_URL`, `JOB_ALERTS_BASE_URL`, `SMTP_HOST`, `SMTP_PORT`,
    `SMTP_USER`, `SMTP_PASSWORD`, `FROM_EMAIL`, and optionally `ADZUNA_APP_ID`,
-   `ADZUNA_APP_KEY`, `REED_API_KEY`.
+   `ADZUNA_APP_KEY`, `REED_API_KEY`. On-site/hybrid alerts need the Adzuna key
+   (free at developer.adzuna.com); without it those subscribers get remote jobs only.
 5. Sign up on your own site, confirm, then run **Job alerts -- daily emails to
    subscribers** from the Actions tab to get your first email.
 

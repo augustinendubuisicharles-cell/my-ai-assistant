@@ -3,7 +3,7 @@ email, and can change or cancel their alerts any time.
 
 Run locally:  uvicorn job_alerts.app:app --reload   (from the repo root)
 Env: DATABASE_URL, BASE_URL (the site's public address), SITE_NAME, plus the
-SMTP_* settings in mailer.py.
+email settings in mailer.py (BREVO_API_KEY on Render).
 """
 import os
 import re
@@ -38,34 +38,50 @@ def _message(request, heading, message, ok=False, link=None, link_text=None, sta
     return resp
 
 
-def _clean_prefs(keywords: str, country: str, level: str) -> tuple[str, str, str] | None:
+def _clean_prefs(keywords: str, country: str, level: str, work_type: str, city: str) -> dict | None:
+    """Validates the form. Remote is the default; on-site/hybrid needs a preferred city or area."""
     words = [w.strip() for w in keywords.split(",") if w.strip()][:5]
-    if not words or any(len(w) > 60 for w in words):
+    remote = work_type != "onsite"
+    city = "" if remote else " ".join(city.split())[:120]
+    if not words or any(len(w) > 60 for w in words) or (not remote and not city):
         return None
-    return ", ".join(words), (country if country in COUNTRIES else ""), (level if level in ("any", "entry", "mid") else "any")
+    return {"keywords": ", ".join(words), "country": country if country in COUNTRIES else "",
+            "level": level if level in ("any", "entry", "mid") else "any", "remote_only": remote, "city": city}
+
+
+def _stats() -> dict:
+    """Live figures for the home page. Counts only appear once they're worth showing; never made up."""
+    try:
+        s = db.stats()
+    except Exception as e:
+        print(f"[stats] {e}")
+        return {}
+    return {k: v for k, v in s.items() if v >= 10}
 
 
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request):
     return _page(request, "form.html", sub=None, countries=list(COUNTRIES), action="/subscribe", button="Send me jobs",
-                 heading=SITE_NAME, lead="Tell us what you're looking for and get the best new matches in your inbox every morning.")
+                 heading=SITE_NAME, stats=_stats(),
+                 lead="Remote jobs matched to you and checked for scams, in your inbox every morning. Prefer on-site? Tell us where.")
 
 
 @app.post("/subscribe", response_class=HTMLResponse)
 def subscribe(request: Request, email: str = Form(""), keywords: str = Form(""), country: str = Form(""),
-              level: str = Form("any"), remote_only: str = Form(""), website: str = Form("")):
+              level: str = Form("any"), work_type: str = Form("remote"), city: str = Form(""), website: str = Form("")):
     if website:  # hidden field only bots fill in
         return _message(request, "Thanks!", "Check your inbox to confirm.")
-    prefs = _clean_prefs(keywords, country, level)
+    prefs = _clean_prefs(keywords, country, level, work_type, city)
     if not EMAIL_RE.match(email.strip()) or not prefs:
-        return _message(request, "Something's missing", "Please enter a valid email and at least one job title.",
+        return _message(request, "Something's missing",
+                        "Please enter a valid email, at least one job title, and your preferred area if you chose on-site.",
                         link="/", link_text="Go back", status=400)
     existing = db.by_email(email)
     if existing and existing["confirmed"]:
         # Don't let anyone who knows an address change its alerts: email the owner a manage link instead.
         sub, (subject, text, html) = existing, emails.manage_link(_base_url(request), existing["token"])
     else:
-        sub = db.upsert_subscriber(email, prefs[0], prefs[1], bool(remote_only), prefs[2])
+        sub = db.upsert_subscriber(email, **prefs)
         subject, text, html = emails.confirmation(_base_url(request), sub["token"])
     try:
         mailer.send(sub["email"], subject, text, html)
@@ -96,12 +112,12 @@ def manage(request: Request, token: str):
 
 @app.post("/manage/{token}", response_class=HTMLResponse)
 def save(request: Request, token: str, keywords: str = Form(""), country: str = Form(""), level: str = Form("any"),
-         remote_only: str = Form("")):
-    prefs = _clean_prefs(keywords, country, level)
+         work_type: str = Form("remote"), city: str = Form("")):
+    prefs = _clean_prefs(keywords, country, level, work_type, city)
     if not db.by_token(token) or not prefs:
-        return _message(request, "Couldn't save", "Please enter at least one job title.", link=f"/manage/{token}",
-                        link_text="Go back", status=400)
-    db.update_prefs(token, prefs[0], prefs[1], bool(remote_only), prefs[2])
+        return _message(request, "Couldn't save", "Please enter at least one job title, and your preferred area if you chose on-site.",
+                        link=f"/manage/{token}", link_text="Go back", status=400)
+    db.update_prefs(token, **prefs)
     return _message(request, "Saved", "Your new preferences apply from the next email.", ok=True)
 
 

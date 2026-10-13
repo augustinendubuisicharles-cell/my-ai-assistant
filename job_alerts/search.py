@@ -76,6 +76,12 @@ def _pay(lo, hi, currency, period) -> str:
     return f"{currency} {rng}/{(period or '').replace('ly', '').replace('annual', 'year') or 'period'}"
 
 
+def _in_country(place: str | None, country: str) -> str:
+    """Adzuna/Reed search one country, so name it in the location ("Leeds" -> "Leeds, United Kingdom")."""
+    place = (place or "").strip()
+    return place if country.lower() in place.lower() else ", ".join(p for p in (place, country) if p)
+
+
 # --- sources (each cached per run, so many subscribers with the same search cost one call) ---
 
 @lru_cache(maxsize=None)
@@ -134,20 +140,23 @@ def from_remotive(keyword: str) -> tuple:
 
 
 @lru_cache(maxsize=None)
-def from_adzuna(keyword: str, country: str) -> tuple:
+def from_adzuna(keyword: str, country: str, city: str = "") -> tuple:
     app_id, app_key = os.environ.get("ADZUNA_APP_ID"), os.environ.get("ADZUNA_APP_KEY")
     code = COUNTRIES.get(country, ("", "", []))[1]
     if not (app_id and app_key and code):
         return ()
     out = []
     try:
-        data = _get(f"https://api.adzuna.com/v1/api/jobs/{code}/search/1", app_id=app_id, app_key=app_key,
-                    what=keyword, results_per_page=50, max_days_old=21, sort_by="date")
+        params = {"app_id": app_id, "app_key": app_key, "what": keyword, "results_per_page": 50,
+                  "max_days_old": 21, "sort_by": "date"}
+        if city:
+            params.update(where=city, distance=25)  # km around their preferred area
+        data = _get(f"https://api.adzuna.com/v1/api/jobs/{code}/search/1", **params)
         for j in data.get("results", []):
             desc = _clean(j.get("description"))
             out.append(_raw(
                 _clean(j.get("title")), (j.get("company") or {}).get("display_name"),
-                (j.get("location") or {}).get("display_name") or country, j.get("redirect_url"), "Adzuna",
+                _in_country((j.get("location") or {}).get("display_name"), country), j.get("redirect_url"), "Adzuna",
                 datetime.fromisoformat(j["created"].replace("Z", "+00:00")) if j.get("created") else None,
                 desc, any(w in f"{j.get('title', '')} {desc}".lower() for w in REMOTE_WORDS),
                 pay=f"{j['salary_min']:,.0f}+ a year" if j.get("salary_min") else "", job_type=j.get("contract_time") or ""))
@@ -157,20 +166,21 @@ def from_adzuna(keyword: str, country: str) -> tuple:
 
 
 @lru_cache(maxsize=None)
-def from_reed(keyword: str) -> tuple:
+def from_reed(keyword: str, city: str = "") -> tuple:
     key = os.environ.get("REED_API_KEY")
     if not key:
         return ()
     out = []
     try:
-        r = requests.get("https://www.reed.co.uk/api/1.0/search", params={"keywords": keyword, "resultsToTake": 50},
+        r = requests.get("https://www.reed.co.uk/api/1.0/search", params={"keywords": keyword, "resultsToTake": 50,
+                                                                         **({"locationName": city, "distanceFromLocation": 15} if city else {})},
                          auth=(key, ""), headers=HEADERS, timeout=TIMEOUT)
         r.raise_for_status()
         for j in r.json().get("results", []):
             desc = _clean(j.get("jobDescription"))
             posted = j.get("date")
             out.append(_raw(
-                j.get("jobTitle"), j.get("employerName"), j.get("locationName") or "United Kingdom", j.get("jobUrl"),
+                j.get("jobTitle"), j.get("employerName"), _in_country(j.get("locationName"), "United Kingdom"), j.get("jobUrl"),
                 "Reed", datetime.strptime(posted, "%d/%m/%Y").replace(tzinfo=timezone.utc) if posted else None,
                 desc, any(w in f"{j.get('jobTitle', '')} {desc}".lower() for w in REMOTE_WORDS),
                 pay=f"GBP {j['minimumSalary']:,.0f}+" if j.get("minimumSalary") else ""))
@@ -195,7 +205,8 @@ def location_fits(job_location: str, country: str, remote: bool) -> bool:
     return remote and any(r in loc for r in COUNTRIES.get(country, ("", "", []))[2])
 
 
-def score(job: dict, keywords: list[str], country: str, remote_only: bool, level: str) -> tuple[int, list[str]] | None:
+def score(job: dict, keywords: list[str], country: str, remote_only: bool, level: str,
+          city: str = "") -> tuple[int, list[str]] | None:
     """Returns (score, reasons), or None if the job fails a check."""
     title, text = job["title"].lower(), f"{job['title']} {job['desc']}".lower()
     hit = next((k for k in keywords if k in title), None)
@@ -222,6 +233,10 @@ def score(job: dict, keywords: list[str], country: str, remote_only: bool, level
         reasons.append(job["pay"])
     if country and country.lower() in job["location"].lower():
         pts += 2  # explicitly hiring in their country, not just "worldwide"
+    if not remote_only and not job["remote"]:
+        pts += 4  # they asked for on-site/hybrid near them, so local jobs come first
+        if city and city.lower() in job["location"].lower():
+            pts += 2
     pts += max(0, 3 - (datetime.now(timezone.utc) - job["posted"]).days // 5)
     reasons.append(f"posted {job['posted']:%d %b}")
     return pts, reasons
@@ -238,20 +253,23 @@ def job_key(job: dict) -> str:
     return job["url"] or f"{job['title']}|{job['company']}".lower()
 
 
-def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, exclude: set[str], n: int = 5) -> list[dict]:
+def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, exclude: set[str], n: int = 5,
+              city: str = "") -> list[dict]:
+    """remote_only=True searches remote jobs. False means on-site/hybrid near `city` (via Adzuna/Reed),
+    with remote jobs as a fallback."""
     keywords = [k.strip().lower() for k in keywords_csv.split(",") if k.strip()][:5]
     pool = []
     for k in keywords:
         pool += from_himalayas(k, country) + from_jobicy(k) + from_remotive(k)
         if not remote_only:
-            pool += from_adzuna(k, country) + (from_reed(k) if country == "United Kingdom" else ())
+            pool += from_adzuna(k, country, city) + (from_reed(k, city) if country == "United Kingdom" else ())
 
     seen, ranked = set(exclude), []
     for job in pool:
         key = job_key(job)
         if key in seen:
             continue
-        result = score(job, keywords, country, remote_only, level)
+        result = score(job, keywords, country, remote_only, level, city)
         if result:
             seen.add(key)
             ranked.append({**job, "score": result[0], "matched": result[1]})

@@ -22,6 +22,15 @@
   .ok { color:var(--ok); font-weight:600; }
   .small { font-size:.85rem; color:var(--muted); margin-top:18px; }
   a { color:var(--accent); }
+  fieldset { border:0; padding:0; margin:16px 0 0; }
+  legend { font-weight:600; padding:0; margin-bottom:2px; }
+  .row { margin-top:8px; }
+  [hidden] { display:none !important; }
+  button:disabled { opacity:.7; cursor:wait; }
+  .stats { list-style:none; padding:0; margin:0 0 20px; display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:10px; }
+  .stats li { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:10px 12px; }
+  .stats b { display:block; font-size:1.3rem; }
+  .stats span { color:var(--muted); font-size:.85rem; }
 </style>
 </head>
 <body><main>{% block body %}{% endblock %}</main></body>

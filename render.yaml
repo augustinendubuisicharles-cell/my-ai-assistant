@@ -18,6 +18,8 @@ services:
         sync: false
       - key: SITE_NAME
         value: Job Alerts
+      - key: BREVO_API_KEY    # Render's free plan blocks SMTP ports, so the site sends through Brevo's API
+        sync: false
       - key: SMTP_HOST
         sync: false
       - key: SMTP_PORT

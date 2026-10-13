@@ -2,7 +2,16 @@
 {% block body %}
 <h1>{{ heading }}</h1>
 <p class="lead">{{ lead }}</p>
-<form class="card" method="post" action="{{ action }}">
+{% if not sub %}
+<ul class="stats">
+  {% if stats.users %}<li><b>{{ "{:,}".format(stats.users) }}</b><span>people getting alerts</span></li>{% endif %}
+  {% if stats.jobs_30d %}<li><b>{{ "{:,}".format(stats.jobs_30d) }}</b><span>jobs sent in the last 30 days</span></li>{% endif %}
+  <li><b>Daily</b><span>fresh matches every morning</span></li>
+  <li><b>Checked</b><span>for scams and dead links</span></li>
+  <li><b>Free</b><span>unsubscribe any time</span></li>
+</ul>
+{% endif %}
+<form class="card" method="post" action="{{ action }}" id="prefs">
   {% if not sub %}
   <label for="email">Your email</label>
   <input id="email" name="email" type="email" required maxlength="320" placeholder="you@example.com">
@@ -15,9 +24,17 @@
     <option value="">Anywhere / don't filter</option>
     {% for c in countries %}<option value="{{ c }}" {% if sub and sub.country == c %}selected{% endif %}>{{ c }}</option>{% endfor %}
   </select>
-  <div class="row">
-    <input id="remote_only" name="remote_only" type="checkbox" value="1" {% if not sub or sub.remote_only %}checked{% endif %}>
-    <label for="remote_only" style="margin:0">Remote jobs only</label>
+  {% set onsite = sub and not sub.remote_only %}
+  <fieldset>
+    <legend>How do you want to work?</legend>
+    <div class="row"><input id="wt_remote" name="work_type" type="radio" value="remote" {% if not onsite %}checked{% endif %}>
+      <label for="wt_remote" style="margin:0">Remote <span class="hint">(work from anywhere)</span></label></div>
+    <div class="row"><input id="wt_onsite" name="work_type" type="radio" value="onsite" {% if onsite %}checked{% endif %}>
+      <label for="wt_onsite" style="margin:0">On-site or hybrid</label></div>
+  </fieldset>
+  <div id="city_box" {% if not onsite %}hidden{% endif %}>
+    <label for="city">Preferred city or area <span class="hint">We'll look for jobs near here, plus remote ones</span></label>
+    <input id="city" name="city" type="text" maxlength="120" placeholder="e.g. Lagos, Manchester" value="{{ sub.city if sub else '' }}">
   </div>
   <label for="level">Experience level</label>
   <select id="level" name="level">
@@ -26,8 +43,25 @@
     <option value="mid" {% if sub and sub.level == 'mid' %}selected{% endif %}>Mid level (no director/head roles)</option>
   </select>
   <input class="hp" name="website" tabindex="-1" autocomplete="off">
-  <button type="submit">{{ button }}</button>
+  <button type="submit" id="submit">{{ button }}</button>
   <p class="small">One email a day with up to 5 new matches, only on days we find some. We skip senior roles if you choose a lower level, and we filter out unpaid roles and listings with common scam signs. Every email has a one-click unsubscribe link. We only store your email and these preferences, never share them, and delete them when you unsubscribe.</p>
 </form>
 {% if sub %}<p class="small"><a href="{{ base_url }}/unsubscribe/{{ sub.token }}">Unsubscribe and delete my details</a></p>{% endif %}
+<script>
+  (function () {
+    var form = document.getElementById("prefs"), box = document.getElementById("city_box"), city = document.getElementById("city");
+    function sync() {
+      var onsite = document.getElementById("wt_onsite").checked;
+      box.hidden = !onsite;
+      city.required = onsite;
+    }
+    form.addEventListener("change", sync);
+    sync();
+    form.addEventListener("submit", function () {
+      var b = document.getElementById("submit");
+      b.disabled = true;
+      b.textContent = "Sending...";
+    });
+  })();
+</script>
 {% endblock %}
