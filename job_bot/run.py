@@ -1,8 +1,10 @@
 """Entry point run daily by .github/workflows/job_search.yml.
 
 Delivery (set up at least one -- see job_bot/README.md):
-  Email:    EMAIL_USER, EMAIL_APP_PASSWORD, optional EMAIL_TO (defaults to EMAIL_USER)
   Telegram: TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+  Email:    EMAIL_USER, EMAIL_APP_PASSWORD, optional EMAIL_TO (defaults to EMAIL_USER).
+            The workflow doesn't pass these today: the email secrets are used by the
+            weekly Nigeria PR/PA search (run_weekly.py) instead.
 Optional secret: REED_API_KEY -- adds Reed's UK jobs with an explicit part-time filter.
 """
 import os

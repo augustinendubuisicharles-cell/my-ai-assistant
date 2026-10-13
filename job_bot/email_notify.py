@@ -8,26 +8,23 @@ from email.message import EmailMessage
 from html import escape
 
 
-def format_text(jobs: list[dict], today) -> str:
+def format_text(jobs: list[dict], today, heading: str = "Your top opportunities") -> str:
     """Plain-text fallback for mail clients that don't show HTML."""
-    lines = [f"Your top opportunities -- {today:%a %d %b}", ""]
+    lines = [f"{heading} -- {today:%a %d %b}", ""]
     if not jobs:
-        lines.append("No strong matches today.")
+        lines.append("No listings passed all the checks this time.")
     for i, j in enumerate(jobs, 1):
         company = f" at {j['company']}" if j["company"] else ""
         where = f" -- {j['location']}" if j["location"] else ""
         lines += [f"{i}. {j['title']}{company}{where}", f"   {', '.join(j['matched']) or 'keyword match'} (via {j['source']})", f"   {j['url']}", ""]
-    lines.append("Always verify visa/work-hours terms on the listing itself before applying.")
+    lines.append("Always read the full listing before applying, and never pay anyone to apply for a job.")
     return "\n".join(lines)
 
 
-def format_html(jobs: list[dict], today) -> str:
+def format_html(jobs: list[dict], today, heading: str = "Your top opportunities") -> str:
     """The same digest as the Telegram message, laid out for an email client."""
     if not jobs:
-        body = (
-            "<p>No strong matches today (nothing hit both a keyword and a remote/part-time signal).</p>"
-            "<p>Add REED_API_KEY for broader UK coverage, or widen the search terms in job_bot/search_jobs.py.</p>"
-        )
+        body = "<p>No listings passed all the checks this time.</p>"
     else:
         items = []
         for j in jobs:
@@ -40,8 +37,8 @@ def format_html(jobs: list[dict], today) -> str:
             )
         body = "<ol>" + "".join(items) + "</ol>"
     return (
-        f"<h2>Your top opportunities &mdash; {today:%a %d %b}</h2>{body}"
-        "<p><i>Always verify visa/work-hours terms on the listing itself before applying.</i></p>"
+        f"<h2>{escape(heading)} &mdash; {today:%a %d %b}</h2>{body}"
+        "<p><i>Always read the full listing before applying, and never pay anyone to apply for a job.</i></p>"
     )
 
 

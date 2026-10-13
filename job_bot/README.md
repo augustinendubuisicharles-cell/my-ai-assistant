@@ -65,3 +65,24 @@ or message within a minute or two if everything's wired up.
   days -- worth also checking your department's own postgrad/HR pages.
   Job-board keyword matching is noisy; always read the actual listing
   before relying on an hours/remote claim the bot made.
+
+## Weekly remote PR & PA jobs (Nigeria) -- email
+
+A second, separate search (`run_weekly.py`, workflow **Weekly remote PR &
+PA jobs (Nigeria)**) runs every Monday at 8am Lagos time and emails the 5
+best remote PR/communications and PA/virtual-assistant jobs that someone
+living in Nigeria can apply for. It uses the `EMAIL_*` secrets above and
+stops by itself after Monday 9 Nov 2026 (`LAST_SEND_DATE` in
+`run_weekly.py`). Change that date to keep it going.
+
+Sources: Himalayas, Jobicy and Remotive (no keys needed). Every job sent
+has passed these checks: open to Nigeria (worldwide, Africa, EMEA or
+Nigeria), posted in the last 3 weeks, not a senior/manager role, no
+common scam signs (fees, Telegram/WhatsApp interviews), and its link
+still loads without saying the job has closed.
+
+To preview it: Actions tab → **Weekly remote PR & PA jobs (Nigeria)** →
+**Run workflow**. "Dry run" is ticked by default, which only prints the
+jobs in the log; untick it to send the email.
+
+The daily UK search above sends to Telegram only.
