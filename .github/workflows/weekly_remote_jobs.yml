@@ -9,6 +9,12 @@ on:
         description: "Only print the jobs found, don't send the email"
         type: boolean
         default: true
+  pull_request:            # dry run whenever the search code changes, to catch breakage early
+    paths:
+      - "job_bot/nigeria_remote_jobs.py"
+      - "job_bot/run_weekly.py"
+      - "job_bot/email_notify.py"
+      - ".github/workflows/weekly_remote_jobs.yml"
 
 jobs:
   search-and-email:
@@ -24,7 +30,7 @@ jobs:
           EMAIL_USER: ${{ secrets.EMAIL_USER }}
           EMAIL_APP_PASSWORD: ${{ secrets.EMAIL_APP_PASSWORD }}
           EMAIL_TO: ${{ secrets.EMAIL_TO }}
-          FORCE_RUN: ${{ github.event_name == 'workflow_dispatch' && '1' || '0' }}
-          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run && '1' || '0' }}
+          FORCE_RUN: ${{ github.event_name != 'schedule' && '1' || '0' }}
+          DRY_RUN: ${{ (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.dry_run)) && '1' || '0' }}
         working-directory: job_bot
         run: python run_weekly.py
