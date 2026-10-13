@@ -5,7 +5,8 @@ Sources (no key needed): Himalayas (filters by country=Nigeria, which includes
 worldwide roles), Jobicy (Anywhere / EMEA roles), Remotive (worldwide roles).
 
 "Verified" here means every job sent has passed all of these checks:
-  1. the listing is open to Nigeria (worldwide, Africa, EMEA or Nigeria),
+  1. the listing is open to Nigeria (worldwide, Africa, EMEA or Nigeria) and,
+     where the board lists hiring time zones, one of them is near Nigeria's,
   2. it was posted in the last 21 days,
   3. it's not a senior/manager/director role (so it's realistic to land),
   4. it's paid (no volunteer/commission-only) and shows none of the usual scam
@@ -118,6 +119,9 @@ def _from_himalayas() -> list[dict]:
             r.raise_for_status()
             for j in r.json().get("jobs", []):
                 if j.get("expiryDate") and j["expiryDate"] < time.time():  # Himalayas says it has closed
+                    continue
+                tz = j.get("timezoneRestrictions") or []
+                if tz and not any(-1 <= t <= 3 for t in tz):  # working hours don't fit Nigeria (UTC+1)
                     continue
                 where = ", ".join(j.get("locationRestrictions") or []) or "Worldwide"
                 job = _job(
