@@ -13,13 +13,18 @@ from email.utils import formataddr
 FROM_NAME = os.environ.get("FROM_NAME", "Job Alerts")
 
 
+def _env(name: str, default: str = "") -> str:
+    # Secrets pasted from a dashboard often carry a stray newline or space.
+    return (os.environ.get(name) or default).strip()
+
+
 def send(to: str, subject: str, text: str, html: str, unsubscribe_url: str | None = None) -> None:
-    host = os.environ.get("SMTP_HOST", "smtp.gmail.com")
-    port = int(os.environ.get("SMTP_PORT", "465"))
-    user, password = os.environ["SMTP_USER"], os.environ["SMTP_PASSWORD"]
+    host = _env("SMTP_HOST", "smtp.gmail.com")
+    port = int(_env("SMTP_PORT", "465"))
+    user, password = _env("SMTP_USER"), _env("SMTP_PASSWORD")
 
     msg = EmailMessage()
-    msg["From"] = formataddr((FROM_NAME, os.environ.get("FROM_EMAIL") or user))
+    msg["From"] = formataddr((FROM_NAME, _env("FROM_EMAIL") or user))
     msg["To"] = to
     msg["Subject"] = subject
     if unsubscribe_url:
