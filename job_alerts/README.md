@@ -20,7 +20,7 @@ board's expiry date, and its link doesn't come back "not found".
 
 ## Going live (all free tiers, about 20 minutes)
 
-1. **Database: Neon** (neon.tech). Create a project and copy its connection
+1. **Database: Neon** (neon.tech). Create a project in the **AWS Europe (London)** region and copy its connection
    string (`postgresql://...`). This is `DATABASE_URL`.
 2. **Email: Brevo** (brevo.com, 300 emails/day free). Verify a sender address,
    then under SMTP & API copy the SMTP login and key. Use `SMTP_HOST=smtp-relay.brevo.com`,
