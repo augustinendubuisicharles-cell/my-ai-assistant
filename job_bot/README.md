@@ -77,9 +77,10 @@ stops by itself after Monday 9 Nov 2026 (`LAST_SEND_DATE` in
 
 Sources: Himalayas, Jobicy and Remotive (no keys needed). Every job sent
 has passed these checks: open to Nigeria (worldwide, Africa, EMEA or
-Nigeria), posted in the last 3 weeks, not a senior/manager role, no
-common scam signs (fees, Telegram/WhatsApp interviews), and its link
-still loads without saying the job has closed.
+Nigeria), posted in the last 3 weeks, not a senior/manager role, paid
+(no volunteer or commission-only roles), no common scam signs (fees,
+Telegram/WhatsApp interviews), not past the board's expiry date, and its
+link doesn't come back "not found" or say the job has closed.
 
 To preview it: Actions tab → **Weekly remote PR & PA jobs (Nigeria)** →
 **Run workflow**. "Dry run" is ticked by default, which only prints the

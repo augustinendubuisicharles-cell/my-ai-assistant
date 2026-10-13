@@ -8,8 +8,10 @@ worldwide roles), Jobicy (Anywhere / EMEA roles), Remotive (worldwide roles).
   1. the listing is open to Nigeria (worldwide, Africa, EMEA or Nigeria),
   2. it was posted in the last 21 days,
   3. it's not a senior/manager/director role (so it's realistic to land),
-  4. it shows none of the usual scam signs (fees, Telegram/WhatsApp interviews...),
-  5. its link still loads and doesn't say the job has closed.
+  4. it's paid (no volunteer/commission-only) and shows none of the usual scam
+     signs (fees, Telegram/WhatsApp interviews...),
+  5. it hasn't passed the board's expiry date, and its link doesn't come back
+     "not found" or say the job has closed.
 """
 import re
 import time
@@ -44,6 +46,7 @@ TOO_SENIOR = ["senior", "sr.", "sr ", "head of", "director", "vp ", "vice presid
 OTHER_COUNTRY_ONLY = ["philippine", "latam", "latin america", "us only", "usa only", "us-based", "u.s. only",
                       "canada only", "uk only", "eu only", "india only", "south africa only"]
 OPEN_TO_NIGERIA = ["worldwide", "anywhere", "global", "africa", "emea", "nigeria", "lagos", "abuja"]
+UNPAID = ["volunteer", "unpaid", "commission only", "commission-only", "equity only"]
 SCAM_SIGNS = ["registration fee", "training fee", "pay a fee", "processing fee", "starter kit", "telegram",
               "whatsapp", "google hangouts", "wire transfer", "send money", "western union", "crypto payment",
               "no interview", "earn $", "unlimited earning"]
@@ -66,7 +69,7 @@ def _role(title: str) -> str | None:
     return None
 
 
-def _job(title, company, location, url, source, posted, desc, level="", pay="") -> dict | None:
+def _job(title, company, location, url, source, posted, desc, level="", pay="", job_type="") -> dict | None:
     """Builds a job dict, or returns None when the listing fails checks 1-4."""
     role = _role(title)
     if not role or not url or not posted:
@@ -75,6 +78,8 @@ def _job(title, company, location, url, source, posted, desc, level="", pay="") 
     if any(w in f" {title.lower()} " for w in TOO_SENIOR) or level.lower() in ("senior", "manager", "director", "executive"):
         return None
     if any(w in text for w in OTHER_COUNTRY_ONLY) or any(w in text for w in SCAM_SIGNS):
+        return None
+    if any(w in f"{title} {job_type}".lower() for w in UNPAID):
         return None
     if not any(w in location.lower() for w in OPEN_TO_NIGERIA):
         return None
@@ -112,6 +117,8 @@ def _from_himalayas() -> list[dict]:
                              params={"q": q, "country": "NG", "sort": "recent"}, headers=HEADERS, timeout=TIMEOUT)
             r.raise_for_status()
             for j in r.json().get("jobs", []):
+                if j.get("expiryDate") and j["expiryDate"] < time.time():  # Himalayas says it has closed
+                    continue
                 where = ", ".join(j.get("locationRestrictions") or []) or "Worldwide"
                 job = _job(
                     j.get("title", ""), j.get("companyName"), where, j.get("applicationLink"), "Himalayas",
@@ -119,6 +126,7 @@ def _from_himalayas() -> list[dict]:
                     _clean(j.get("description") or j.get("excerpt") or ""),
                     level=", ".join(j.get("seniority") or []),
                     pay=_pay(j.get("minSalary"), j.get("maxSalary"), j.get("currency"), j.get("salaryPeriod")),
+                    job_type=j.get("employmentType") or "",
                 )
                 if job:
                     jobs.append(job)
@@ -145,6 +153,7 @@ def _from_jobicy() -> list[dict]:
                         _clean(j.get("jobExcerpt") or j.get("jobDescription") or ""),
                         level=j.get("jobLevel") or "",
                         pay=_pay(j.get("salaryMin"), j.get("salaryMax"), j.get("salaryCurrency"), j.get("salaryPeriod")),
+                        job_type=str(j.get("jobType") or ""),
                     )
                     if job:
                         jobs.append(job)
@@ -170,6 +179,7 @@ def _from_remotive() -> list[dict]:
                     datetime.fromisoformat(posted).replace(tzinfo=timezone.utc) if posted else None,
                     _clean(j.get("description", "")),
                     pay=j.get("salary") or "",
+                    job_type=j.get("job_type") or "",
                 )
                 if job:
                     jobs.append(job)
