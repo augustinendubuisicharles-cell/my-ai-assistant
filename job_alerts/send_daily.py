@@ -34,6 +34,7 @@ def main() -> None:
                 sub = db.start_trial(sub["id"], payments.TRIAL_DAYS)
             remind(sub, base_url)
             if not db.is_paid(sub):
+                db.note_run(sub["id"], "not active: trial or membership ended")
                 continue
         try:
             member = db.is_member(sub, paid_ids)
@@ -55,6 +56,7 @@ def main() -> None:
                 if first:  # don't leave a new subscriber wondering
                     subject, text, html = emails.no_matches_yet(base_url, sub["token"], first_titles(sub["keywords"], titles))
                     mailer.send(sub["email"], subject, text, html, unsubscribe_url=f"{base_url}/unsubscribe/{sub['token']}")
+                db.note_run(sub["id"], "no new matches" + (" (sent the we-are-searching email)" if first else ""))
                 print(f"- subscriber {sub['id']}: no new matches{', sent the we-are-searching email' if first else ', nothing sent'}")
                 continue
             subject, text, html = emails.digest(jobs, datetime.now(timezone.utc), base_url, sub["token"],
@@ -63,11 +65,16 @@ def main() -> None:
             mailer.send(sub["email"], subject, text, html, unsubscribe_url=f"{base_url}/unsubscribe/{sub['token']}")
             db.record_sent(sub["id"], [job_key(j) for j in jobs])
             sent += 1
+            db.note_run(sub["id"], f"sent {len(jobs)} job{'s' if len(jobs) != 1 else ''}")
             print(f"- subscriber {sub['id']}: sent {len(jobs)} job(s)")
             time.sleep(1)
         except Exception as e:  # one bad subscriber shouldn't stop everyone else's email
             failed += 1
             print(f"- subscriber {sub['id']}: FAILED {e}")
+            try:
+                db.note_run(sub["id"], f"FAILED: {e}")
+            except Exception:
+                pass
     print(f"Done: {sent} email(s) sent, {failed} failed.")
     if failed and not sent:
         sys.exit(1)

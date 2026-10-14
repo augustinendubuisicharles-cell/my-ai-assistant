@@ -29,6 +29,8 @@ subscribers = Table(
     Column("ref_code", String(16), unique=True),         # their invite link: /?ref=<ref_code>
     Column("referred_by", Integer),                      # subscriber id whose invite link they used
     Column("ref_rewards", Integer, nullable=False, server_default="0"),  # free months already given for invites
+    Column("last_run_at", DateTime(timezone=True)),      # when a job search last ran for them (owner dashboard)
+    Column("last_run_result", String(200)),              # what it did: "sent 5 jobs", "no new matches", "FAILED: ..."
 )
 
 payments = Table(
@@ -75,7 +77,8 @@ def init_db() -> None:
     have = {c["name"] for c in inspect(engine).get_columns("subscribers")}
     added = {"city": "VARCHAR(120) NOT NULL DEFAULT ''", "paid_until": "TIMESTAMP WITH TIME ZONE",
              "reminded_for": "TIMESTAMP WITH TIME ZONE", "telegram_chat_id": "VARCHAR(32)", "cv_text": "TEXT",
-             "ref_code": "VARCHAR(16)", "referred_by": "INTEGER", "ref_rewards": "INTEGER NOT NULL DEFAULT 0"}
+             "ref_code": "VARCHAR(16)", "referred_by": "INTEGER", "ref_rewards": "INTEGER NOT NULL DEFAULT 0",
+             "last_run_at": "TIMESTAMP WITH TIME ZONE", "last_run_result": "VARCHAR(200)"}
     with engine.begin() as conn:
         for name, sql_type in added.items():
             if name not in have:
@@ -200,6 +203,13 @@ def start_trial(subscriber_id: int, days: int) -> dict | None:
                      .values(paid_until=now() + timedelta(days=days)))
         row = conn.execute(select(subscribers).where(subscribers.c.id == subscriber_id)).mappings().first()
         return dict(row) if row else None
+
+
+def note_run(subscriber_id: int, result: str) -> None:
+    """Records what today's search did for this subscriber, for the owner dashboard."""
+    with engine.begin() as conn:
+        conn.execute(update(subscribers).where(subscribers.c.id == subscriber_id)
+                     .values(last_run_at=now(), last_run_result=result[:200]))
 
 
 def mark_reminded(subscriber_id: int, paid_until: datetime) -> None:

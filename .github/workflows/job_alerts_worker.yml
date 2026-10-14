@@ -94,10 +94,11 @@ jobs:
           TELEGRAM_TOKEN: ${{ secrets.JOB_ALERTS_TELEGRAM_TOKEN }}
           GH_TOKEN: ${{ secrets.JOB_ALERTS_GITHUB_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.JOB_ALERTS_ANTHROPIC_KEY }}
+          ADMIN_KEY: ${{ secrets.JOB_ALERTS_ADMIN_KEY }}
         run: |
           node -e '
             const names = ["DATABASE_URL", "BREVO_API_KEY", "FROM_EMAIL", "CONTACT_EMAIL", "CREDO_PUBLIC_KEY",
-                           "CREDO_SECRET_KEY", "CREDO_LIVE", "CREDO_BUSINESS_CODE", "PAYSTACK_SECRET_KEY", "TELEGRAM_TOKEN", "GH_TOKEN", "ANTHROPIC_API_KEY"];
+                           "CREDO_SECRET_KEY", "CREDO_LIVE", "CREDO_BUSINESS_CODE", "PAYSTACK_SECRET_KEY", "TELEGRAM_TOKEN", "GH_TOKEN", "ANTHROPIC_API_KEY", "ADMIN_KEY"];
             const out = Object.fromEntries(names.filter((n) => (process.env[n] || "").trim()).map((n) => [n, process.env[n].trim()]));
             console.error("Setting: " + Object.keys(out).join(", "));
             require("fs").writeFileSync("/tmp/secrets.json", JSON.stringify(out));
