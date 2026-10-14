@@ -18,6 +18,9 @@ def main() -> None:
         sys.exit("BASE_URL is required so emails can link to the site.")
     db.init_db()
     subs = db.confirmed_subscribers()
+    if only := os.environ.get("ONLY_EMAIL", "").strip().lower():  # test run for one subscriber
+        subs = [s for s in subs if s["email"].strip().lower() == only]
+        print(f"Test run for one address: {len(subs)} matching confirmed subscriber(s).")
     require_payment = os.environ.get("REQUIRE_PAYMENT", "1") != "0"
     print(f"{len(subs)} confirmed subscriber(s); payment {'required' if require_payment else 'not required'}.")
     paid_ids = db.paid_subscriber_ids()
