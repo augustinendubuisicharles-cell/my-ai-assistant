@@ -166,76 +166,153 @@ const fmtTime = (d) => (d ? new Date(d).toLocaleString("en-GB", { ...LAGOS, day:
 const naira = (n) => `₦${Number(n || 0).toLocaleString("en")}`;
 
 const STYLE = `
-  :root { --bg:#f6f7f9; --card:#fff; --text:#1d2433; --muted:#5b6475; --border:#dfe3ea; --green:#127a3e; --amber:#9a5b00; --red:#b42318; --accent:#2457d6; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#12151b; --card:#1b2029; --text:#e8ebf1; --muted:#a2abbb; --border:#2c3340; --green:#5fd18f; --amber:#f0b44c; --red:#ff8a80; --accent:#7aa2ff; } }
+  :root { --bg:#f3f5f8; --card:#fff; --card2:#f8f9fb; --text:#161b26; --muted:#5d6678; --border:#e1e5ec; --green:#13804a; --amber:#a35f00; --red:#c0281b; --accent:#2f5bea; --gray:#9aa3b2; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0e1116; --card:#171b22; --card2:#1d222b; --text:#e9ecf2; --muted:#9aa4b5; --border:#262d39; --green:#4fd18b; --amber:#f2b74f; --red:#ff7f74; --accent:#7f9dff; --gray:#5d6678; } }
   * { box-sizing:border-box; }
-  body { margin:0; font:15px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--text); }
-  main { max-width:880px; margin:0 auto; padding:20px 16px 48px; }
-  h1 { font-size:20px; margin:0 0 4px; } h2 { font-size:16px; margin:28px 0 10px; }
-  .muted { color:var(--muted); } a { color:var(--accent); }
-  .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:14px 16px; }
-  .health { border-left:6px solid var(--c); } .health b.big { font-size:22px; color:var(--c); display:block; }
-  .green { --c:var(--green); } .amber { --c:var(--amber); } .red { --c:var(--red); }
-  .health ul { margin:8px 0 0; padding-left:18px; }
-  .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; margin-top:12px; }
-  .grid .card { padding:10px 12px; } .grid b { display:block; font-size:22px; }
-  .list { list-style:none; margin:0; padding:0; display:grid; gap:8px; }
-  .list li { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:10px 12px; }
-  .row { display:flex; flex-wrap:wrap; gap:6px 12px; align-items:baseline; }
-  .email { font-weight:600; overflow-wrap:anywhere; }
-  .pill { font-size:12px; padding:1px 8px; border-radius:99px; border:1px solid currentColor; }
+  body { margin:0; font:14px/1.45 Inter,system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--text); }
+  main { max-width:1440px; margin:0 auto; padding:24px 32px 56px; }
+  a { color:var(--accent); text-decoration:none; } a:hover { text-decoration:underline; }
+  .muted { color:var(--muted); } .small { font-size:12.5px; }
   .ok { color:var(--green); } .warn { color:var(--amber); } .bad { color:var(--red); }
-  .small { font-size:13px; }
+  .green { --c:var(--green); } .amber { --c:var(--amber); } .red { --c:var(--red); }
+  header.top { display:flex; align-items:center; justify-content:space-between; gap:16px; margin-bottom:20px; }
+  header.top h1 { font-size:22px; margin:0; letter-spacing:-.01em; }
+  .status { display:inline-flex; align-items:center; gap:8px; padding:6px 14px; border-radius:99px; font-weight:600; color:var(--c);
+    background:color-mix(in srgb, var(--c) 12%, transparent); border:1px solid color-mix(in srgb, var(--c) 35%, transparent); }
+  .dot { width:8px; height:8px; border-radius:50%; background:currentColor; display:inline-block; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:18px 20px; }
+  .card h2 { font-size:13px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 14px; font-weight:600; }
+  .kpis { display:grid; grid-template-columns:repeat(8,minmax(0,1fr)); gap:12px; margin-bottom:16px; }
+  .kpi { padding:14px 16px; } .kpi b { display:block; font-size:26px; font-weight:700; letter-spacing:-.02em; } .kpi span { color:var(--muted); font-size:12.5px; }
+  .kpi.money b { color:var(--green); }
+  .cols { display:grid; grid-template-columns:minmax(0,1.5fr) minmax(0,1fr) minmax(0,.9fr); gap:16px; margin-bottom:16px; }
+  .health { border-left:5px solid var(--c); }
+  .health .big { font-size:24px; font-weight:700; color:var(--c); margin:0 0 4px; }
+  .health ul { margin:10px 0 0; padding-left:18px; } .health li { margin:4px 0; }
+  .bar { display:flex; height:12px; border-radius:99px; overflow:hidden; background:var(--card2); margin:16px 0 10px; }
+  .bar i { display:block; height:100%; }
+  .legend { display:flex; flex-wrap:wrap; gap:6px 16px; font-size:12.5px; color:var(--muted); }
+  .mini { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-top:18px; }
+  .mini div { background:var(--card2); border-radius:10px; padding:10px 12px; } .mini b { display:block; font-size:18px; } .mini span { font-size:12px; color:var(--muted); }
+  .legend b { color:var(--text); }
+  .sw { width:10px; height:10px; border-radius:3px; display:inline-block; margin-right:5px; vertical-align:-1px; }
+  table { width:100%; border-collapse:collapse; }
+  th { text-align:left; font-size:11.5px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); font-weight:600; padding:8px 10px; border-bottom:1px solid var(--border); white-space:nowrap; }
+  td { padding:9px 10px; border-bottom:1px solid var(--border); vertical-align:top; }
+  tr:last-child td { border-bottom:0; }
+  .runs td, .services td { padding:7px 6px; } .runs td { white-space:nowrap; } .runs th, .services th { padding:6px; }
+  .pill { display:inline-block; font-size:11.5px; font-weight:600; padding:2px 9px; border-radius:99px; white-space:nowrap; color:var(--c, var(--muted));
+    background:color-mix(in srgb, var(--c, var(--gray)) 13%, transparent); }
+  .pill.member { --c:var(--green); } .pill.trial { --c:var(--accent); } .pill.expired { --c:var(--red); } .pill.unconfirmed { --c:var(--gray); }
+  .toolbar { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
+  .tabs { display:flex; gap:4px; background:var(--card2); border:1px solid var(--border); border-radius:10px; padding:3px; }
+  .tabs button { font:inherit; font-size:13px; border:0; background:none; color:var(--muted); padding:6px 12px; border-radius:7px; cursor:pointer; }
+  .tabs button.on { background:var(--card); color:var(--text); box-shadow:0 1px 2px rgba(0,0,0,.12); font-weight:600; }
+  .tabs button em { font-style:normal; color:var(--muted); margin-left:4px; font-weight:400; }
+  input[type=search] { font:inherit; width:280px; padding:8px 12px; border-radius:9px; border:1px solid var(--border); background:var(--card2); color:var(--text); }
+  .users td { font-size:13.5px; } .users tbody tr:hover { background:var(--card2); }
+  .email { font-weight:600; overflow-wrap:anywhere; }
+  .num { text-align:right; font-variant-numeric:tabular-nums; }
+  .titles { max-width:300px; }
+  .empty { padding:24px; text-align:center; color:var(--muted); display:none; }
+  @media (max-width:1100px) { .kpis { grid-template-columns:repeat(4,minmax(0,1fr)); } .cols { grid-template-columns:1fr; } main { padding:20px 16px 48px; } .users { display:block; overflow-x:auto; } }
 `;
 
-const PILL = { member: "ok", trial: "warn", expired: "bad", unconfirmed: "muted" };
+const PLAN = { member: "Member", trial: "Free trial", expired: "Expired", unconfirmed: "Unconfirmed" };
+
+function morning(u) {
+  if (!u.confirmed) return `<span class="muted">Not searched until they confirm their email</span>`;
+  if (u.status === "expired") return `<span class="muted">Not searched: their trial or membership has ended</span>`;
+  if (u.ranToday) return `<span class="${u.failed ? "bad" : "ok"}">${u.failed ? "✗" : "✓"} This morning: ${esc(u.last_run_result)}</span><div class="small muted">${fmtTime(u.last_run_at)}</div>`;
+  if (u.last_run_at) return `<span class="warn">⚠ Not reached this morning.</span><div class="small muted">Last: ${esc(u.last_run_result)}, ${fmtTime(u.last_run_at)}</div>`;
+  if (u.neverSearched) return `<span class="bad">✗ Never searched: their first search didn't start</span>`;
+  return `<span class="warn">⚠ No search recorded yet</span>`;
+}
 
 function userRow(u) {
-  const plan = u.status === "member" || u.status === "trial" ? `${u.status} until ${fmtDay(u.paid_until)}`
-    : u.status === "expired" ? `expired ${fmtDay(u.paid_until)}` : "unconfirmed";
-  const where = u.remote_only ? "remote" : `on-site near ${u.city || "?"}`;
-  let morning;
-  if (!u.confirmed) morning = `<span class="muted">Not searched until they confirm their email</span>`;
-  else if (u.status === "expired") morning = `<span class="muted">Not searched: their trial or membership has ended</span>`;
-  else if (u.ranToday) morning = `<span class="${u.failed ? "bad" : "ok"}">${u.failed ? "✗" : "✓"} This morning: ${esc(u.last_run_result)}</span> <span class="muted">${fmtTime(u.last_run_at)}</span>`;
-  else if (u.last_run_at) morning = `<span class="warn">⚠ Not reached this morning.</span> <span class="muted">Last: ${esc(u.last_run_result)}, ${fmtTime(u.last_run_at)}</span>`;
-  else if (u.neverSearched) morning = `<span class="bad">✗ Never searched: their first search didn't start</span>`;
-  else morning = `<span class="warn">⚠ No search recorded yet</span>`;
-  return `<li><div class="row"><span class="email">${esc(u.email)}</span><span class="pill ${PILL[u.status]}">${esc(plan)}</span></div>
-<div class="small muted">${esc((u.keywords || "").replace(/,\s*/g, ", "))} · ${esc(u.country || "any country")} · ${esc(where)} · joined ${fmtDay(u.created_at)}${u.telegram ? " · Telegram" : ""}</div>
-<div class="small">${morning}</div>
-<div class="small muted">${u.jobs_sent} job${u.jobs_sent === 1 ? "" : "s"} sent in total${u.last_job_at ? `, last on ${fmtDay(u.last_job_at)}` : ""}</div></li>`;
+  const active = u.status === "member" || u.status === "trial";
+  const attention = active && (u.failed || u.neverSearched || (!u.ranToday && !u.newToday));
+  const until = active ? `${u.status} until ${fmtDay(u.paid_until)}` : u.status === "expired" ? `ended ${fmtDay(u.paid_until)}` : "";
+  const where = u.remote_only ? "Remote" : `On-site, ${u.city || "?"}`;
+  const tags = [u.status, active ? "active" : "", attention ? "attention" : ""].join(" ");
+  return `<tr data-tags="${tags}">
+<td><div class="email">${esc(u.email)}</div><div class="small muted">Joined ${fmtDay(u.created_at)}${u.telegram ? " · Telegram" : ""}</div></td>
+<td><span class="pill ${u.status}">${PLAN[u.status]}</span>${until ? `<div class="small muted">${esc(until)}</div>` : ""}</td>
+<td class="titles">${esc((u.keywords || "").replace(/,\s*/g, ", "))}</td>
+<td>${esc(u.country || "Any country")}<div class="small muted">${esc(where)}</div></td>
+<td>${morning(u)}</td>
+<td class="num"><b>${u.jobs_sent}</b>${u.last_job_at ? `<div class="small muted">last ${fmtDay(u.last_job_at)}</div>` : ""}</td>
+</tr>`;
 }
+
+const SCRIPT = `
+(() => {
+  const rows = [...document.querySelectorAll(".users tbody tr")], q = document.getElementById("q"), empty = document.querySelector(".empty");
+  let tab = "all";
+  const apply = () => {
+    const term = q.value.trim().toLowerCase(); let shown = 0;
+    for (const r of rows) {
+      const ok = (tab === "all" || r.dataset.tags.split(" ").includes(tab)) && (!term || r.textContent.toLowerCase().includes(term));
+      r.style.display = ok ? "" : "none"; shown += ok;
+    }
+    empty.style.display = shown ? "none" : "block";
+  };
+  document.querySelectorAll(".tabs button").forEach((b) => b.addEventListener("click", () => {
+    document.querySelectorAll(".tabs button").forEach((x) => x.classList.toggle("on", x === b)); tab = b.dataset.tab; apply();
+  }));
+  q.addEventListener("input", apply);
+})();
+`;
 
 export function render(siteName, { users, stats: s }, now = new Date()) {
   const h = s.health;
-  const tile = (n, label) => `<div class="card"><b>${n}</b><span class="muted small">${label}</span></div>`;
+  const kpi = (n, label, cls = "") => `<div class="card kpi ${cls}"><b>${n}</b><span>${label}</span></div>`;
+  const notReached = Math.max(0, s.active - s.reached);
+  const pct = (n) => (s.active ? (n / s.active) * 100 : 0);
+  const seg = (n, color) => (n ? `<i style="width:${pct(n)}%;background:var(${color})"></i>` : "");
   const runs = s.runs === null ? `<p class="muted small">Run history unavailable.</p>` : !s.runs.length ? `<p class="muted small">No runs yet.</p>`
-    : `<ul class="list">${s.runs.map((r) => {
+    : `<table class="runs"><thead><tr><th>Result</th><th>Started</th><th>Trigger</th><th></th></tr></thead><tbody>${s.runs.map((r) => {
         const state = r.status !== "completed" ? ["warn", "running"] : r.conclusion === "success" ? ["ok", "passed"] : ["bad", r.conclusion];
-        const kind = r.event === "schedule" ? "fallback schedule" : r.event === "workflow_dispatch" ? "started by the site" : r.event;
-        return `<li class="small"><div class="row"><span class="${state[0]}">${esc(state[1])}</span><span>${fmtTime(r.when)}</span><span class="muted">${esc(kind)}</span><a href="${esc(r.url)}" rel="noreferrer">log</a></div></li>`;
-      }).join("")}</ul>`;
+        const kind = r.event === "schedule" ? "Fallback schedule" : r.event === "workflow_dispatch" ? "Started by the site" : r.event;
+        return `<tr><td><span class="${state[0]}"><span class="dot"></span> ${esc(state[1])}</span></td><td>${fmtTime(r.when)}</td><td class="muted">${esc(kind)}</td><td class="num"><a href="${esc(r.url)}" rel="noreferrer">Log</a></td></tr>`;
+      }).join("")}</tbody></table>`;
+  const attention = users.filter((u) => (u.status === "member" || u.status === "trial") && (u.failed || u.neverSearched || (!u.ranToday && !u.newToday))).length;
+  const newToday = users.filter((u) => u.confirmed && u.newToday).length;
+  const tab = (key, label, n, on = false) => `<button data-tab="${key}"${on ? ' class="on"' : ""}>${label}<em>${n}</em></button>`;
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex, nofollow"><meta name="referrer" content="no-referrer">
 <title>${esc(siteName)} dashboard</title><style>${STYLE}</style></head>
 <body><main>
-<h1>${esc(siteName)} dashboard</h1>
-<p class="muted small">Updated ${fmtTime(now)} (Nigeria time). "This morning" means since ${fmtTime(s.since)}.</p>
+<header class="top"><div><h1>${esc(siteName)} dashboard</h1>
+<div class="muted small">Updated ${fmtTime(now)} (Nigeria time). "This morning" means since ${fmtTime(s.since)}.</div></div>
+<span class="status ${h.level}"><span class="dot"></span>${h.headline}</span></header>
 
-<div class="card health ${h.level}"><b class="big">${h.headline}</b>
+<section class="kpis">${kpi(s.users, "Signed up")}${kpi(s.confirmed, "Confirmed")}${kpi(s.active, "Active now")}${kpi(s.member, "Paying members")}${kpi(s.trial, "On free trial")}${kpi(s.unconfirmed, "Unconfirmed")}${kpi(naira(s.revenue.month), "Paid, last 30 days", "money")}${kpi(naira(s.revenue.total), "Paid in total", "money")}</section>
+
+<section class="cols">
+<div class="card health ${h.level}"><h2>System health</h2><p class="big">${h.headline}</p>
 <span>${s.reached} of ${s.active} active users searched this morning: ${s.sent} got jobs, ${s.none} had no new matches${s.failed ? `, <span class="bad">${s.failed} failed</span>` : ""}.</span>
-${h.notes.length ? `<ul>${h.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}</div>
+<div class="bar">${seg(s.sent, "--green")}${seg(s.none, "--accent")}${seg(s.failed, "--red")}${seg(notReached, "--amber")}</div>
+<div class="legend"><span><i class="sw" style="background:var(--green)"></i>Got jobs <b>${s.sent}</b></span><span><i class="sw" style="background:var(--accent)"></i>No new matches <b>${s.none}</b></span><span><i class="sw" style="background:var(--red)"></i>Failed <b>${s.failed}</b></span><span><i class="sw" style="background:var(--amber)"></i>Not reached yet <b>${notReached}</b></span></div>
+${h.notes.length ? `<ul>${h.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>` : ""}
+<div class="mini"><div><b>${s.active ? Math.round((s.reached / s.active) * 100) : 0}%</b><span>reached this morning</span></div>
+<div><b>${newToday}</b><span>joined since the run</span></div>
+<div><b class="${attention ? "warn" : ""}">${attention}</b><span>need attention</span></div>
+<div><b>${users.reduce((n, u) => n + (u.jobs_sent || 0), 0)}</b><span>jobs sent in total</span></div></div></div>
 
-<div class="grid">${tile(s.users, "signed up")}${tile(s.confirmed, "confirmed")}${tile(s.member, "paying members")}${tile(s.trial, "on free trial")}${tile(s.expired, "expired")}${tile(s.unconfirmed, "unconfirmed")}${tile(naira(s.revenue.month), "paid, last 30 days")}${tile(naira(s.revenue.total), "paid in total")}</div>
+<div class="card"><h2>Morning runs</h2>${runs}</div>
 
-<h2>Morning runs</h2>${runs}
+<div class="card"><h2>Services</h2><table class="services"><tbody>${s.services.map(([name, on]) => `<tr><td>${esc(name)}</td><td class="num"><span class="pill" style="--c:var(${on ? "--green" : "--gray"})">${on ? "On" : "Off"}</span></td></tr>`).join("")}</tbody></table>
+</div>
+</section>
 
-<h2>Services</h2>
-<ul class="list">${s.services.map(([name, on]) => `<li class="small"><span class="${on ? "ok" : "muted"}">${on ? "✓ On" : "○ Off"}</span> ${esc(name)}</li>`).join("")}</ul>
-
-<h2>Users (${users.length})</h2>
-<ul class="list">${users.map(userRow).join("")}</ul>
-</main></body></html>`;
+<section class="card">
+<div class="toolbar"><div class="tabs">${tab("all", "All users", users.length, true)}${tab("active", "Active", s.active)}${tab("attention", "Needs attention", attention)}${tab("member", "Members", s.member)}${tab("trial", "Trial", s.trial)}${tab("unconfirmed", "Unconfirmed", s.unconfirmed)}${tab("expired", "Expired", s.expired)}</div>
+<input type="search" id="q" placeholder="Search email, job title, country…" aria-label="Search users"></div>
+<table class="users"><thead><tr><th>User</th><th>Plan</th><th>Job titles</th><th>Location</th><th>This morning</th><th class="num">Jobs sent</th></tr></thead>
+<tbody>${users.map(userRow).join("")}</tbody></table>
+<div class="empty">No users match.</div>
+</section>
+</main><script>${SCRIPT}</script></body></html>`;
 }
