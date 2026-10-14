@@ -31,6 +31,8 @@ subscribers = Table(
     Column("ref_rewards", Integer, nullable=False, server_default="0"),  # free months already given for invites
     Column("last_run_at", DateTime(timezone=True)),      # when a job search last ran for them (owner dashboard)
     Column("last_run_result", String(200)),              # what it did: "sent 5 jobs", "no new matches", "FAILED: ..."
+    Column("confirm_reminded_at", DateTime(timezone=True)),  # one "please confirm" reminder for unconfirmed sign-ups
+    Column("titles_tip_at", DateTime(timezone=True)),    # one "try broader job titles" email when nothing ever matched
 )
 
 payments = Table(
@@ -78,7 +80,8 @@ def init_db() -> None:
     added = {"city": "VARCHAR(120) NOT NULL DEFAULT ''", "paid_until": "TIMESTAMP WITH TIME ZONE",
              "reminded_for": "TIMESTAMP WITH TIME ZONE", "telegram_chat_id": "VARCHAR(32)", "cv_text": "TEXT",
              "ref_code": "VARCHAR(16)", "referred_by": "INTEGER", "ref_rewards": "INTEGER NOT NULL DEFAULT 0",
-             "last_run_at": "TIMESTAMP WITH TIME ZONE", "last_run_result": "VARCHAR(200)"}
+             "last_run_at": "TIMESTAMP WITH TIME ZONE", "last_run_result": "VARCHAR(200)",
+             "confirm_reminded_at": "TIMESTAMP WITH TIME ZONE", "titles_tip_at": "TIMESTAMP WITH TIME ZONE"}
     with engine.begin() as conn:
         for name, sql_type in added.items():
             if name not in have:
@@ -210,6 +213,22 @@ def note_run(subscriber_id: int, result: str) -> None:
     with engine.begin() as conn:
         conn.execute(update(subscribers).where(subscribers.c.id == subscriber_id)
                      .values(last_run_at=now(), last_run_result=result[:200]))
+
+
+def unconfirmed_to_remind() -> list[dict]:
+    """Signed up 20 hours to 7 days ago, never confirmed, not reminded yet."""
+    t = now()
+    with engine.connect() as conn:
+        rows = conn.execute(select(subscribers).where(
+            subscribers.c.confirmed.is_(False), subscribers.c.confirm_reminded_at.is_(None),
+            subscribers.c.created_at <= t - timedelta(hours=20), subscribers.c.created_at >= t - timedelta(days=7)))
+        return [dict(r._mapping) for r in rows]
+
+
+def mark(subscriber_id: int, column: str) -> None:
+    """Stamps one of the once-only email columns (confirm_reminded_at, titles_tip_at) with now."""
+    with engine.begin() as conn:
+        conn.execute(update(subscribers).where(subscribers.c.id == subscriber_id).values({column: now()}))
 
 
 def mark_reminded(subscriber_id: int, paid_until: datetime) -> None:
