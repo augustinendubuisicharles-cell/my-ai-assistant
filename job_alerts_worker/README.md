@@ -47,3 +47,11 @@ npm install
 npm test        # runs the site against an in-memory Postgres with the real schema
 npm run check   # bundles it the way Cloudflare will
 ```
+
+## First jobs right after sign-up
+
+When someone confirms their email, the site starts the daily-email workflow for just
+that person, so their first matches arrive within minutes instead of the next morning.
+This needs one GitHub secret, `JOB_ALERTS_GITHUB_TOKEN`: a fine-grained token
+(GitHub → Settings → Developer settings → Fine-grained tokens) for this repository only,
+with **Actions: Read and write**. Without it, first matches simply come the next morning.

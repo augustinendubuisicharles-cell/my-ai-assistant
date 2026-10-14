@@ -184,14 +184,14 @@ const steps = (list) => `<ol class="steps">${list.map(([state, title, detail], i
   `<li class="${state}"><span class="dot">${state === "done" ? "&#10003;" : i + 1}</span><b>${esc(title)}</b><span>${esc(detail)}</span></li>`).join("")}</ol>`;
 
 // "You're in": shown after confirming an email or paying.
-export function welcome(ctx, { title = "You're in! 🎉", until, trial = true, sub }) {
+export function welcome(ctx, { title = "You're in! 🎉", until, trial = true, sub, soon = false }) {
   const share = `I get job matches in my inbox every morning from JobAlert, checked for scams. ${trial ? `Free for ${ctx.trialDays} days: ` : ""}${ctx.baseUrl}`;
   return page(ctx, `<div class="hero">${ART_ROCKET}<h1>${esc(title)}</h1><p>Your jobs are on their way.</p>
 <span class="pill">${trial ? "Free trial" : "Active"} until ${esc(until)}</span></div>
 <div class="card">${steps([
     ["done", "Email confirmed", "You're all set"],
     ["now", "Searching for your jobs", "Remote and local job boards, checked for scams and dead links"],
-    ["", "First matches in your inbox", "Tomorrow morning, and every morning after"],
+    ["", "First matches in your inbox", soon ? "In a few minutes, then every morning" : "Tomorrow morning, and every morning after"],
   ])}
 <div class="actions">
   <a class="btn wa" href="https://wa.me/?text=${encodeURIComponent(share)}">Tell a friend on WhatsApp</a>

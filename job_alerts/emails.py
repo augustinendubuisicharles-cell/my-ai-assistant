@@ -120,27 +120,56 @@ def _job_card(j: dict) -> str:
             f"View and apply &rarr;</a></div></td></tr></table>")
 
 
-def digest(jobs: list[dict], today, base_url: str, token: str, upgrade: str = "") -> tuple[str, str, str]:
-    """`upgrade`: optional line telling trial users what paying adds."""
+def _trial_box(trial: dict, pay: str) -> str:
+    """Countdown for free-trial users plus, in one line, what members get."""
+    days = trial["days_left"]
+    left = "Last day of your free trial" if days <= 1 else f"{days} days left in your free trial"
+    action = (f'<div style="margin-top:12px"><a href="{_a(pay)}" style="display:inline-block;background:{BLUE};color:#fff;'
+              f'font-weight:700;text-decoration:none;padding:10px 18px;border-radius:8px">Join for {escape(trial["price"])}</a></div>'
+              if trial.get("can_pay") else f'<div style="margin-top:8px;color:{MUTED};font-size:13px">Membership opens soon. We\'ll email you.</div>')
+    return (f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:4px 0 16px"><tr>'
+            f'<td style="background:#eef3ff;border-radius:12px;padding:16px 18px">'
+            f'<div style="font-size:16px;font-weight:800">⏳ {left}</div>'
+            f'<div style="margin-top:6px;font-size:14px;color:{INK}">Members get <b>{escape(trial["perks"])}</b>.</div>'
+            f"{action}</td></tr></table>")
+
+
+def digest(jobs: list[dict], today, base_url: str, token: str, trial: dict | None = None,
+           first: bool = False) -> tuple[str, str, str]:
+    """`trial`: for free-trial users, {"days_left", "perks", "price", "can_pay"} adds a short countdown box.
+    `first`: the email sent right after someone confirms."""
     manage, unsub, pay = f"{base_url}/manage/{token}", f"{base_url}/unsubscribe/{token}", f"{base_url}/pay/{token}"
     n = len(jobs)
-    lines = [f"Your job matches -- {today:%a %d %b}", ""]
+    lines = [f"Your first job matches" if first else f"Your job matches -- {today:%a %d %b}", ""]
     for i, j in enumerate(jobs, 1):
         company = f" at {j['company']}" if j["company"] else ""
-        lines += [f"{i}. {j['title']}{company}", f"   {', '.join(j['matched'])} (via {j['source']})", f"   {j['url']}", ""]
-    if upgrade:
-        lines += [f"{upgrade} {pay}", ""]
+        lines += [f"{i}. {j['title']}{company}", f"   {j['url']}", ""]
+    if trial:
+        lines += [f"{trial['days_left']} day(s) left in your free trial. Members get {trial['perks']}."
+                  + (f" Become a member: {pay}" if trial.get("can_pay") else " Membership opens soon."), ""]
     lines += [FOOTER, "", f"Change what you get: {manage}", f"Unsubscribe: {unsub}"]
 
-    extra = (f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:6px 0 16px"><tr>'
-             f'<td style="background:#eef3ff;border-radius:12px;padding:16px 18px"><b>⚡ Want more?</b> {escape(upgrade)}'
-             f'<div style="margin-top:10px"><a href="{_a(pay)}" style="color:{BLUE};font-weight:700;text-decoration:none">'
-             f"Upgrade &rarr;</a></div></td></tr></table>") if upgrade else ""
-    tip = (f'<p style="background:#fff8e6;border-radius:12px;padding:14px 18px;margin:6px 0 0;font-size:14px">'
-           f"💡 <b>Tip:</b> apply within a day or two. Early applicants are far more likely to hear back. {escape(FOOTER)}</p>")
-    body = "".join(_job_card(j) for j in jobs) + extra + tip
+    body = "".join(_job_card(j) for j in jobs) + (_trial_box(trial, pay) if trial else "")
+    body += f'<p style="color:{MUTED};font-size:13px;margin:6px 0 0">💡 Apply early. {escape(FOOTER)}</p>'
     footer = (f'<a href="{_a(manage)}" style="color:{MUTED}">Change what you get</a> &middot; '
               f'<a href="{_a(unsub)}" style="color:{MUTED}">Unsubscribe</a>')
-    hero = _hero(f"{n} new job{'s' if n != 1 else ''} for you ☀️", f"{today:%A %d %B} · picked for you, checked for scams")
-    html = layout(base_url, f"{jobs[0]['title']} and more, picked for you today." if jobs else "", hero, body, footer)
-    return f"☀️ {n} new job match{'es' if n != 1 else ''} for you -- {today:%d %b}", "\n".join(lines), html
+    jobs_word = f"{n} job{'s' if n != 1 else ''}"
+    hero = (_hero(f"Your first {jobs_word} are here 🎉" if n != 1 else "Your first job is here 🎉", "More every morning, never repeated")
+            if first else _hero(f"{n} new job{'s' if n != 1 else ''} for you ☀️", f"{today:%A %d %B}"))
+    html = layout(base_url, f"{jobs[0]['title']} and more, picked for you." if jobs else "", hero, body, footer)
+    subject = ((f"🎉 Your first {jobs_word} from JobAlert" if n != 1 else "🎉 Your first job from JobAlert") if first
+               else f"☀️ {n} new job match{'es' if n != 1 else ''} for you -- {today:%d %b}")
+    return subject, "\n".join(lines), html
+
+
+def no_matches_yet(base_url: str, token: str, keywords: str) -> tuple[str, str, str]:
+    """Sent instead of the first digest when nothing matched, so a new subscriber isn't left wondering."""
+    manage = f"{base_url}/manage/{token}"
+    text = (f"We searched for {keywords} and found nothing new that fits today. We'll keep looking every morning.\n\n"
+            f"Tip: broader job titles find more jobs. Change yours here: {manage}")
+    body = (f"<p style=\"margin:0\">We searched for <b>{escape(keywords)}</b> and found nothing that fits yet. "
+            "We'll keep looking every morning.</p>"
+            f'<p style="margin:14px 0 0;color:{MUTED};font-size:14px">💡 Broader or common job titles find more jobs.</p>'
+            + button(manage, "Change my job titles"))
+    return "We're searching for your jobs 🔎", text, layout(base_url, "Nothing yet, we'll keep looking every morning.",
+                                                           _hero("We're on it 🔎", "No matches yet"), body)

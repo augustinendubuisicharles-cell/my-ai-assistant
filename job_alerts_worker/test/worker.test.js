@@ -18,7 +18,7 @@ from job_alerts import db
 print(';'.join(str(CreateTable(t).compile(dialect=postgresql.dialect())) for t in db.metadata.sorted_tables) + ';')
 "`, { cwd: repo }).toString();
 
-let pg, q, sent, txs, env, tg;
+let pg, q, sent, txs, env, tg, gh;
 const BASE = "https://job-alerts.example.workers.dev";
 
 beforeEach(async () => {
@@ -28,6 +28,7 @@ beforeEach(async () => {
   sent = [];
   txs = {};
   tg = [];
+  gh = [];
   env = { BREVO_API_KEY: "brevo", FROM_EMAIL: "hi@jobs.test", CREDO_PUBLIC_KEY: "0PUBkey", CREDO_SECRET_KEY: "secret" };
   globalThis.fetch = fakeFetch;
 });
@@ -66,6 +67,11 @@ async function fakeFetch(url, init = {}) {
   if (m) {
     tg.push({ method: m[1], ...body });
     return Response.json({ ok: true, result: m[1] === "getMe" ? { username: "JobAlertTestBot" } : {} });
+  }
+  if (u === "https://api.github.com/repos/owner/repo/actions/workflows/job_alerts_daily.yml/dispatches") {
+    assert.equal(init.headers.authorization, "Bearer GHTOKEN");
+    gh.push(body);
+    return new Response(null, { status: 204 });
   }
   throw new Error(`unexpected fetch ${u}`);
 }
@@ -286,4 +292,19 @@ test("paying members can connect Telegram; trial users can't, and the webhook ch
   assert.equal((await subscriber()).telegram_chat_id, null);
   await hook("/start not-a-real-token-at-all-xx");
   assert.match(tg.at(-1).text, /didn't work/);
+});
+
+test("confirming starts the first job search once, and says jobs arrive in minutes", async () => {
+  await signUp();
+  const { token } = await subscriber();
+  assert.match(await (await call(`/confirm/${token}`)).text(), /Tomorrow morning/); // not set up: no dispatch, no promise
+
+  env.GH_TOKEN = "GHTOKEN";
+  env.GITHUB_REPO = "owner/repo";
+  await call("/subscribe", { method: "POST", form: { email: "new@example.com", keywords: "pr", work_type: "remote" } });
+  const fresh = (await q("SELECT token FROM subscribers WHERE email = 'new@example.com'"))[0].token;
+  assert.match(await (await call(`/confirm/${fresh}`)).text(), /In a few minutes/);
+  assert.deepEqual(gh, [{ ref: "main", inputs: { only_email: "new@example.com", first: "1" } }]);
+  await call(`/confirm/${fresh}`); // clicking the link again doesn't search again
+  assert.equal(gh.length, 1);
 });
