@@ -16,6 +16,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from html import unescape
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import requests
 
@@ -249,8 +250,38 @@ def _link_ok(url: str) -> bool:
         return False
 
 
+def _words(s: str) -> str:
+    return " ".join(re.findall(r"[a-z0-9]+", (s or "").lower()))
+
+
+TRACKING = {"ref", "referrer", "source", "src", "fbclid", "gclid", "mc_cid", "mc_eid"}
+
+
+def _clean_url(url: str) -> str:
+    """Drops tracking parameters, so the same advert isn't seen as new because its link changed."""
+    parts = urlsplit((url or "").strip())
+    query = [(k, v) for k, v in parse_qsl(parts.query) if not (k.lower().startswith("utm_") or k.lower() in TRACKING)]
+    return urlunsplit((parts.scheme.lower(), parts.netloc.lower(), parts.path.rstrip("/"), urlencode(query), ""))
+
+
+def job_keys(job: dict) -> set[str]:
+    """Ways we recognise a job we've sent before: its link, and its title + company (the same
+    advert is often on several job boards under different links)."""
+    keys = {f"t:{_words(job['title'])}|{_words(job['company'])}"}
+    if job.get("url"):
+        keys |= {job["url"], _clean_url(job["url"])}
+    return keys
+
+
 def job_key(job: dict) -> str:
-    return job["url"] or f"{job['title']}|{job['company']}".lower()
+    """One stored value per job that holds both its title + company and its link."""
+    title_key = f"t:{_words(job['title'])}|{_words(job['company'])}"
+    return f"{title_key}\t{_clean_url(job.get('url') or '')}"[:500]
+
+
+def sent_keys(stored: set[str]) -> set[str]:
+    """Expands stored job_key values (including older ones that were just a link) for matching."""
+    return {part for value in stored for part in value.split("\t") if part}
 
 
 def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, exclude: set[str], n: int = 5,
@@ -264,23 +295,27 @@ def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, ex
         if not remote_only:
             pool += from_adzuna(k, country, city) + (from_reed(k, city) if country == "United Kingdom" else ())
 
-    seen, ranked = set(exclude), []
+    seen, ranked = sent_keys(exclude), []
     for job in pool:
-        key = job_key(job)
-        if key in seen:
+        keys = job_keys(job)
+        if keys & seen:
             continue
         result = score(job, keywords, country, remote_only, level, city)
         if result:
-            seen.add(key)
-            ranked.append({**job, "score": result[0], "matched": result[1]})
+            seen |= keys
+            hit = next(k for k in keywords if k in job["title"].lower())
+            ranked.append({**job, "score": result[0], "matched": result[1], "hit": hit})
     ranked.sort(key=lambda j: j["score"], reverse=True)
 
-    picked = []
-    for job in ranked:
-        if len(picked) >= n:
-            break
+    # Take turns between their keywords, so one busy job title doesn't fill every email.
+    picked, used = [], {k: 0 for k in keywords}
+    while len(picked) < n and ranked:
+        fewest = min(used[j["hit"]] for j in ranked)
+        job = next(j for j in ranked if used[j["hit"]] == fewest)
+        ranked.remove(job)
         if _link_ok(job["url"]):
             picked.append(job)
+            used[job["hit"]] += 1
     return picked
 
 
