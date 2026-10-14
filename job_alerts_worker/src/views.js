@@ -227,6 +227,16 @@ export function checkInbox(ctx, email) {
 <p class="note">Can't find it? Check Spam or Promotions${ctx.fromEmail ? `. It comes from <b>${esc(ctx.fromEmail)}</b>` : ""}.</p>`);
 }
 
+// Someone signed up again with an address that's already confirmed: nothing changes, and the
+// manage link goes to their inbox, so only the address owner can change or pay.
+export function welcomeBack(ctx, email) {
+  return page(ctx, `<div class="hero">${ART_MAIL}<h1>Welcome back 👋</h1>
+<p><b>${esc(email)}</b> is already signed up, so we didn't change anything.</p></div>
+<div class="card"><p style="margin:0">We've emailed you a link to <b>manage your job alerts</b>. Open it to change your job titles,
+location or level${ctx.paidService ? `, or to pay ${esc(ctx.price)} for ${ctx.months} months` : ""}.</p></div>
+<p class="note">Can't find it? Check Spam or Promotions${ctx.fromEmail ? `. It comes from <b>${esc(ctx.fromEmail)}</b>` : ""}.</p>`);
+}
+
 // Why JobAlert: the three strengths, near the top of the home page.
 const ICONS = {
   globe: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/></svg>`,
