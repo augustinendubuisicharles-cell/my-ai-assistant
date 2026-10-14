@@ -31,7 +31,7 @@ jobs:
             "") echo "INFO  PAYSTACK_SECRET_KEY is not set";;
             *) echo "WARN  PAYSTACK_SECRET_KEY doesn't look like a Paystack secret key";;
           esac
-          if grep -q 'On</span> Payments (Paystack)' /tmp/dash.html; then echo "PASS  the dashboard shows Paystack payments switched on"
+          if grep -q 'Payments (Paystack)</td><td class="num"><span class="pill" style="--c:var(--green)">On' /tmp/dash.html; then echo "PASS  the dashboard shows Paystack payments switched on"
           else echo "INFO  the dashboard does not show Paystack payments on"; fi
           # Can the site start job searches? Same call it makes after a sign-up, for an address
           # no one has, so the run it starts finds nobody and emails no one.
