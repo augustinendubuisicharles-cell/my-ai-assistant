@@ -129,7 +129,7 @@ test("a confirmed address can't be changed by someone else signing up again", as
 test("confirming starts a 7-day free trial, once", async () => {
   await signUp();
   const { token } = await subscriber();
-  assert.match(await (await call(`/confirm/${token}`)).text(), /free 7-day trial runs until/);
+  assert.match(await (await call(`/confirm/${token}`)).text(), /Free trial until .*2026/);
   const first = (await subscriber()).paid_until;
   const days = (new Date(first) - Date.now()) / 86400000;
   assert.ok(days > 6.9 && days < 7.1, `trial days ${days}`);

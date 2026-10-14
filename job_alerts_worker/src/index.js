@@ -31,6 +31,7 @@ function context(env, request) {
     months: Math.round(payments.periodDays(env) / 30),
     trialDays: payments.trialDays(env),
     contact: (env.CONTACT_EMAIL || env.FROM_EMAIL || "").trim(),
+    fromEmail: (env.FROM_EMAIL || "").trim(),
   };
 }
 
@@ -121,7 +122,7 @@ export async function handle(request, env, q) {
       console.log(`[confirm email] failed for subscriber ${sub.id}: ${e}`);
       return msg("We couldn't send your email", "Please try again in a few minutes.", { status: 502 });
     }
-    return msg("Check your inbox", `We've sent a link to ${sub.email}. Open it to finish (check spam if you can't see it).`, { ok: true });
+    return html(views.checkInbox(ctx, sub.email));
   }
 
   if ((m = path.match(/^\/confirm\/([\w-]+)$/)) && method === "GET") {
@@ -132,8 +133,7 @@ export async function handle(request, env, q) {
       if (ctx.paidService) return html(views.pay(ctx, { sub, heading: "Email confirmed. Pick up where you left off", status: status(ctx, sub) }));
       return msg("Email confirmed", "Your free trial has ended. We'll email you when paid plans open.");
     }
-    return msg("You're in!", `Your free ${ctx.trialDays}-day trial runs until ${fmtDate(sub.paid_until)}. Your first matches arrive tomorrow morning.`,
-      { ok: true, link: `/manage/${sub.token}`, linkText: "Change my preferences" });
+    return html(views.welcome(ctx, { sub, until: fmtDate(sub.paid_until), trial: !(await db.isMember(q, sub)) }));
   }
 
   if ((m = path.match(/^\/manage\/([\w-]+)$/))) {
@@ -193,9 +193,7 @@ export async function handle(request, env, q) {
         "If you were charged, it will show on your account within a few minutes and we'll email you. " +
         `Otherwise you can try again from the link in your email${ctx.contact ? ` or contact ${ctx.contact}` : ""}.`, { status: 402 });
     }
-    return msg("Payment received. You're in!",
-      `Your alerts are active until ${fmtDate(sub.paid_until)}. Your first matches arrive tomorrow morning.`,
-      { ok: true, link: `/manage/${sub.token}`, linkText: "Change my preferences" });
+    return html(views.welcome(ctx, { sub, title: "Payment received 🎉", until: fmtDate(sub.paid_until), trial: false }));
   }
 
   if (path === "/telegram/webhook" && method === "POST") {
