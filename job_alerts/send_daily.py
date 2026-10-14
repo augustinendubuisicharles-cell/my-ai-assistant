@@ -99,7 +99,7 @@ def trial_info(sub: dict) -> dict:
     left = (db._aware(sub["paid_until"]) - db.now()).total_seconds() / 86400 if sub.get("paid_until") else 0
     jobs, titles = payments.PAID_LIMITS
     return {"days_left": max(1, math.ceil(left)), "price": f"₦{payments.PRICE_NGN:,}",
-            "perks": f"{jobs} jobs a day, all {titles} job titles, AI cover letters and Telegram alerts, "
+            "perks": f"{jobs} jobs a day, all {titles} job titles, a CV tailored to each job, AI cover letters and Telegram alerts, "
                      f"for {payments.PERIOD_DAYS // 30} months", "can_pay": payments.enabled()}
 
 

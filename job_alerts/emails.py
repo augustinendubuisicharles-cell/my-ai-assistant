@@ -122,7 +122,7 @@ def _chip(label: str) -> str:
             f'color:{color};font-size:12px;font-weight:600">{"✓ " if good else ""}{escape(label)}</span>')
 
 
-def _job_card(j: dict, letter_url: str = "") -> str:
+def _job_card(j: dict, letter_url: str = "", cv_url: str = "") -> str:
     company = f'<div style="color:{MUTED};font-size:14px;margin-top:2px">{escape(j["company"])} · via {escape(j["source"])}</div>' \
         if j["company"] else f'<div style="color:{MUTED};font-size:14px;margin-top:2px">via {escape(j["source"])}</div>'
     return (f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 14px;border:1px solid {LINE};'
@@ -131,6 +131,8 @@ def _job_card(j: dict, letter_url: str = "") -> str:
             f'{company}<div>{"".join(_chip(m) for m in j["matched"])}</div>'
             f'<div style="margin-top:12px"><a href="{_a(j["url"])}" style="color:{BLUE};font-weight:700;text-decoration:none">'
             f"View and apply &rarr;</a>"
+            + (f'<a href="{_a(cv_url)}" style="color:{MUTED};font-weight:600;text-decoration:none;margin-left:16px">'
+               f"📄 Tailored CV</a>" if cv_url else "")
             + (f'<a href="{_a(letter_url)}" style="color:{MUTED};font-weight:600;text-decoration:none;margin-left:16px">'
                f"✍️ Cover letter</a>" if letter_url else "")
             + "</div></td></tr></table>")
@@ -150,26 +152,31 @@ def _trial_box(trial: dict, pay: str) -> str:
             f"{action}</td></tr></table>")
 
 
-def letter_link(base_url: str, token: str, j: dict) -> str:
-    return f"{base_url}/letter/{token}?" + urlencode({"t": j["title"], "c": j["company"], "u": j["url"]})
+def letter_link(base_url: str, token: str, j: dict, kind: str = "letter") -> str:
+    """The member's cover-letter page (kind "letter") or tailored-CV page (kind "cv") for one job."""
+    return f"{base_url}/{kind}/{token}?" + urlencode({"t": j["title"], "c": j["company"], "u": j["url"]})
 
 
 def digest(jobs: list[dict], today, base_url: str, token: str, trial: dict | None = None,
            first: bool = False, letters: bool = False) -> tuple[str, str, str]:
     """`trial`: for free-trial users, {"days_left", "perks", "price", "can_pay"} adds a short countdown box.
-    `first`: the email sent right after someone confirms. `letters`: members get a cover-letter link per job."""
+    `first`: the email sent right after someone confirms. `letters`: members get a tailored-CV and a cover-letter link per job."""
     manage, unsub, pay = f"{base_url}/manage/{token}", f"{base_url}/unsubscribe/{token}", f"{base_url}/pay/{token}"
     n = len(jobs)
     lines = [f"Your first job matches" if first else f"Your job matches -- {today:%a %d %b}", ""]
     for i, j in enumerate(jobs, 1):
         company = f" at {j['company']}" if j["company"] else ""
-        lines += [f"{i}. {j['title']}{company}", f"   {j['url']}", ""]
+        lines += [f"{i}. {j['title']}{company}", f"   {j['url']}"]
+        if letters:
+            lines += [f"   Tailored CV: {letter_link(base_url, token, j, 'cv')}", f"   Cover letter: {letter_link(base_url, token, j)}"]
+        lines += [""]
     if trial:
         lines += [f"{trial['days_left']} day(s) left in your free trial. Members get {trial['perks']}."
                   + (f" Become a member: {pay}" if trial.get("can_pay") else " Membership opens soon."), ""]
     lines += [FOOTER, "", f"Change what you get: {manage}", f"Unsubscribe: {unsub}"]
 
-    body = "".join(_job_card(j, letter_link(base_url, token, j) if letters else "") for j in jobs) + (_trial_box(trial, pay) if trial else "")
+    body = "".join(_job_card(j, *((letter_link(base_url, token, j), letter_link(base_url, token, j, "cv")) if letters else ()))
+                   for j in jobs) + (_trial_box(trial, pay) if trial else "")
     body += f'<p style="color:{MUTED};font-size:13px;margin:6px 0 0">💡 Apply early. {escape(FOOTER)}</p>'
     footer = (f'<a href="{_a(manage)}" style="color:{MUTED}">🎁 Invite 2 friends, get a month free</a><br>'
               f'<a href="{_a(manage)}" style="color:{MUTED}">Change what you get</a> &middot; '

@@ -8,7 +8,7 @@ REED_API_KEY). Without those keys, on-site coverage is thin, so the form
 encourages remote searches.
 
 Every job sent has passed: location fits the subscriber, posted in the last
-3 weeks, seniority fits, paid and no common scam signs, not past the board's
+7 days (older adverts already have a pile of applicants), seniority fits, paid and no common scam signs, not past the board's
 expiry date, and its link doesn't come back "not found".
 """
 import os
@@ -27,7 +27,7 @@ import requests
 
 TIMEOUT = 20
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; JobAlertsBot/1.0)"}
-MAX_AGE = timedelta(days=21)
+MAX_AGE = timedelta(days=7)
 
 # name: (ISO code, Adzuna code or "", regions the country belongs to)
 COUNTRIES = {
@@ -278,7 +278,7 @@ def from_adzuna(keyword: str, country: str, city: str = "") -> tuple:
     out = []
     try:
         params = {"app_id": app_id, "app_key": app_key, "what": keyword, "results_per_page": 50,
-                  "max_days_old": 21, "sort_by": "date"}
+                  "max_days_old": 7, "sort_by": "date"}
         if city:
             params.update(where=city, distance=25)  # km around their preferred area
         data = _get(f"https://api.adzuna.com/v1/api/jobs/{code}/search/1", **params)
@@ -523,7 +523,7 @@ def score(job: dict, keywords: list[str], country: str, remote_only: bool, level
         pts += 4  # they asked for on-site/hybrid near them, so local jobs come first
         if city and city.lower() in job["location"].lower():
             pts += 2
-    pts += max(0, 3 - (datetime.now(timezone.utc) - job["posted"]).days // 5)
+    pts += max(0, 3 - (datetime.now(timezone.utc) - job["posted"]).days // 2)  # newest first: fewer applicants yet
     reasons.append(f"posted {job['posted']:%d %b}")
     return pts, reasons
 

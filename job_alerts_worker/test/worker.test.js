@@ -418,6 +418,36 @@ test("members get an AI cover letter from their CV; trial users are asked to joi
   assert.equal(ai.length, 2);
 });
 
+test("members get their CV tailored to a job, counted apart from letters, and can download it for Word", async () => {
+  env.ANTHROPIC_API_KEY = "sk-test";
+  await signUp();
+  const { token } = await subscriber();
+  await call(`/confirm/${token}`);
+  const link = `/cv/${token}?t=PR%20Associate&c=Acme&u=${encodeURIComponent("https://jobs.example/pr-1")}`;
+  assert.match(await (await call(link)).text(), /Tailored CVs are for members/);
+
+  await call(`/pay/${token}`, { method: "POST" });
+  await call("/paid?transRef=vs_1");
+  const form = await (await call(link)).text();
+  assert.match(form, /Your CV for this job/);
+  assert.match(form, /Tailor my CV/);
+
+  const done = await (await call(link, { method: "POST", form: { cv: "Ada Obi. Comms officer at Lagos NGO, 2 years." } })).text();
+  assert.match(done, /Download for Word/);
+  assert.match(done, /9 of 10 left today/);
+  assert.match(done, /href="\/letter\/[\w-]+\?t=PR\+Associate/); // and a cover letter for the same job
+  assert.match(ai[0].system, /Rewrite the applicant's CV/);
+  assert.match(ai[0].system, /never invent/);
+  assert.match(ai[0].messages[0].content, /Comms officer at Lagos NGO/);
+  assert.match(ai[0].messages[0].content, /Write press releases\./);
+
+  // Letters have their own 10 a day, and use the CV saved above.
+  const letter = await (await call(`/letter/${token}?t=PR%20Associate&c=Acme`, { method: "POST", form: {} })).text();
+  assert.match(letter, /9 of 10 left today/);
+  assert.match(ai[1].system, /cover letters/);
+  assert.deepEqual((await q("SELECT kind FROM letters ORDER BY id")).map((r) => r.kind), ["cv", "letter"]);
+});
+
 test("job titles come from the list plus 'Something else', and the manage page ticks them again", async () => {
   await signUp();
   const { token } = await subscriber();

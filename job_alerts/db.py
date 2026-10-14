@@ -44,11 +44,12 @@ payments = Table(
     Column("paid_at", DateTime(timezone=True), nullable=False),
 )
 
-letters = Table(  # one row per AI cover letter written, for the daily limit
+letters = Table(  # one row per AI cover letter or tailored CV written, for the daily limits
     "letters", metadata,
     Column("id", Integer, primary_key=True),
     Column("subscriber_id", Integer, ForeignKey("subscribers.id", ondelete="CASCADE"), nullable=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("kind", String(10), nullable=False, server_default="letter"),  # "letter" or "cv"
 )
 
 sent_jobs = Table(
@@ -88,6 +89,8 @@ def init_db() -> None:
                 if engine.dialect.name == "sqlite":
                     sql_type = sql_type.replace("TIMESTAMP WITH TIME ZONE", "DATETIME")
                 conn.execute(text(f"ALTER TABLE subscribers ADD COLUMN {name} {sql_type}"))
+        if "kind" not in {c["name"] for c in inspect(engine).get_columns("letters")}:
+            conn.execute(text("ALTER TABLE letters ADD COLUMN kind VARCHAR(10) NOT NULL DEFAULT 'letter'"))
         if "ref_code" not in have:  # create_all only adds the unique index on new databases
             conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS subscribers_ref_code_key ON subscribers (ref_code)"))
 
