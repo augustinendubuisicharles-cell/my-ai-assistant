@@ -46,7 +46,7 @@
   </select>
   <input class="hp" name="website" tabindex="-1" autocomplete="off">
   <button type="submit" id="submit">{{ button }}</button>
-  {% if paid_service and not sub %}<p class="small"><b>{{ price }} for {{ months }} months.</b> After confirming your email you'll pay once through Paystack. Nothing renews automatically. <a href="/terms">Terms and refunds</a>.</p>{% endif %}
+  {% if paid_service and not sub %}<p class="small"><b>{{ price }} for {{ months }} months.</b> After confirming your email you'll pay once through {{ provider }}. Nothing renews automatically. <a href="/terms">Terms and refunds</a>.</p>{% endif %}
   <p class="small">One email a day with up to 5 new matches, only on days we find some. We skip senior roles if you choose a lower level, and we filter out unpaid roles and listings with common scam signs. Every email has a one-click unsubscribe link. We only store your email and these preferences, never share them, and delete them when you unsubscribe.</p>
 </form>
 {% if sub %}<p class="small"><a href="{{ base_url }}/unsubscribe/{{ sub.token }}">Unsubscribe and delete my details</a></p>{% endif %}

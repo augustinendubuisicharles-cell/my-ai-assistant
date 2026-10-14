@@ -20,6 +20,12 @@ services:
         value: Job Alerts
       - key: BREVO_API_KEY    # Render's free plan blocks SMTP ports, so the site sends through Brevo's API
         sync: false
+      - key: CREDO_PUBLIC_KEY     # Credo (eTranzact) keys; set these OR the Paystack key
+        sync: false
+      - key: CREDO_SECRET_KEY
+        sync: false
+      - key: CREDO_LIVE           # 1 = real money (api.credocentral.com); anything else = sandbox
+        sync: false
       - key: PAYSTACK_SECRET_KEY  # sk_test_... to try it out, sk_live_... to take real money
         sync: false
       - key: CONTACT_EMAIL        # shown on the terms page; defaults to FROM_EMAIL

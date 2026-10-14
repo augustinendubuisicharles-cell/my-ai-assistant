@@ -5,7 +5,6 @@ Run locally:  uvicorn job_alerts.app:app --reload   (from the repo root)
 Env: DATABASE_URL, BASE_URL (the site's public address), SITE_NAME, plus the
 email settings in mailer.py (BREVO_API_KEY on Render).
 """
-import json
 import os
 import re
 from pathlib import Path
@@ -32,7 +31,7 @@ def _base_url(request: Request) -> str:
 
 def _page(request: Request, name: str, **ctx) -> HTMLResponse:
     return templates.TemplateResponse(request, name, {
-        "site_name": SITE_NAME, "base_url": _base_url(request), "paid_service": payments.enabled(),
+        "site_name": SITE_NAME, "base_url": _base_url(request), "paid_service": payments.enabled(), "provider": payments.provider(),
         "price": f"₦{payments.PRICE_NGN:,}", "months": round(payments.PERIOD_DAYS / 30), "contact": CONTACT_EMAIL, **ctx})
 
 
@@ -160,7 +159,7 @@ def checkout(request: Request, token: str):
     if not sub or not payments.enabled():
         return _message(request, "Link not recognised", "This link is invalid or you've already unsubscribed.", status=404)
     try:
-        url = payments.start_checkout(sub["email"], token, f"{_base_url(request)}/paid")
+        url = payments.start_checkout(sub["email"], sub["id"], f"{_base_url(request)}/paid")
     except Exception as e:
         print(f"[checkout] subscriber {sub['id']}: {e}")
         return _message(request, "Payment page unavailable", "Please try again in a few minutes.",
@@ -170,15 +169,16 @@ def checkout(request: Request, token: str):
 
 def _apply_payment(reference: str) -> dict | None:
     paid = payments.verify(reference)
-    return db.record_payment(paid["reference"], paid["token"], paid["amount"], payments.PERIOD_DAYS) if paid else None
+    return db.record_payment(paid["reference"], paid["subscriber_id"], paid["amount"], payments.PERIOD_DAYS) if paid else None
 
 
 @app.get("/paid", response_class=HTMLResponse)
-def paid(request: Request, reference: str = "", trxref: str = ""):
+def paid(request: Request, reference: str = "", trxref: str = "", transRef: str = ""):
+    ref = transRef or reference or trxref  # Credo sends transRef; Paystack sends reference
     try:
-        sub = _apply_payment(reference or trxref)
+        sub = _apply_payment(ref)
     except Exception as e:
-        print(f"[paid] {reference or trxref}: {e}")
+        print(f"[paid] {ref}: {e}")
         sub = None
     if not sub:
         return _message(request, "We couldn't confirm your payment yet",
@@ -192,15 +192,20 @@ def paid(request: Request, reference: str = "", trxref: str = ""):
 
 @app.post("/payments/webhook")
 async def webhook(request: Request):
-    """Paystack calls this on every successful charge, so a payment counts even if the
-    buyer closed the page before coming back. Each event is re-checked with Paystack."""
+    """The payment provider calls this on every successful charge, so a payment counts
+    even if the buyer closed the page before coming back. Each one is re-checked with the provider."""
     body = await request.body()
-    if not payments.signature_ok(body, request.headers.get("x-paystack-signature", "")):
-        return HTMLResponse("bad signature", status_code=401)
+    if not payments.enabled():
+        return HTMLResponse("payments off", status_code=404)
     try:
-        event = json.loads(body)
-        if event.get("event") == "charge.success":
-            _apply_payment(event["data"]["reference"])
+        ref = payments.webhook_ref(body, request.headers)
+    except PermissionError:
+        return HTMLResponse("bad signature", status_code=401)
+    except ValueError:
+        return HTMLResponse("bad body", status_code=400)
+    try:
+        if ref:
+            _apply_payment(ref)
     except Exception as e:
         print(f"[webhook] {e}")
     return HTMLResponse("ok")

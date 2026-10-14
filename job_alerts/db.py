@@ -29,7 +29,7 @@ subscribers = Table(
 payments = Table(
     "payments", metadata,
     Column("id", Integer, primary_key=True),
-    Column("reference", String(100), nullable=False, unique=True),  # Paystack reference; unique = never counted twice
+    Column("reference", String(100), nullable=False, unique=True),  # our reference; unique = never counted twice
     Column("subscriber_id", Integer, ForeignKey("subscribers.id", ondelete="SET NULL")),
     Column("amount_ngn", Integer, nullable=False),
     Column("paid_at", DateTime(timezone=True), nullable=False),
@@ -148,11 +148,11 @@ def is_paid(sub: dict) -> bool:
     return bool(sub.get("paid_until")) and _aware(sub["paid_until"]) > now()
 
 
-def record_payment(reference: str, token: str, amount_ngn: int, period_days: int) -> dict | None:
-    """Adds `period_days` to the subscriber's paid time, once per Paystack reference
+def record_payment(reference: str, subscriber_id: int, amount_ngn: int, period_days: int) -> dict | None:
+    """Adds `period_days` to the subscriber's paid time, once per payment reference
     (the browser return and the webhook can both report the same payment)."""
     with engine.begin() as conn:
-        sub = conn.execute(select(subscribers).where(subscribers.c.token == token)).mappings().first()
+        sub = conn.execute(select(subscribers).where(subscribers.c.id == subscriber_id)).mappings().first()
         if not sub:
             return None
         seen = conn.execute(select(payments.c.id).where(payments.c.reference == reference)).first()
