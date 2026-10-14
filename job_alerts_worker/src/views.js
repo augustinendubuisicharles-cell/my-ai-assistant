@@ -77,12 +77,35 @@ const STYLE = `
   .plan li::before { content:"✓"; position:absolute; left:0; color:var(--ok); font-weight:800; }
   .plan li.no { color:var(--muted); }
   .plan li.no::before { content:"–"; color:var(--muted); }
+  .home h1 { font-size:2.1rem; line-height:1.15; letter-spacing:-.5px; }
+  .home h1 em { font-style:normal; color:var(--accent); }
+  .home p.lead { font-size:1.08rem; margin-bottom:18px; }
+  .cta { display:inline-block; padding:13px 22px; border-radius:10px; background:var(--accent); color:var(--on-accent); font-weight:800; text-decoration:none; margin:0 0 24px; }
+  .why { display:grid; gap:12px; margin:0 0 22px; }
+  .why .card { display:grid; grid-template-columns:48px 1fr; gap:14px; align-items:start; padding:16px 18px; }
+  .why .ico { width:48px; height:48px; border-radius:12px; display:flex; align-items:center; justify-content:center; }
+  .why .ico svg { width:26px; height:26px; }
+  .why h3 { margin:0 0 3px; font-size:1.05rem; }
+  .why p { margin:0; color:var(--muted); font-size:.95rem; }
+  .ico.blue { background:color-mix(in srgb, var(--accent) 14%, transparent); color:var(--accent); }
+  .ico.gold { background:#fff3d6; color:#b7791f; }
+  .ico.green { background:color-mix(in srgb, var(--ok) 14%, transparent); color:var(--ok); }
+  @media (prefers-color-scheme: dark) { .ico.gold { background:#3a2f12; color:#ffc75a; } }
+  .vs { margin:28px 0 0; }
+  .vs h2 { font-size:1.3rem; margin:0 0 12px; }
+  .vs table { width:100%; border-collapse:collapse; font-size:.9rem; table-layout:fixed; }
+  .vs col.a { width:30%; } .vs col.b { width:33%; }
+  .vs th, .vs td { padding:10px 6px; overflow-wrap:anywhere; border-bottom:1px solid var(--border); text-align:left; vertical-align:top; }
+  .vs tr:last-child td { border-bottom:0; }
+  .vs th { font-size:.8rem; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
+  .vs td.us { color:var(--ok); font-weight:700; }
+  .vs td.them { color:var(--muted); }
   .brand { display:inline-flex; align-items:center; gap:10px; margin:0 0 20px; text-decoration:none; color:var(--text); font-size:1.35rem; font-weight:800; letter-spacing:-.3px; }
   .brand b { color:var(--accent); }
   .brand img { border-radius:9px; }
 `;
 
-const DESCRIPTION = "Remote and local jobs matched to you, checked for scams and never repeated, in your inbox every morning. 7 days free.";
+const DESCRIPTION = "Remote jobs from companies abroad that actually hire Nigerians, checked for scams and never repeated, in your inbox every morning. 7 days free.";
 
 export function page(ctx, body) {
   const footer = `<footer><a href="/terms">Terms, pricing and refunds</a>${
@@ -100,13 +123,13 @@ export function page(ctx, body) {
 <meta name="theme-color" content="#2457d6">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="${esc(ctx.siteName)}">
-<meta property="og:title" content="${esc(ctx.siteName)}: jobs in your inbox every morning">
+<meta property="og:title" content="${esc(ctx.siteName)}: remote jobs that actually hire Nigerians">
 <meta property="og:description" content="${esc(DESCRIPTION)}">
 <meta property="og:url" content="${esc(ctx.baseUrl)}/">
 <meta property="og:image" content="${esc(ctx.baseUrl)}/og.jpg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="${esc(ctx.siteName)}: fresh remote and local jobs in your inbox every morning">
+<meta property="og:image:alt" content="${esc(ctx.siteName)}: remote jobs that actually hire Nigerians, in your inbox every morning">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="${esc(ctx.baseUrl)}/og.jpg">
 <style>${STYLE}</style>
@@ -178,6 +201,39 @@ export function checkInbox(ctx, email) {
 <p class="note">Can't find it? Check Spam or Promotions${ctx.fromEmail ? `. It comes from <b>${esc(ctx.fromEmail)}</b>` : ""}.</p>`);
 }
 
+// Why JobAlert: the three strengths, near the top of the home page.
+const ICONS = {
+  globe: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/></svg>`,
+  inbox: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 13l2.5-7h11L20 13v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1z"/><path d="M4 13h4.5l1 2h5l1-2H20"/><path d="M9.5 9.5l1.8 1.8 3.4-3.6"/></svg>`,
+  shield: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7.5 3v5.5c0 4.6-3.2 8.2-7.5 9.5-4.3-1.3-7.5-4.9-7.5-9.5V6z"/><path d="M8.8 12.2l2.2 2.2 4.3-4.6"/></svg>`,
+};
+
+function strengths() {
+  const item = (icon, color, title, text) =>
+    `<div class="card"><span class="ico ${color}">${ICONS[icon]}</span><div><h3>${title}</h3><p>${text}</p></div></div>`;
+  return `<section class="why" aria-label="Why JobAlert">
+  ${item("globe", "blue", "Foreign jobs that accept Nigerians",
+    "Remote roles from companies abroad, often paying in dollars or pounds. We check every one is open to applicants in Nigeria.")}
+  ${item("inbox", "gold", "Done for you, every morning",
+    "No scrolling through huge job boards. A short, matched list lands in your inbox each morning, and you never see the same job twice.")}
+  ${item("shield", "green", "Scams and dead links filtered out",
+    "We drop listings that ask you to pay, push you to WhatsApp or Telegram, or point to jobs that have closed.")}
+</section>`;
+}
+
+// JobAlert vs doing it yourself (no named competitors: fair to everyone, and true).
+function compare() {
+  const row = (what, us, them) => `<tr><td>${what}</td><td class="us">✓ ${us}</td><td class="them">${them}</td></tr>`;
+  return `<section class="vs card"><h2>Why not just search job boards?</h2><table><colgroup><col class="a"><col class="b"><col></colgroup>
+<tr><th></th><th>JobAlert</th><th>On your own</th></tr>
+${row("Remote jobs from abroad", "Every morning", "Mostly local listings")}
+${row("Open to Nigerians?", "Checked for you", "Find out after applying")}
+${row("Scams and closed jobs", "Filtered out", "Common, especially in WhatsApp groups")}
+${row("Effort", "Read one email", "Hours of scrolling")}
+${row("Repeats", "Never", "Same posts again and again")}
+</table></section>`;
+}
+
 // "What you get": free trial vs member, shown under the sign-up form.
 function plans(ctx) {
   const li = (text, yes = true) => `<li${yes ? "" : ' class="no"'}>${text}</li>`;
@@ -210,8 +266,6 @@ export function form(ctx, { sub = null, action, button, heading, lead, stats = {
   const statTiles = sub ? "" : `<ul class="stats">
   ${stats.users ? `<li><b>${stats.users.toLocaleString("en")}</b><span>people getting alerts</span></li>` : ""}
   ${stats.jobs_30d ? `<li><b>${stats.jobs_30d.toLocaleString("en")}</b><span>jobs sent in the last 30 days</span></li>` : ""}
-  <li><b>Daily</b><span>fresh matches every morning</span></li>
-  <li><b>Checked</b><span>for scams and dead links</span></li>
   <li><b>${ctx.trialDays} days free</b><span>no card needed &middot; <a href="#plans">see plans</a></span></li>
   ${ctx.paidService ? `<li><b>${esc(ctx.price)}</b><span>then ${ctx.months} months, no auto-renewal</span></li>` : ""}
 </ul>`;
@@ -220,8 +274,12 @@ export function form(ctx, { sub = null, action, button, heading, lead, stats = {
   const telegramBox = !telegramLink ? "" : `<p class="card status">${sub.telegram_chat_id
     ? "Telegram alerts are on: new matches arrive there during the day. Send /stop to the bot to turn them off."
     : `Get new matches on Telegram during the day, before the morning email. <a href="${esc(telegramLink)}">Connect Telegram</a>`}</p>`;
-  return page(ctx, `<h1>${esc(heading)}</h1>
+  const intro = sub ? `<h1>${esc(heading)}</h1>
+<p class="lead">${esc(lead)}</p>` : `<div class="home"><h1>Remote jobs that <em>actually hire Nigerians</em></h1>
 <p class="lead">${esc(lead)}</p>
+<a class="cta" href="#prefs">Start free for ${ctx.trialDays} days</a></div>
+${strengths()}`;
+  return page(ctx, `${intro}
 ${statusBox}${telegramBox}${statTiles}
 <form class="card" method="post" action="${esc(action)}" id="prefs">
   ${sub ? "" : `<label for="email">Your email</label>
@@ -256,7 +314,7 @@ ${statusBox}${telegramBox}${statTiles}
   ${ctx.paidService && !sub ? `<p class="small"><b>Free for ${ctx.trialDays} days, then ${esc(ctx.price)} for ${ctx.months} months</b>, paid once through ${esc(ctx.provider)} if you want to continue. Nothing renews automatically. <a href="/terms">Terms and refunds</a>.</p>` : ""}
   <p class="small">One email a day with up to ${member ? "10" : "5"} new matches, only on days we find some${member ? "" : ctx.paidService ? " (members get up to 10, plus Telegram alerts)" : ""}. Remote jobs that only hire from certain countries are left out if yours isn't one of them. We skip senior roles if you choose a lower level, and we filter out unpaid roles and listings with common scam signs. Every email has a one-click unsubscribe link. We only store your email and these preferences, never share them, and delete them when you unsubscribe.</p>
 </form>
-${sub ? "" : plans(ctx)}
+${sub ? "" : compare() + plans(ctx)}
 ${sub ? `<p class="small"><a href="/unsubscribe/${esc(sub.token)}">Unsubscribe and delete my details</a></p>` : ""}
 <script>
   (function () {

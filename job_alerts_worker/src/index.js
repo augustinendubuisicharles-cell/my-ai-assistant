@@ -93,8 +93,8 @@ export async function handle(request, env, q) {
     } catch (e) {
       console.log(`[stats] ${e}`);
     }
-    return html(views.form(ctx, { action: "/subscribe", button: "Send me jobs", heading: "Jobs that fit you, every morning", stats,
-      lead: "Remote jobs matched to you and checked for scams, in your inbox every morning. Prefer on-site? Tell us where." }));
+    return html(views.form(ctx, { action: "/subscribe", button: "Send me jobs", heading: "Remote jobs that actually hire Nigerians", stats,
+      lead: "Jobs from companies abroad, checked as open to Nigeria and free of scams, in your inbox every morning. Prefer on-site? Tell us where." }));
   }
 
   if (path === "/subscribe" && method === "POST") {
