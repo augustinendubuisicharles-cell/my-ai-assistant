@@ -1,0 +1,91 @@
+name: Job alerts -- website on Cloudflare
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "job_alerts_worker/**"
+      - "job_alerts/db.py"
+      - ".github/workflows/job_alerts_worker.yml"
+  pull_request:
+    paths:
+      - "job_alerts_worker/**"
+      - "job_alerts/db.py"
+      - "job_alerts/search.py"
+      - ".github/workflows/job_alerts_worker.yml"
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: job_alerts_worker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r ../job_alerts/requirements.txt   # tests build the schema from job_alerts/db.py
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm ci
+      - run: npm test
+      - name: Check it bundles for Cloudflare
+        run: npm run check
+
+  deploy:
+    needs: test
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: job_alerts_worker
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+    steps:
+      - name: Check Cloudflare is set up
+        id: check
+        working-directory: .
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID secrets not set yet -- skipping deploy (see job_alerts_worker/README.md)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.check.outputs.ready == 'true'
+        uses: actions/checkout@v4
+      - if: steps.check.outputs.ready == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - if: steps.check.outputs.ready == 'true'
+        run: npm ci
+      - if: steps.check.outputs.ready == 'true'
+        name: Deploy the Worker
+        run: npx wrangler deploy
+      - if: steps.check.outputs.ready == 'true'
+        name: Copy secrets from GitHub to the Worker (only the ones that are set)
+        env:
+          DATABASE_URL: ${{ secrets.JOB_ALERTS_DATABASE_URL }}
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+          FROM_EMAIL: ${{ secrets.FROM_EMAIL }}
+          CONTACT_EMAIL: ${{ secrets.CONTACT_EMAIL }}
+          CREDO_PUBLIC_KEY: ${{ secrets.CREDO_PUBLIC_KEY }}
+          CREDO_SECRET_KEY: ${{ secrets.CREDO_SECRET_KEY }}
+          CREDO_LIVE: ${{ secrets.CREDO_LIVE }}
+          CREDO_BUSINESS_CODE: ${{ secrets.CREDO_BUSINESS_CODE }}
+          PAYSTACK_SECRET_KEY: ${{ secrets.PAYSTACK_SECRET_KEY }}
+        run: |
+          node -e '
+            const names = ["DATABASE_URL", "BREVO_API_KEY", "FROM_EMAIL", "CONTACT_EMAIL", "CREDO_PUBLIC_KEY",
+                           "CREDO_SECRET_KEY", "CREDO_LIVE", "CREDO_BUSINESS_CODE", "PAYSTACK_SECRET_KEY"];
+            const out = Object.fromEntries(names.filter((n) => (process.env[n] || "").trim()).map((n) => [n, process.env[n].trim()]));
+            console.error("Setting: " + Object.keys(out).join(", "));
+            require("fs").writeFileSync("/tmp/secrets.json", JSON.stringify(out));
+          '
+          npx wrangler secret bulk /tmp/secrets.json
+          rm -f /tmp/secrets.json

@@ -1,0 +1,2 @@
+// Generated from job_alerts/search.py COUNTRIES -- keep in sync (CI checks it).
+export default ["Nigeria", "Ghana", "Kenya", "South Africa", "Egypt", "United Kingdom", "Ireland", "Germany", "France", "Netherlands", "Spain", "Italy", "Poland", "Portugal", "United Arab Emirates", "Saudi Arabia", "India", "Pakistan", "Philippines", "Singapore", "Australia", "New Zealand", "United States", "Canada", "Mexico", "Brazil"];

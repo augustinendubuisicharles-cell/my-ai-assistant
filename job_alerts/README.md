@@ -5,7 +5,9 @@ want (job titles/skills, country, remote only, experience level). Every
 morning it searches job boards for each person, keeps the best new matches
 that pass its checks, and emails them up to 5. Nobody gets the same job twice.
 
-- **Sign-up site** (`app.py`): sign up, confirm by email, change preferences,
+- **Sign-up site**: runs on Cloudflare from `job_alerts_worker/` (see its README). `app.py` is the
+  same site in Python, kept for local development and the original Render setup (`render.yaml`).
+- **Python sign-up site** (`app.py`): sign up, confirm by email, change preferences,
   one-click unsubscribe (which deletes their details).
 - **Daily sender** (`send_daily.py`): run by the GitHub Actions workflow
   `job_alerts_daily.yml` at 6:00 UTC.

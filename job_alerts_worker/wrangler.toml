@@ -1,0 +1,12 @@
+# Cloudflare Worker for the job alerts sign-up website. Deployed by
+# .github/workflows/job_alerts_worker.yml; secrets are set there from GitHub secrets.
+name = "job-alerts"
+main = "src/index.js"
+compatibility_date = "2026-09-01"
+workers_dev = true
+
+[vars]
+SITE_NAME = "Job Alerts"
+
+[observability]
+enabled = true
