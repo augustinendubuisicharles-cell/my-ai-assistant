@@ -65,14 +65,16 @@ export const clearTelegram = (q, chatId) => q("UPDATE subscribers SET telegram_c
 // Adds `days` of paid time, once per payment reference: the browser return and the
 // webhook can both report the same payment. One statement, so it's atomic.
 export async function recordPayment(q, reference, subscriberId, amountNgn, days) {
-  await q(`WITH ins AS (
+  const rows = await q(`WITH ins AS (
              INSERT INTO payments (reference, subscriber_id, amount_ngn, paid_at)
              SELECT $1, id, $3, now() FROM subscribers WHERE id = $2
              ON CONFLICT (reference) DO NOTHING RETURNING subscriber_id)
            UPDATE subscribers s
            SET paid_until = GREATEST(now(), COALESCE(s.paid_until, now())) + make_interval(days => $4), confirmed = true
-           FROM ins WHERE s.id = ins.subscriber_id`, [reference, subscriberId, amountNgn, days]);
-  return byId(q, subscriberId);
+           FROM ins WHERE s.id = ins.subscriber_id RETURNING s.id`, [reference, subscriberId, amountNgn, days]);
+  const sub = await byId(q, subscriberId);
+  // justPaid: this call recorded the payment (the other report of it finds it already there).
+  return sub && { ...sub, justPaid: rows.length > 0 };
 }
 
 // --- AI cover letters (members) ---

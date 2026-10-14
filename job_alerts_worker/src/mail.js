@@ -92,3 +92,24 @@ export function referralReward(baseUrl, token, months, until) {
     `Two friends you invited joined JobAlert, so you get ${what}. Your alerts now run until ${until}.\n\nInvite more: ${link}`,
     layout(baseUrl, `Your alerts now run until ${until}.`, hero(`You earned ${what} 🎁`, "Thanks for spreading the word"), body)];
 }
+
+// Sent once when a payment is recorded: JobAlert's own receipt.
+export function paymentReceipt(baseUrl, token, { amount, reference, paidOn, until, months, provider, contact }) {
+  const link = `${baseUrl}/manage/${token}`;
+  const naira = `₦${Number(amount).toLocaleString("en")}`;
+  const row = (k, v) => `<tr><td style="padding:9px 0;color:${MUTED};border-bottom:1px solid #e6e9f0">${esc(k)}</td>` +
+    `<td align="right" style="padding:9px 0;font-weight:700;border-bottom:1px solid #e6e9f0">${esc(v)}</td></tr>`;
+  const body = `<p style="margin:0">Thank you! Your payment went through and your membership is active.</p>` +
+    `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:18px 0 4px;font-size:15px">` +
+    row("Amount", naira) + row("Membership", `${months} months`) + row("Active until", until) + row("Paid on", paidOn) +
+    row("Reference", reference) + `</table>` +
+    steps([["Up to 10 jobs a day", "From all 5 of your job titles"], ["AI cover letters", "A ready letter for any job in your email"],
+      ["Telegram alerts", "New matches during the day, so you can apply first"]]) +
+    button(link, "Open my job alerts") +
+    `<p style="color:${MUTED};font-size:13px;margin:6px 0 0">Paid securely through ${esc(provider || "our payment partner")}. ` +
+    `Nothing renews automatically. Not happy? Full refund within 7 days${contact ? `: write to ${esc(contact)}` : ""}.</p>`;
+  return [`Payment received: you're a JobAlert member 🎉`,
+    `Thank you! Your payment went through.\n\nAmount: ${naira}\nMembership: ${months} months\nActive until: ${until}\n` +
+    `Paid on: ${paidOn}\nReference: ${reference}\n\nOpen your job alerts: ${link}\n\nNothing renews automatically. Full refund within 7 days.`,
+    layout(baseUrl, `${naira} received. Your membership runs until ${until}.`, hero("Payment received 🎉", "You're now a JobAlert member"), body)];
+}
