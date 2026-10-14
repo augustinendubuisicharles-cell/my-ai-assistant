@@ -77,7 +77,9 @@ async function fakeFetch(url, init = {}) {
     return new Response(null, { status: 204 });
   }
   if (u.startsWith("https://api.github.com/repos/owner/repo/actions/workflows/job_alerts_daily.yml/runs")) {
-    return Response.json({ workflow_runs: [{ status: "completed", conclusion: "success", event: "workflow_dispatch",
+    return Response.json({ workflow_runs: [
+      { status: "completed", conclusion: "failure", event: "pull_request", run_started_at: new Date().toISOString(), html_url: "https://github.com/pr-check" },
+      { status: "completed", conclusion: "success", event: "workflow_dispatch",
       run_started_at: new Date().toISOString(), html_url: "https://github.com/owner/repo/actions/runs/1" }] });
   }
   if (u === "https://api.anthropic.com/v1/messages?beta=true" || u === "https://api.anthropic.com/v1/messages") {
@@ -466,6 +468,7 @@ test("the owner's dashboard needs the secret key and shows who got this morning'
   assert.ok(!page.includes("<b>cy</b>"), "emails are escaped");
   assert.match(page, /noindex/);
   assert.match(page, /passed/);
+  assert.ok(!page.includes("pr-check"), "code checks on pull requests aren't listed as job runs");
 
   // The login page: wrong password refused, right one (with stray spaces) opens it and is remembered.
   assert.match(await (await call("/admin")).text(), /type="password"/);
@@ -490,4 +493,17 @@ test("the owner's dashboard needs the secret key and shows who got this morning'
 test("before 06:30 UTC the dashboard judges yesterday's morning run", () => {
   assert.equal(admin.runWindow(new Date("2026-10-14T06:10:00Z")).toISOString(), "2026-10-13T05:00:00.000Z");
   assert.equal(admin.runWindow(new Date("2026-10-14T09:00:00Z")).toISOString(), "2026-10-14T05:00:00.000Z");
+});
+
+test("the dashboard flags users whose first search never ran", async () => {
+  env.ADMIN_KEY = "k".repeat(32);
+  await signUp();
+  await call(`/confirm/${(await subscriber()).token}`);
+  let page = await (await call("/admin/" + "k".repeat(32))).text();
+  assert.ok(!page.includes("never had a job search"), "just confirmed: give the first search time");
+  await q("UPDATE subscribers SET created_at = now() - interval '2 hours'");
+  page = await (await call("/admin/" + "k".repeat(32))).text();
+  assert.match(page, /1 active user has never had a job search/);
+  assert.match(page, /Never searched: their first search didn't start/);
+  assert.match(page, /Needs attention/);
 });

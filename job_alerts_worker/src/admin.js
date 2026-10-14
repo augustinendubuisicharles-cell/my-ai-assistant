@@ -73,11 +73,12 @@ export function runWindow(now = new Date()) {
 async function recentRuns(env) {
   if (!firstSearch.enabled(env)) return null;
   try {
-    const r = await fetch(`https://api.github.com/repos/${env.GITHUB_REPO.trim()}/actions/workflows/job_alerts_daily.yml/runs?per_page=6`, {
+    const r = await fetch(`https://api.github.com/repos/${env.GITHUB_REPO.trim()}/actions/workflows/job_alerts_daily.yml/runs?per_page=30`, {
       headers: { authorization: `Bearer ${env.GH_TOKEN.trim()}`, accept: "application/vnd.github+json", "user-agent": "jobalert-worker" },
     });
     if (!r.ok) return null;
-    return ((await r.json()).workflow_runs || []).map((w) => ({
+    // Code checks on pull requests run the same workflow; they aren't job runs.
+    return ((await r.json()).workflow_runs || []).filter((w) => w.event !== "pull_request").slice(0, 6).map((w) => ({
       when: new Date(w.run_started_at || w.created_at), status: w.status, conclusion: w.conclusion,
       event: w.event, url: w.html_url, title: w.display_title || "",
     }));
@@ -106,6 +107,10 @@ export async function load(env, q, now = new Date()) {
     u.status = !u.confirmed ? "unconfirmed" : !active ? "expired" : u.member ? "member" : "trial";
     u.ranToday = Boolean(u.last_run_at && new Date(u.last_run_at) >= since);
     u.failed = u.ranToday && /^FAILED/.test(u.last_run_result || "");
+    // Joined after this morning's run: their first search, not the morning run, is what counts today.
+    u.newToday = new Date(u.created_at) >= new Date(since.getTime() + 90 * 60 * 1000);
+    // Confirmed over 30 minutes ago and still nothing: the first search never ran for them.
+    u.neverSearched = u.confirmed && !u.last_run_at && !u.jobs_sent && now - new Date(u.created_at) > 30 * 60 * 1000;
   }
   const confirmed = users.filter((u) => u.confirmed);
   const active = confirmed.filter((u) => u.status === "member" || u.status === "trial");
@@ -124,7 +129,9 @@ export async function load(env, q, now = new Date()) {
     member: count("member"), trial: count("trial"), expired: count("expired"), unconfirmed: count("unconfirmed"),
     reached: today.length, sent: today.filter((u) => /^sent/.test(u.last_run_result || "")).length,
     none: today.filter((u) => /^no new/.test(u.last_run_result || "")).length,
-    failed: today.filter((u) => u.failed).length, missed: active.length - today.length,
+    failed: today.filter((u) => u.failed).length,
+    missed: active.filter((u) => !u.ranToday && !u.newToday).length, due: active.filter((u) => !u.newToday).length,
+    neverSearched: active.filter((u) => u.neverSearched).length,
     revenue: money[0], runs, lastRun, services,
   };
   stats.health = health(stats);
@@ -137,9 +144,13 @@ function health(s) {
   if (!s.services[0][1]) problems.push("Email sending is not set up, so nobody gets jobs.");
   if (s.lastRun && s.lastRun.conclusion !== "success") problems.push(`The last morning run ended "${s.lastRun.conclusion}".`);
   if (s.failed) problems.push(`${s.failed} user${s.failed === 1 ? "" : "s"} failed this morning.`);
-  if (s.missed && s.active) {
-    const msg = `${s.missed} of ${s.active} active user${s.active === 1 ? " was" : "s were"} not reached this morning.`;
-    (s.missed * 2 > s.active ? problems : warnings).push(msg);
+  if (s.neverSearched) {
+    problems.push(`${s.neverSearched} active user${s.neverSearched === 1 ? " has" : "s have"} never had a job search. ` +
+      "The site couldn't start their first search: check the GitHub token can run workflows (Actions: Read and write).");
+  }
+  if (s.missed && s.due) {
+    const msg = `${s.missed} of ${s.due} active user${s.due === 1 ? " was" : "s were"} not reached this morning.`;
+    (s.missed * 2 > s.due ? problems : warnings).push(msg);
   }
   if (s.runs === null) warnings.push("Can't read the run history (the GitHub token is missing or lacks access).");
   if (s.runs?.[0] && s.runs[0].status !== "completed") warnings.push("A run is in progress right now.");
@@ -188,6 +199,7 @@ function userRow(u) {
   else if (u.status === "expired") morning = `<span class="muted">Not searched: their trial or membership has ended</span>`;
   else if (u.ranToday) morning = `<span class="${u.failed ? "bad" : "ok"}">${u.failed ? "✗" : "✓"} This morning: ${esc(u.last_run_result)}</span> <span class="muted">${fmtTime(u.last_run_at)}</span>`;
   else if (u.last_run_at) morning = `<span class="warn">⚠ Not reached this morning.</span> <span class="muted">Last: ${esc(u.last_run_result)}, ${fmtTime(u.last_run_at)}</span>`;
+  else if (u.neverSearched) morning = `<span class="bad">✗ Never searched: their first search didn't start</span>`;
   else morning = `<span class="warn">⚠ No search recorded yet</span>`;
   return `<li><div class="row"><span class="email">${esc(u.email)}</span><span class="pill ${PILL[u.status]}">${esc(plan)}</span></div>
 <div class="small muted">${esc((u.keywords || "").replace(/,\s*/g, ", "))} · ${esc(u.country || "any country")} · ${esc(where)} · joined ${fmtDay(u.created_at)}${u.telegram ? " · Telegram" : ""}</div>
