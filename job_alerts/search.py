@@ -13,6 +13,7 @@ expiry date, and its link doesn't come back "not found".
 import os
 import re
 import time
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from html import unescape
@@ -246,23 +247,30 @@ def says_open_to(job: dict, country: str) -> bool:
 
 
 def score(job: dict, keywords: list[str], country: str, remote_only: bool, level: str,
-          city: str = "") -> tuple[int, list[str]] | None:
-    """Returns (score, reasons), or None if the job fails a check."""
+          city: str = "", why: Counter | None = None) -> tuple[int, list[str]] | None:
+    """Returns (score, reasons), or None if the job fails a check (counted in `why` by reason)."""
+    def no(reason):
+        if why is not None:
+            why[reason] += 1
+        return None
+
     title, text = job["title"].lower(), f"{job['title']} {job['desc']}".lower()
     hit = next((k for k in keywords if k in title), None)
-    if not hit or not job["url"] or not job["posted"]:
-        return None
+    if not hit:
+        return no("title doesn't match")
+    if not job["url"] or not job["posted"]:
+        return no("no link or date")
     if datetime.now(timezone.utc) - job["posted"] > MAX_AGE:
-        return None
+        return no("too old")
     if remote_only and not job["remote"]:
-        return None
+        return no("not remote")
     if not location_fits(job["location"], country, job["remote"]) or not open_to(job, country):
-        return None
+        return no("not open to their country")
     if level in TOO_SENIOR and (any(w in f" {title} " for w in TOO_SENIOR[level])
                                 or job["level"].lower() in ("senior", "manager", "director", "executive")):
-        return None
+        return no("too senior")
     if any(w in f"{title} {job['job_type']}".lower() for w in UNPAID) or any(w in text for w in SCAM_SIGNS):
-        return None
+        return no("unpaid or scam signs")
 
     pts, reasons = 10, [f"matches \"{hit}\"", f"{'remote, ' if job['remote'] else ''}{job['location'] or 'location not stated'}"]
     if country and job["remote"] and says_open_to(job, country):
@@ -337,17 +345,19 @@ def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, ex
         if not remote_only:
             pool += from_adzuna(k, country, city) + (from_reed(k, city) if country == "United Kingdom" else ())
 
-    seen, ranked = sent_keys(exclude), []
+    seen, ranked, why = sent_keys(exclude), [], Counter()
     for job in pool:
         keys = job_keys(job)
         if keys & seen:
+            why["already sent or duplicate"] += 1
             continue
-        result = score(job, keywords, country, remote_only, level, city)
+        result = score(job, keywords, country, remote_only, level, city, why)
         if result:
             seen |= keys
             hit = next(k for k in keywords if k in job["title"].lower())
             ranked.append({**job, "score": result[0], "matched": result[1], "hit": hit})
     ranked.sort(key=lambda j: j["score"], reverse=True)
+    matched = len(ranked)
 
     # Take turns between their keywords, so one busy job title doesn't fill every email.
     picked, used = [], {k: 0 for k in keywords}
@@ -358,6 +368,8 @@ def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, ex
         if _link_ok(job["url"]):
             picked.append(job)
             used[job["hit"]] += 1
+    print(f"  checked {len(pool)} listings, {matched} matched, picked {len(picked)}; "
+          f"left out: {', '.join(f'{n} {r}' for r, n in why.most_common()) or 'none'}")
     return picked
 
 

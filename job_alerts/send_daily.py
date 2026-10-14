@@ -35,6 +35,10 @@ def main() -> None:
         try:
             member = db.is_member(sub, paid_ids)
             n, titles = payments.limits(member)
+            if os.environ.get("ONLY_EMAIL"):
+                print(f"- subscriber {sub['id']}: searching {first_titles(sub['keywords'], titles)!r}, country "
+                      f"{sub['country'] or 'any'}, {'remote' if sub['remote_only'] else 'on-site near ' + (sub.get('city') or '?')}, "
+                      f"level {sub['level']}, {len(db.already_sent(sub['id']))} job(s) already sent")
             jobs = find_jobs(first_titles(sub["keywords"], titles), sub["country"], sub["remote_only"], sub["level"],
                              db.already_sent(sub["id"]), n=n, city=sub.get("city") or "")
             if not jobs:
