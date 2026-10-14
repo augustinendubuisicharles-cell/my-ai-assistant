@@ -11,3 +11,6 @@ GITHUB_REPO = "augustinendubuisicharles-cell/my-ai-assistant"   # where the firs
 
 [observability]
 enabled = true
+
+[triggers]
+crons = ["0 6 * * *"]   # 7am Lagos: starts the morning emails (GitHub's own schedule can run hours late)

@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { execSync } from "node:child_process";
 import { createHash, createHmac } from "node:crypto";
 import { PGlite } from "@electric-sql/pglite";
-import { handle } from "../src/index.js";
+import worker, { handle } from "../src/index.js";
 import COUNTRIES from "../src/countries.js";
 
 const repo = new URL("../../", import.meta.url).pathname;
@@ -394,4 +394,13 @@ test("job titles come from the list plus 'Something else', and the manage page t
   assert.match(page, /id="other"[^>]*value="public relations"/);
   const none = await call(`/manage/${token}`, { method: "POST", form: { other: " ", work_type: "remote" } });
   assert.equal(none.status, 400);
+});
+
+test("the 06:00 cron trigger starts the morning run for everyone", async () => {
+  env.GH_TOKEN = "GHTOKEN";
+  env.GITHUB_REPO = "owner/repo";
+  const waits = [];
+  await worker.scheduled({ cron: "0 6 * * *" }, env, { waitUntil: (p) => waits.push(p) });
+  await Promise.all(waits);
+  assert.deepEqual(gh.at(-1), { ref: "main", inputs: { first: "0" } });
 });

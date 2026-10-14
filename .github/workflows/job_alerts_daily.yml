@@ -2,7 +2,7 @@ name: Job alerts -- daily emails to subscribers
 
 on:
   schedule:
-    - cron: "0 6 * * *"   # 7am Lagos / 7am London (winter)
+    - cron: "30 8 * * *"  # fallback only: the website starts the run at 06:00 UTC (7am Lagos); anyone already emailed is skipped
   workflow_dispatch:
     inputs:
       only_email:
