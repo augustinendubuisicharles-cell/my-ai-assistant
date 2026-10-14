@@ -24,6 +24,13 @@ import requests
 PRICE_NGN = int(os.environ.get("PRICE_NGN", "5000"))
 PERIOD_DAYS = int(os.environ.get("PERIOD_DAYS", "90"))
 TRIAL_DAYS = int(os.environ.get("TRIAL_DAYS", "7"))  # free days everyone gets when they confirm their email
+# What each plan gets per daily email: (jobs, job titles searched). Paid members also get Telegram alerts.
+TRIAL_LIMITS = (5, 2)
+PAID_LIMITS = (10, 5)
+
+
+def limits(member: bool) -> tuple[int, int]:
+    return PAID_LIMITS if member else TRIAL_LIMITS
 REF_RE = re.compile(r"^ja(\d+)x[0-9a-f]+$")  # our reference: ja<subscriber id>x<random>
 
 

@@ -33,7 +33,8 @@ def renewal_reminder(base_url: str, token: str, paid_until, price: str, can_pay:
     return f"Your job alerts end on {when}", text, html
 
 
-def digest(jobs: list[dict], today, base_url: str, token: str) -> tuple[str, str, str]:
+def digest(jobs: list[dict], today, base_url: str, token: str, upgrade: str = "") -> tuple[str, str, str]:
+    """`upgrade`: optional line telling trial users what paying adds."""
     manage, unsub = f"{base_url}/manage/{token}", f"{base_url}/unsubscribe/{token}"
     lines = [f"Your job matches -- {today:%a %d %b}", ""]
     items = []
@@ -44,8 +45,13 @@ def digest(jobs: list[dict], today, base_url: str, token: str) -> tuple[str, str
             f'<li style="margin-bottom:14px"><a href="{escape(j["url"], quote=True)}"><b>{escape(j["title"])}</b></a>'
             f"{' at <b>' + escape(j['company']) + '</b>' if j['company'] else ''}"
             f"<br><i>{escape(', '.join(j['matched']))}</i> (via {escape(j['source'])})</li>")
+    pay = f"{base_url}/pay/{token}"
+    if upgrade:
+        lines += [f"{upgrade} {pay}", ""]
     lines += [FOOTER, "", f"Change what you get: {manage}", f"Unsubscribe: {unsub}"]
-    html = (f"<h2>Your job matches &mdash; {today:%a %d %b}</h2><ol>{''.join(items)}</ol><p><i>{FOOTER}</i></p>"
+    extra = (f'<p style="background:#eef3ff;padding:10px 14px;border-radius:8px">{escape(upgrade)} '
+             f'<a href="{escape(pay, quote=True)}"><b>Upgrade</b></a></p>') if upgrade else ""
+    html = (f"<h2>Your job matches &mdash; {today:%a %d %b}</h2><ol>{''.join(items)}</ol>{extra}<p><i>{FOOTER}</i></p>"
             f'<p style="color:#666;font-size:13px"><a href="{escape(manage, quote=True)}">Change what you get</a> &middot; '
             f'<a href="{escape(unsub, quote=True)}">Unsubscribe</a></p>')
     return f"{len(jobs)} new job match{'es' if len(jobs) != 1 else ''} for you -- {today:%d %b}", "\n".join(lines), html

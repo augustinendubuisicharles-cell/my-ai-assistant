@@ -18,7 +18,7 @@ from job_alerts import db
 print(';'.join(str(CreateTable(t).compile(dialect=postgresql.dialect())) for t in db.metadata.sorted_tables) + ';')
 "`, { cwd: repo }).toString();
 
-let pg, q, sent, txs, env;
+let pg, q, sent, txs, env, tg;
 const BASE = "https://job-alerts.example.workers.dev";
 
 beforeEach(async () => {
@@ -27,6 +27,7 @@ beforeEach(async () => {
   q = async (text, params = []) => (await pg.query(text, params)).rows;
   sent = [];
   txs = {};
+  tg = [];
   env = { BREVO_API_KEY: "brevo", FROM_EMAIL: "hi@jobs.test", CREDO_PUBLIC_KEY: "0PUBkey", CREDO_SECRET_KEY: "secret" };
   globalThis.fetch = fakeFetch;
 });
@@ -60,6 +61,11 @@ async function fakeFetch(url, init = {}) {
     const tx = txs[decodeURIComponent(m[1])];
     if (!tx) return Response.json({ status: false }, { status: 404 });
     return Response.json({ status: true, data: { status: "success", currency: "NGN", amount: tx.amount, reference: tx.reference } });
+  }
+  m = u.match(/^https:\/\/api\.telegram\.org\/botTGTOKEN\/(\w+)$/);
+  if (m) {
+    tg.push({ method: m[1], ...body });
+    return Response.json({ ok: true, result: m[1] === "getMe" ? { username: "JobAlertTestBot" } : {} });
   }
   throw new Error(`unexpected fetch ${u}`);
 }
@@ -226,9 +232,11 @@ test("preferences save, and unsubscribe deletes the subscriber but keeps payment
 test("user text is escaped in pages", async () => {
   await signUp({ keywords: "<script>alert(1)</script>" });
   const { token } = await subscriber();
-  const page = await (await call(`/pay/${token}`)).text();
-  assert.doesNotMatch(page, /<script>alert/);
-  assert.match(page, /&lt;script&gt;/);
+  for (const path of [`/pay/${token}`, `/manage/${token}`]) {
+    const page = await (await call(path)).text();
+    assert.doesNotMatch(page, /<script>alert/);
+  }
+  assert.match(await (await call(`/manage/${token}`)).text(), /&lt;script&gt;/);
 });
 
 test("logo, icons and link-preview image are served, and pages point at them", async () => {
@@ -242,4 +250,38 @@ test("logo, icons and link-preview image are served, and pages point at them", a
     assert.deepEqual([...new Uint8Array(await res.arrayBuffer())].slice(0, 2), magic);
   }
   assert.match(await (await call("/favicon.svg")).text(), /^<svg/);
+});
+
+test("paying members can connect Telegram; trial users can't, and the webhook checks its secret", async () => {
+  env.TELEGRAM_TOKEN = "TGTOKEN";
+  await signUp();
+  const { token } = await subscriber();
+  await call(`/confirm/${token}`);
+  const trial = await (await call(`/manage/${token}`)).text();
+  assert.doesNotMatch(trial, /Connect Telegram/);
+  assert.match(trial, /free trial searches the first 2/);
+
+  await call(`/pay/${token}`, { method: "POST" });
+  await call("/paid?transRef=vs_1");
+  const member = await (await call(`/manage/${token}`)).text();
+  assert.match(member, new RegExp(`href="https://t.me/JobAlertTestBot\\?start=${token}"`));
+  assert.doesNotMatch(member, /free trial searches/);
+
+  const update = (text) => JSON.stringify({ message: { chat: { id: 4242, type: "private" }, text } });
+  assert.equal((await call("/telegram/webhook", { method: "POST", body: update(`/start ${token}`),
+    headers: { "x-telegram-bot-api-secret-token": "wrong" } })).status, 401);
+  assert.equal((await subscriber()).telegram_chat_id, null);
+
+  const secret = createHash("sha256").update("jobalert-webhook:TGTOKEN").digest("hex").slice(0, 48);
+  const hook = (text) => call("/telegram/webhook", { method: "POST", body: update(text),
+    headers: { "x-telegram-bot-api-secret-token": secret } });
+  assert.equal((await hook(`/start ${token}`)).status, 200);
+  assert.equal((await subscriber()).telegram_chat_id, "4242");
+  assert.match(tg.at(-1).text, /^Connected! New matches/);
+  assert.match(await (await call(`/manage/${token}`)).text(), /Telegram alerts are on/);
+
+  await hook("/stop");
+  assert.equal((await subscriber()).telegram_chat_id, null);
+  await hook("/start not-a-real-token-at-all-xx");
+  assert.match(tg.at(-1).text, /didn't work/);
 });

@@ -27,6 +27,18 @@ GitHub Actions (`job_alerts/send_daily.py`).
 Changing a secret in GitHub only reaches the site on the next deploy, so re-run
 the workflow after changing one.
 
+## Paid members
+
+Paying members (not trial users) get up to 10 jobs a day across all 5 of their
+job titles (the trial gets 5 jobs from the first 2) and can connect Telegram.
+
+Telegram alerts: create a bot with @BotFather, save its token as the GitHub
+secret `JOB_ALERTS_TELEGRAM_TOKEN`, make sure `JOB_ALERTS_BASE_URL` is set, and
+re-run this workflow. It points the bot at `<site>/telegram/webhook`. Members
+then see "Connect Telegram" on their manage page, and
+`.github/workflows/job_alerts_telegram.yml` sends them up to 3 new matches four
+times a day.
+
 ## Develop
 
 ```

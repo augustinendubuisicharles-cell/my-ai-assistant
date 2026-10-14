@@ -206,6 +206,45 @@ def location_fits(job_location: str, country: str, remote: bool) -> bool:
     return remote and any(r in loc for r in COUNTRIES.get(country, ("", "", []))[2])
 
 
+# Remote adverts that are really limited to one country or region ("must be based in the US",
+# "authorized to work in the UK"...). place pattern -> countries it allows.
+_PLACES = {
+    r"(?:the )?(?:u\.s\.a?\.?|usa|united states|us)": {"United States"},
+    r"(?:the )?(?:u\.k\.?|uk|united kingdom|great britain|england)": {"United Kingdom"},
+    r"canada": {"Canada"},
+    r"(?:the )?(?:eu|european union|europe|eea)": {c for c, v in COUNTRIES.items() if "europe" in v[2]},
+    r"australia": {"Australia"}, r"india": {"India"}, r"germany": {"Germany"}, r"latin america|latam": {
+        c for c, v in COUNTRIES.items() if "latam" in v[2]},
+}
+_LIMITS = [
+    r"\b(?:must|need to|needs to|required to|should) (?:be )?(?:currently )?(?:based|located|living|residing|resident|reside) in {p}\b",
+    r"\b(?:candidates|applicants) (?:must be )?(?:based|located|residing) in {p}\b",
+    r"\b(?:authori[sz]ed|eligible|legally able|permitted) to work in {p}\b",
+    r"\bright to work in {p}\b",
+    r"\b{p}[- ](?:based )?(?:candidates|applicants|residents|citizens) only\b",
+    r"\bonly (?:open to|accepting|hiring) (?:candidates |applicants )?(?:in|from|based in) {p}\b",
+]
+_LIMIT_RES = [(re.compile(t.format(p=f"(?:{place})")), allowed) for place, allowed in _PLACES.items() for t in _LIMITS]
+_CITIZENS = re.compile(r"\b(?:us|u\.s\.) citizen(?:s|ship)?\b|\bsecurity clearance\b|\bw-2\b")
+
+
+def open_to(job: dict, country: str) -> bool:
+    """False when the advert says it only hires from places that don't include `country`."""
+    if not country or not job["remote"]:
+        return True
+    text = f"{job['title']} {job['location']} {job['desc']}".lower()
+    if country != "United States" and _CITIZENS.search(text):
+        return False
+    return all(country in allowed for rx, allowed in _LIMIT_RES if rx.search(text))
+
+
+def says_open_to(job: dict, country: str) -> bool:
+    """True when the listing explicitly names the country, one of its regions, or worldwide."""
+    loc = job["location"].lower()
+    names = [country.lower()] + ALIASES.get(country, []) + COUNTRIES.get(country, ("", "", []))[2]
+    return any(n in loc for n in names) or any(w in loc for w in ANYWHERE)
+
+
 def score(job: dict, keywords: list[str], country: str, remote_only: bool, level: str,
           city: str = "") -> tuple[int, list[str]] | None:
     """Returns (score, reasons), or None if the job fails a check."""
@@ -217,7 +256,7 @@ def score(job: dict, keywords: list[str], country: str, remote_only: bool, level
         return None
     if remote_only and not job["remote"]:
         return None
-    if not location_fits(job["location"], country, job["remote"]):
+    if not location_fits(job["location"], country, job["remote"]) or not open_to(job, country):
         return None
     if level in TOO_SENIOR and (any(w in f" {title} " for w in TOO_SENIOR[level])
                                 or job["level"].lower() in ("senior", "manager", "director", "executive")):
@@ -226,6 +265,9 @@ def score(job: dict, keywords: list[str], country: str, remote_only: bool, level
         return None
 
     pts, reasons = 10, [f"matches \"{hit}\"", f"{'remote, ' if job['remote'] else ''}{job['location'] or 'location not stated'}"]
+    if country and job["remote"] and says_open_to(job, country):
+        pts += 1
+        reasons.insert(0, f"open to {country}")
     if level == "entry" and ("entry" in job["level"].lower() or any(w in text for w in ENTRY_SIGNS)):
         pts += 3
         reasons.append("entry-level")

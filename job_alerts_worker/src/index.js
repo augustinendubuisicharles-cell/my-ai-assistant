@@ -11,6 +11,7 @@ import * as mail from "./mail.js";
 import * as payments from "./payments.js";
 import * as views from "./views.js";
 import * as assets from "./assets.js";
+import * as telegram from "./telegram.js";
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
@@ -139,8 +140,11 @@ export async function handle(request, env, q) {
     const sub = await db.byToken(q, m[1]);
     if (method === "GET") {
       if (!sub) return notFound();
+      const member = await db.isMember(q, sub);
+      const bot = member ? await telegram.botUsername(env) : null;
       return html(views.form(ctx, { sub, action: `/manage/${sub.token}`, button: "Save", heading: "Your job alerts",
-        lead: `Alerts for ${sub.email}`, status: status(ctx, sub) }));
+        lead: `Alerts for ${sub.email}`, status: status(ctx, sub), member,
+        telegramLink: bot ? `https://t.me/${bot}?start=${sub.token}` : null }));
     }
     if (method === "POST") {
       const prefs = cleanPrefs(await request.formData());
@@ -192,6 +196,32 @@ export async function handle(request, env, q) {
     return msg("Payment received. You're in!",
       `Your alerts are active until ${fmtDate(sub.paid_until)}. Your first matches arrive tomorrow morning.`,
       { ok: true, link: `/manage/${sub.token}`, linkText: "Change my preferences" });
+  }
+
+  if (path === "/telegram/webhook" && method === "POST") {
+    if (!telegram.enabled(env)) return new Response("telegram off", { status: 404 });
+    if (request.headers.get("x-telegram-bot-api-secret-token") !== (await telegram.webhookSecret(env))) {
+      return new Response("forbidden", { status: 401 });
+    }
+    const update = await request.json().catch(() => ({}));
+    const chat = update.message?.chat?.id;
+    const text = String(update.message?.text || "").trim();
+    if (!chat || update.message.chat.type !== "private") return new Response("ok");
+    const start = text.match(/^\/start(?:@\w+)?\s+([\w-]{20,64})$/);
+    let reply;
+    if (start) {
+      const sub = await db.setTelegram(q, start[1], String(chat));
+      if (!sub) reply = "That link didn't work. Open your manage page from one of our emails and tap Connect Telegram again.";
+      else if (await db.isMember(q, sub)) reply = `Connected! New matches for "${sub.keywords}" will come here during the day. Send /stop to turn this off.`;
+      else reply = "Connected. Telegram alerts are for paying members, so they'll start as soon as you pay. Send /stop to disconnect.";
+    } else if (/^\/stop\b/.test(text)) {
+      await db.clearTelegram(q, String(chat));
+      reply = "Telegram alerts are off. Your daily email carries on as normal.";
+    } else {
+      reply = "To get job alerts here, open your manage page from one of our emails and tap Connect Telegram.";
+    }
+    await telegram.send(env, chat, reply).catch((e) => console.log(`[telegram send] ${e}`));
+    return new Response("ok");
   }
 
   if (path === "/payments/webhook" && method === "POST") {

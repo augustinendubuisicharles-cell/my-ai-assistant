@@ -87,7 +87,7 @@ ${link ? `<p><a href="${esc(link)}">${esc(linkText)}</a></p>` : ""}</div>`);
 const sel = (cond) => (cond ? " selected" : "");
 const chk = (cond) => (cond ? " checked" : "");
 
-export function form(ctx, { sub = null, action, button, heading, lead, stats = {}, status = "" }) {
+export function form(ctx, { sub = null, action, button, heading, lead, stats = {}, status = "", member = false, telegramLink = null }) {
   const onsite = sub && !sub.remote_only;
   const statTiles = sub ? "" : `<ul class="stats">
   ${stats.users ? `<li><b>${stats.users.toLocaleString("en")}</b><span>people getting alerts</span></li>` : ""}
@@ -99,13 +99,16 @@ export function form(ctx, { sub = null, action, button, heading, lead, stats = {
 </ul>`;
   const statusBox = sub && status ? `<p class="card status">${esc(status)}${
     ctx.paidService ? ` <a href="/pay/${esc(sub.token)}">Pay ${esc(ctx.price)} for ${ctx.months} months</a>` : ""}</p>` : "";
+  const telegramBox = !telegramLink ? "" : `<p class="card status">${sub.telegram_chat_id
+    ? "Telegram alerts are on: new matches arrive there during the day. Send /stop to the bot to turn them off."
+    : `Get new matches on Telegram during the day, before the morning email. <a href="${esc(telegramLink)}">Connect Telegram</a>`}</p>`;
   return page(ctx, `<h1>${esc(heading)}</h1>
 <p class="lead">${esc(lead)}</p>
-${statusBox}${statTiles}
+${statusBox}${telegramBox}${statTiles}
 <form class="card" method="post" action="${esc(action)}" id="prefs">
   ${sub ? "" : `<label for="email">Your email</label>
   <input id="email" name="email" type="email" required maxlength="320" placeholder="you@example.com">`}
-  <label for="keywords">What jobs do you want? <span class="hint">Up to 5 job titles or skills, separated by commas</span></label>
+  <label for="keywords">What jobs do you want? <span class="hint">Up to 5 job titles or skills, separated by commas${member ? "" : `. The free trial searches the first 2`}</span></label>
   <input id="keywords" name="keywords" type="text" required maxlength="200"
          placeholder="virtual assistant, public relations, customer support" value="${esc(sub?.keywords)}">
   <label for="country">Where do you live?</label>
@@ -133,7 +136,7 @@ ${statusBox}${statTiles}
   <input class="hp" name="website" tabindex="-1" autocomplete="off">
   <button type="submit" id="submit">${esc(button)}</button>
   ${ctx.paidService && !sub ? `<p class="small"><b>Free for ${ctx.trialDays} days, then ${esc(ctx.price)} for ${ctx.months} months</b>, paid once through ${esc(ctx.provider)} if you want to continue. Nothing renews automatically. <a href="/terms">Terms and refunds</a>.</p>` : ""}
-  <p class="small">One email a day with up to 5 new matches, only on days we find some. We skip senior roles if you choose a lower level, and we filter out unpaid roles and listings with common scam signs. Every email has a one-click unsubscribe link. We only store your email and these preferences, never share them, and delete them when you unsubscribe.</p>
+  <p class="small">One email a day with up to ${member ? "10" : "5"} new matches, only on days we find some${member ? "" : ctx.paidService ? " (members get up to 10, plus Telegram alerts)" : ""}. Remote jobs that only hire from certain countries are left out if yours isn't one of them. We skip senior roles if you choose a lower level, and we filter out unpaid roles and listings with common scam signs. Every email has a one-click unsubscribe link. We only store your email and these preferences, never share them, and delete them when you unsubscribe.</p>
 </form>
 ${sub ? `<p class="small"><a href="/unsubscribe/${esc(sub.token)}">Unsubscribe and delete my details</a></p>` : ""}
 <script>
@@ -161,7 +164,8 @@ export function pay(ctx, { sub, heading, status }) {
 <form class="card" method="post" action="/pay/${esc(sub.token)}" id="payform">
   <p class="price"><b>${esc(ctx.price)}</b> for ${ctx.months} months</p>
   <ul class="perks">
-    <li>Up to 5 new matches for "${esc(sub.keywords)}" every morning</li>
+    <li>Up to 10 new matches a day across all 5 of your job titles (the trial gets 5 jobs from 2 titles)</li>
+    <li>New matches on Telegram during the day, so you can apply first</li>
     <li>${sub.remote_only ? "Remote jobs" : `Jobs near ${esc(sub.city)}, plus remote ones`}, checked for scams and dead links</li>
     <li>One payment. Nothing renews automatically; we'll email you before it ends</li>
   </ul>

@@ -1,6 +1,6 @@
 // Queries against the same Postgres (Neon) tables the Python side creates and
 // uses (job_alerts/db.py owns the schema). `q(text, params)` returns rows.
-const COLS = "id, email, keywords, country, remote_only, city, level, token, confirmed, paid_until";
+const COLS = "id, email, keywords, country, remote_only, city, level, token, confirmed, paid_until, telegram_chat_id";
 
 const one = async (q, text, params) => (await q(text, params))[0] || null;
 
@@ -49,6 +49,17 @@ export const startTrial = (q, id, days) =>
           WHERE id = $1 AND paid_until IS NULL RETURNING ${COLS}`, [id, days]).then((s) => s || byId(q, id));
 
 export const isPaid = (sub) => Boolean(sub?.paid_until) && new Date(sub.paid_until) > new Date();
+
+// A paying member with time left (the free trial alone doesn't count): bigger limits and Telegram.
+export async function isMember(q, sub) {
+  if (!isPaid(sub)) return false;
+  return Boolean(await one(q, "SELECT 1 AS y FROM payments WHERE subscriber_id = $1 LIMIT 1", [sub.id]));
+}
+
+export const setTelegram = (q, token, chatId) =>
+  one(q, `UPDATE subscribers SET telegram_chat_id = $2 WHERE token = $1 RETURNING ${COLS}`, [token, chatId]);
+
+export const clearTelegram = (q, chatId) => q("UPDATE subscribers SET telegram_chat_id = NULL WHERE telegram_chat_id = $1", [chatId]);
 
 // Adds `days` of paid time, once per payment reference: the browser return and the
 // webhook can both report the same payment. One statement, so it's atomic.
