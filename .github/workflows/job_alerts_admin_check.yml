@@ -11,6 +11,7 @@ jobs:
     steps:
       - env:
           ADMIN_KEY: ${{ secrets.JOB_ALERTS_ADMIN_KEY }}
+          PAYSTACK_SECRET_KEY: ${{ secrets.PAYSTACK_SECRET_KEY }}
           BASE_URL: ${{ secrets.BASE_URL }}
         run: |
           SITE="${BASE_URL:-https://jobalert.me.uk}"; SITE="${SITE%/}"
@@ -23,4 +24,12 @@ jobs:
           code=$(curl -sS -o /tmp/dash.html -w '%{http_code}' --data-urlencode "key=$KEY" "$SITE/admin")
           if grep -q 'active users searched' /tmp/dash.html; then echo "PASS  the saved password opens the dashboard ($code)"
           else echo "FAIL  the saved password did not open the dashboard ($code)"; ok=0; fi
+          case "$(printf '%s' "$PAYSTACK_SECRET_KEY" | tr -d '[:space:]')" in
+            sk_live_*) echo "INFO  PAYSTACK_SECRET_KEY is a live key (sk_live_...)";;
+            sk_test_*) echo "WARN  PAYSTACK_SECRET_KEY is a TEST key: real customers can't pay";;
+            "") echo "INFO  PAYSTACK_SECRET_KEY is not set";;
+            *) echo "WARN  PAYSTACK_SECRET_KEY doesn't look like a Paystack secret key";;
+          esac
+          if grep -q 'On</span> Payments (Paystack)' /tmp/dash.html; then echo "PASS  the dashboard shows Paystack payments switched on"
+          else echo "INFO  the dashboard does not show Paystack payments on"; fi
           [ "$ok" = 1 ]
