@@ -4,6 +4,11 @@ name: Job alerts -- Paystack test payment
 # PAYSTACK_TEST_SECRET_KEY secret; the live site and database are not touched.
 on:
   workflow_dispatch:
+    inputs:
+      email:
+        description: "Also email JobAlert's receipt for the test payment to this address (optional)"
+        required: false
+        default: ""
 
 jobs:
   test-payment:
@@ -18,4 +23,8 @@ jobs:
           node-version: "22"
       - env:
           PAYSTACK_TEST_SECRET_KEY: ${{ secrets.PAYSTACK_TEST_SECRET_KEY }}
+          EMAIL: ${{ inputs.email }}
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+          FROM_EMAIL: ${{ secrets.FROM_EMAIL }}
+          CONTACT_EMAIL: ${{ secrets.CONTACT_EMAIL }}
         run: node scripts/paystack_test.mjs

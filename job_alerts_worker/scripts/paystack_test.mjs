@@ -1,6 +1,7 @@
 // Test payment against Paystack's TEST mode, using the site's own payment code.
 // Run by the "Job alerts -- Paystack test payment" workflow; never touches the live site or database.
 import * as payments from "../src/payments.js";
+import * as mail from "../src/mail.js";
 
 const key = (process.env.PAYSTACK_TEST_SECRET_KEY || "").trim();
 if (!key.startsWith("sk_test_")) {
@@ -50,6 +51,20 @@ check(await payments.webhookRef(env, body, new Headers({ "x-paystack-signature":
 let forged = false;
 try { await payments.webhookRef(env, body, new Headers({ "x-paystack-signature": "0".repeat(128) })); } catch { forged = true; }
 check(forged, "forged webhook refused");
+
+// 5. JobAlert's own receipt, sent to the test address so it can be seen in a real inbox.
+if (process.env.EMAIL && process.env.BREVO_API_KEY && paid) {
+  const fmt = (d) => d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" });
+  const env2 = { BREVO_API_KEY: process.env.BREVO_API_KEY, FROM_EMAIL: process.env.FROM_EMAIL };
+  try {
+    await mail.send(env2, email, ...mail.paymentReceipt("https://jobalert.me.uk", "test", { amount: paid.amount, reference,
+      paidOn: fmt(new Date()), until: fmt(new Date(Date.now() + payments.periodDays(env) * 86400000)),
+      months: Math.round(payments.periodDays(env) / 30), provider: "Paystack", contact: (process.env.CONTACT_EMAIL || "").trim() }));
+    check(true, `JobAlert receipt emailed to ${email}`);
+  } catch (e) {
+    check(false, `JobAlert receipt email: ${e.message}`);
+  }
+}
 
 console.log(failed ? "\nSome steps failed." : "\nAll steps passed.");
 process.exit(failed ? 1 : 0);
