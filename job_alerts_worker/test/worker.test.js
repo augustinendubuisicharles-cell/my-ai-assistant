@@ -90,6 +90,8 @@ test("home page shows the trial, the price and the form", async () => {
   const r = await call("/");
   const page = await r.text();
   assert.equal(r.status, 200);
+  assert.match(page, /What you get/);
+  assert.match(page, /Up to <b>5 jobs<\/b>[\s\S]*<b>₦5,000<\/b> for 3 months[\s\S]*Up to <b>10 jobs<\/b>/);
   assert.match(page, /₦5,000/);
   assert.match(page, /7 days free/);
   assert.match(page, /How do you want to work\?/);
