@@ -141,9 +141,176 @@ const STYLE = `
   .brand img { border-radius:9px; }
 `;
 
+// The home page: a blue hero with the form and floating example jobs, four steps, and a
+// "What's harder for you right now?" picker. Kept short on words on purpose.
+const LANDING_STYLE = `
+  body.landing { font-family:"Plus Jakarta Sans", system-ui, -apple-system, Segoe UI, Roboto, sans-serif; background:var(--bg); }
+  .landing .wrap { max-width:1180px; margin:0 auto; padding:0 24px; }
+  .hero-band { position:relative; overflow:hidden; color:#fff; padding-bottom:56px;
+    background:radial-gradient(1100px 520px at 12% -10%, #ffffffcc 0, #ffffff00 45%), radial-gradient(900px 600px at 85% 30%, #3d8bff 0, #3d8bff00 60%), linear-gradient(160deg, #1f6bff 0%, #0b4fd6 55%, #0a3fb3 100%); }
+  .landing .nav { display:flex; justify-content:space-between; align-items:center; padding-top:24px; padding-bottom:24px; }
+  .nav .brand { margin:0; color:#0b1a3a; font-size:1.5rem; }
+  .nav .brand b { color:#1f5fe0; }
+  .nav .brand img { width:44px; height:44px; border-radius:12px; box-shadow:0 8px 20px -8px #0b3fb380; }
+  .nav a.navlink { color:#fff; font-weight:700; text-decoration:none; padding:9px 18px; border-radius:99px; background:#ffffff26; border:1px solid #ffffff40; backdrop-filter:blur(6px); }
+  .hero-grid { display:grid; grid-template-columns:minmax(0,1.05fr) minmax(0,1fr); gap:56px; align-items:center; padding-top:18px; }
+  .eyebrow { display:inline-flex; align-items:center; gap:8px; font-weight:700; font-size:.88rem; padding:7px 14px; border-radius:99px; background:#ffffff22; border:1px solid #ffffff3a; }
+  .eyebrow i { width:8px; height:8px; border-radius:50%; background:#ff9f1c; box-shadow:0 0 0 4px #ff9f1c40; }
+  .hero-copy h1 { font-size:clamp(2.6rem, 5.2vw, 4.4rem); line-height:1.02; letter-spacing:-.045em; font-weight:800; margin:18px 0 16px; color:#fff; }
+  .hero-copy h1 span { display:block; }
+  .hero-copy > p { font-size:1.15rem; line-height:1.5; margin:0 0 26px; color:#e6efff; max-width:30em; }
+  .landing form.card { color:var(--text); border:0; border-radius:20px; padding:22px 22px 18px; box-shadow:0 30px 60px -30px #021a5a99, 0 2px 0 #ffffff inset; max-width:470px; }
+  .landing form.card label:first-child { margin-top:0; }
+  .landing form.card button { border-radius:12px; padding:14px; font-weight:800; font-size:1.05rem; background:linear-gradient(135deg, #1f6bff, #0b4fd6); color:#fff; box-shadow:0 12px 24px -12px #0b4fd6; }
+  .stack { position:relative; display:grid; gap:14px; perspective:1200px; }
+  .job { display:grid; grid-template-columns:52px 1fr auto; gap:14px; align-items:center; background:#fff; color:#0b1a3a; border-radius:18px; padding:16px 18px;
+    box-shadow:0 24px 48px -24px #021a5ab3; transform:rotate(-1.2deg); animation:drift 7s ease-in-out infinite; }
+  .job:nth-child(2) { transform:rotate(1deg) translateX(-26px) scale(1.04); z-index:2; animation-delay:-2s; }
+  .job:nth-child(3) { transform:rotate(-.6deg) translateX(14px); animation-delay:-4s; opacity:.96; }
+  .job:nth-child(4) { transform:rotate(.8deg) translateX(-8px); animation-delay:-5s; opacity:.9; }
+  @keyframes drift { 0%,100% { translate:0 0; } 50% { translate:0 -7px; } }
+  .job .av { width:52px; height:52px; border-radius:14px; display:grid; place-items:center; font-weight:800; color:#fff; font-size:1.05rem; }
+  .job h3 { margin:0; font-size:1.05rem; color:#1450d8; letter-spacing:-.01em; }
+  .job .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:7px; }
+  .job .chips span { font-size:.76rem; font-weight:600; color:#4a5672; background:#f1f4fa; border-radius:8px; padding:3px 8px; }
+  .job .chips span.pay { color:#127a3e; background:#e7f6ed; }
+  .job .when { font-size:.78rem; color:#7a8499; align-self:end; white-space:nowrap; }
+  .job .tick { position:absolute; right:-18px; top:-18px; width:46px; height:46px; border-radius:50%; background:#22b45a; border:4px solid #fff; display:grid; place-items:center; box-shadow:0 10px 20px -8px #0a6b30; }
+  .job .tick svg { width:22px; height:22px; }
+  .job.best { position:relative; }
+  .flow { list-style:none; margin:56px auto 0; padding:0 24px; display:grid; grid-template-columns:repeat(4, 1fr); gap:20px; max-width:1180px; counter-reset:f; }
+  .flow li { display:flex; align-items:center; gap:14px; font-weight:700; color:#fff; position:relative; }
+  .flow li:not(:last-child)::after { content:"›"; position:absolute; right:-6px; font-size:1.6rem; opacity:.6; }
+  .flow .ic { flex:none; width:54px; height:54px; border-radius:50%; display:grid; place-items:center; background:#ffffff1f; border:1.5px solid #ffffff66; }
+  .flow .ic svg { width:24px; height:24px; }
+  .flow small { display:block; font-weight:500; color:#d6e4ff; font-size:.85rem; }
+  .landing .harder { padding-top:96px; padding-bottom:20px; text-align:center; }
+  .harder h2, .landing .plans h2 { font-size:clamp(2rem, 3.6vw, 3rem); letter-spacing:-.035em; line-height:1.08; margin:0 0 10px; font-weight:800; }
+  .harder h2 em { font-style:italic; color:#1f6bff; position:relative; padding-right:.12em; }
+  .harder h2 em::after { content:""; position:absolute; left:4%; right:4%; bottom:-4px; height:4px; border-radius:4px; background:#ff8a1c; }
+  .harder > p { color:var(--muted); margin:0 0 30px; }
+  .pills { display:flex; flex-wrap:wrap; justify-content:center; gap:14px; max-width:860px; margin:0 auto; }
+  .pills button { width:auto; margin:0; display:inline-flex; align-items:center; gap:12px; padding:14px 22px 14px 14px; border-radius:16px; font:inherit; font-size:1.02rem; font-weight:600;
+    color:#fff; background:#1f5fe0; box-shadow:0 14px 28px -16px #1f5fe0; transition:transform .15s, box-shadow .15s, background .15s; }
+  .pills button:nth-child(even) { background:#ff7a10; box-shadow:0 14px 28px -16px #ff7a10; }
+  .pills button:nth-child(odd) { transform:rotate(-1.2deg); } .pills button:nth-child(even) { transform:rotate(1.2deg); }
+  .pills button:hover, .pills button[aria-pressed=true] { transform:rotate(0) translateY(-3px); box-shadow:0 18px 30px -14px #0b1a3a80; }
+  .pills button[aria-pressed=true] { outline:3px solid color-mix(in srgb, currentColor 0%, #0b1a3a); outline-offset:2px; }
+  .pills b { width:30px; height:30px; flex:none; border-radius:50%; border:2px solid #fff; display:grid; place-items:center; font-size:.9rem; }
+  .answer { max-width:640px; margin:26px auto 0; min-height:64px; font-size:1.15rem; font-weight:600; color:var(--text); }
+  .answer span { display:inline-block; padding:14px 22px; border-radius:16px; background:var(--card); border:1px solid var(--border); animation:pop .25s ease-out; }
+  @keyframes pop { from { opacity:0; transform:translateY(6px); } to { opacity:1; transform:none; } }
+  .hardwork { display:flex; align-items:center; justify-content:space-between; gap:20px; max-width:860px; margin:34px auto 0; padding:22px 26px; border-radius:22px; text-align:left;
+    background:color-mix(in srgb, #1f6bff 9%, var(--card)); border:1px solid color-mix(in srgb, #1f6bff 20%, var(--border)); text-decoration:none; color:var(--text); }
+  .hardwork strong { display:block; font-size:clamp(1.3rem, 2.4vw, 1.75rem); letter-spacing:-.025em; }
+  .hardwork strong em { font-style:normal; color:#1f6bff; }
+  .hardwork small { color:var(--muted); font-size:1rem; }
+  .hardwork i { flex:none; width:58px; height:58px; border-radius:50%; background:#1f5fe0; color:#fff; display:grid; place-items:center; font-style:normal; font-size:1.6rem; transition:transform .15s; }
+  .hardwork:hover i { transform:translateX(4px); }
+  .landing .plans { max-width:860px; margin:88px auto 0; gap:18px; grid-template-columns:1fr 1fr; }
+  .landing .plan { overflow:visible; } .landing .plan::after { display:none; }
+  .landing .plans h2 { text-align:center; margin-bottom:12px; }
+  .landing .plan { border-radius:22px; padding:26px; }
+  .landing footer { margin:56px 0 40px; }
+  @media (max-width: 900px) {
+    .hero-grid { grid-template-columns:1fr; gap:36px; }
+    .landing form.card { max-width:none; }
+    .stack { max-width:520px; margin:0 auto; width:100%; }
+    .job .tick { right:-6px; }
+    .flow { grid-template-columns:1fr 1fr; gap:22px 16px; margin-top:44px; }
+    .flow li::after { display:none; }
+    .landing .plans { grid-template-columns:1fr; }
+  }
+  @media (max-width: 560px) {
+    .landing .wrap { padding:0 16px; } .flow { padding:0 16px; }
+    .nav .brand { font-size:1.25rem; } .nav .brand img { width:38px; height:38px; }
+    .job { grid-template-columns:44px 1fr; padding:14px; } .job .av { width:44px; height:44px; } .job .when { display:none; }
+    .job:nth-child(2) { transform:rotate(1deg) scale(1.02); } .job:nth-child(3), .job:nth-child(4) { transform:none; }
+    .job:nth-child(4) { display:none; }
+    .flow { grid-template-columns:1fr; }
+    .pills button { width:100%; }
+    .hardwork { padding:18px; }
+  }
+  @media (prefers-reduced-motion: reduce) { .job, .answer span { animation:none; } }
+`;
+
+const FLOW_ICONS = {
+  pick: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="4"/><path d="M12 12l7-7M16 5h3v3"/></svg>`,
+  search: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="M16 16l4.5 4.5"/></svg>`,
+  shield: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7.5 3v5.5c0 4.6-3.2 8.2-7.5 9.5-4.3-1.3-7.5-4.9-7.5-9.5V6z"/><path d="M8.8 12.2l2.2 2.2 4.3-4.6"/></svg>`,
+  mail: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5.5" width="18" height="13" rx="2.5"/><path d="M4 7l8 6 8-6"/></svg>`,
+};
+const TICK = `<svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>`;
+
+// Example cards: the kind of jobs people get (no real company names or logos).
+const SAMPLE_JOBS = [
+  ["CS", "#111827", "Customer Support Specialist", ["Remote", "Full time", "Open to Nigeria"], "2 days ago"],
+  ["DM", "#1f6bff", "Digital Marketing Associate", ["Remote", "Full time", "$1,500/mo"], "1 day ago", true],
+  ["CW", "#f04a4a", "Content Writer", ["Remote", "Part time", "Worldwide"], "3 days ago"],
+  ["DA", "#f59e0b", "Data Analyst", ["Remote", "Entry level", "Worldwide"], "5 days ago"],
+];
+
+const HARDER = [
+  ["Finding high-paying jobs", "We show the pay, converted to naira, so you can see what's worth it."],
+  ["Building a standout CV", "Members get their CV rewritten for every job, plus a cover letter."],
+  ["Discovering local opportunities", "Pick on-site and your city: local jobs come first, remote ones too."],
+  ["Getting matched to relevant roles", "Your job titles first, then the closest roles. Never the same job twice."],
+  ["Beating the crowd", "Only jobs from the last 7 days, in your inbox at 7am, before most people apply."],
+];
+
+function landing(ctx, formHtml) {
+  const job = ([av, color, title, chips, when, best]) => `<div class="job${best ? " best" : ""}">
+  <span class="av" style="background:${color}">${av}</span>
+  <div><h3>${title}</h3><div class="chips">${chips.map((c) => `<span${c.startsWith("$") ? ' class="pay"' : ""}>${c}</span>`).join("")}</div></div>
+  <span class="when">${when}</span>${best ? `<span class="tick">${TICK}</span>` : ""}</div>`;
+  const step = (icon, title, sub) => `<li><span class="ic">${FLOW_ICONS[icon]}</span><span>${title}<small>${sub}</small></span></li>`;
+  return `<section class="hero-band">
+<nav class="wrap nav"><a class="brand" href="/"><img src="/favicon.svg" alt="" width="44" height="44"><span>Job<b>Alert</b></span></a>
+<a class="navlink" href="#plans">Plans</a></nav>
+<div class="wrap hero-grid">
+  <div class="hero-copy">
+    <span class="eyebrow"><i></i>Fresh jobs every morning at 7am</span>
+    <h1>Find the right job <span>faster.</span></h1>
+    <p>Remote jobs that hire Nigerians, matched to you and checked for scams.</p>
+    ${formHtml}
+  </div>
+  <div class="stack" aria-hidden="true">${SAMPLE_JOBS.map(job).join("")}</div>
+</div>
+<ol class="flow">
+  ${step("pick", "Pick your jobs", "Up to 5 titles")}
+  ${step("search", "We search 9 job boards", "Every morning")}
+  ${step("shield", "We check every job", "Scams and closed jobs out")}
+  ${step("mail", "Get them by email", "Never the same job twice")}
+</ol>
+</section>
+
+<section class="wrap harder">
+  <h2>What's <em>harder</em> for you right now?</h2>
+  <p>Tap one.</p>
+  <div class="pills">${HARDER.map(([q, a], i) => `<button type="button" aria-pressed="false" data-a="${esc(a)}"><b>${i + 1}</b>${q}</button>`).join("")}</div>
+  <div class="answer" aria-live="polite"></div>
+  <a class="hardwork" href="#top"><span><strong>Let <em>JobAlert</em> do the hard work.</strong><small>${ctx.trialDays} days free. No card.</small></span><i>→</i></a>
+</section>
+
+<div class="wrap">${plans(ctx)}</div>
+<script>
+  (function () {
+    var pills = document.querySelectorAll(".pills button"), out = document.querySelector(".answer");
+    pills.forEach(function (b) { b.addEventListener("click", function () {
+      pills.forEach(function (x) { x.setAttribute("aria-pressed", x === b ? "true" : "false"); });
+      out.innerHTML = ""; var s = document.createElement("span"); s.textContent = b.dataset.a; out.appendChild(s);
+    }); });
+    document.querySelector(".hardwork").addEventListener("click", function (e) {
+      e.preventDefault(); var f = document.getElementById("prefs"); f.scrollIntoView({ behavior: "smooth", block: "center" });
+      setTimeout(function () { document.getElementById("email").focus({ preventScroll: true }); }, 500);
+    });
+  })();
+</script>`;
+}
+
 const DESCRIPTION = "Remote jobs from companies abroad that actually hire Nigerians, checked for scams and never repeated, in your inbox every morning. 7 days free.";
 
-export function page(ctx, body) {
+export function page(ctx, body, { landing = false } = {}) {
   const footer = `<footer><a href="/terms">Terms, pricing and refunds</a>${
     ctx.contact ? ` &middot; <a href="mailto:${esc(ctx.contact)}">Contact</a>` : ""}</footer>`;
   return `<!doctype html>
@@ -168,11 +335,13 @@ export function page(ctx, body) {
 <meta property="og:image:alt" content="${esc(ctx.siteName)}: remote jobs that actually hire Nigerians, in your inbox every morning">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="${esc(ctx.baseUrl)}/og.jpg">
-<style>${STYLE}</style>
+<style>${STYLE}${landing ? LANDING_STYLE : ""}</style>${landing ? `
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">` : ""}
 </head>
-<body><main><a class="brand" href="/"><img src="/favicon.svg" alt="" width="36" height="36"><span>Job<b>Alert</b></span></a>
+${landing ? `<body class="landing">${body}<div class="wrap">${footer}</div></body>` : `<body><main><a class="brand" href="/"><img src="/favicon.svg" alt="" width="36" height="36"><span>Job<b>Alert</b></span></a>
 ${body}
-${footer}</main></body>
+${footer}</main></body>`}
 </html>`;
 }
 
@@ -313,6 +482,50 @@ function plans(ctx) {
 </ul></div></section>`;
 }
 
+const FORM_SCRIPT = `<script>
+  (function () {
+    var form = document.getElementById("prefs"), box = document.getElementById("city_box"), city = document.getElementById("city");
+    function sync() {
+      var onsite = document.getElementById("wt_onsite").checked;
+      box.hidden = !onsite;
+      city.required = onsite;
+    }
+    if (location.hash === "#plans") document.getElementById("plans").open = true;
+    form.addEventListener("change", sync);
+    sync();
+    var jobs = document.getElementById("jobs"), boxes = jobs.querySelectorAll("input[type=checkbox]"),
+        other = document.getElementById("other"), label = jobs.querySelector("summary");
+    function chosen() {
+      var list = [];
+      boxes.forEach(function (b) { if (b.checked) list.push(b.value); });
+      other.value.split(",").forEach(function (w) { if (w.trim()) list.push(w.trim()); });
+      return list;
+    }
+    function syncJobs() {
+      var list = chosen();
+      label.textContent = list.length ? list.join(", ") : "Choose jobs";
+      label.className = list.length ? "" : "empty";
+      boxes.forEach(function (b) { b.disabled = !b.checked && list.length >= 5; });
+      other.setCustomValidity(list.length > 5 ? "Pick up to 5 jobs" : "");
+    }
+    jobs.addEventListener("input", syncJobs);
+    syncJobs();
+    form.addEventListener("submit", function (e) {
+      if (!chosen().length) {
+        e.preventDefault();
+        jobs.open = true;
+        other.setCustomValidity("Pick at least one job, or type your own");
+        other.reportValidity();
+        other.setCustomValidity("");
+        return;
+      }
+      var b = document.getElementById("submit");
+      b.disabled = true;
+      b.textContent = "Sending...";
+    });
+  })();
+</script>`;
+
 const sel = (cond) => (cond ? " selected" : "");
 const chk = (cond) => (cond ? " checked" : "");
 
@@ -356,9 +569,7 @@ export function form(ctx, { sub = null, action, button, heading, lead, status = 
   const intro = sub ? `<h1>${esc(heading)}</h1>
 <p class="lead">${esc(lead)}</p>` : `<div class="home"><h1>Remote jobs that <em>actually hire Nigerians</em></h1>
 <p class="lead">${esc(lead)}</p></div>`;
-  return page(ctx, `${intro}
-${statusBox}${telegramBox}
-<form class="card" method="post" action="${esc(action)}" id="prefs">
+  const formHtml = `<form class="card" method="post" action="${esc(action)}" id="prefs">
   ${sub ? "" : `<label for="email">Your email</label>
   <input id="email" name="email" type="email" required maxlength="320" placeholder="you@example.com">`}
   <label id="jobs_label">What jobs do you want? <span class="hint">Pick up to 5${sub && !member ? ". The free trial searches the first 2" : ""}</span></label>
@@ -398,7 +609,12 @@ ${statusBox}${telegramBox}
   <input type="hidden" name="ref" value="${esc(ref)}">` : ""}
   <button type="submit" id="submit">${esc(button)}</button>
   ${sub ? "" : `<p class="free">${ctx.trialDays} days free &middot; no card</p>`}
-</form>
+</form>`;
+  const script = FORM_SCRIPT;
+  if (!sub) return page(ctx, landing(ctx, formHtml) + script, { landing: true });
+  return page(ctx, `${intro}
+${statusBox}${telegramBox}
+${formHtml}
 <details class="fold info" id="plans"><summary>${sub ? "How it works" : "See what you get"}</summary>
 ${sub ? "" : strengths() + plans(ctx) + compare()}
   ${ctx.paidService && !sub ? `<p class="small"><b>Free for ${ctx.trialDays} days, then ${esc(ctx.price)} for ${ctx.months} months</b>, paid once through ${esc(ctx.provider)} if you want to continue. Nothing renews automatically. <a href="/terms">Terms and refunds</a>.</p>` : ""}
@@ -406,49 +622,7 @@ ${sub ? "" : strengths() + plans(ctx) + compare()}
 </details>
 ${inviteBox}
 ${sub ? `<p class="small"><a href="/unsubscribe/${esc(sub.token)}">Unsubscribe and delete my details</a></p>` : ""}
-<script>
-  (function () {
-    var form = document.getElementById("prefs"), box = document.getElementById("city_box"), city = document.getElementById("city");
-    function sync() {
-      var onsite = document.getElementById("wt_onsite").checked;
-      box.hidden = !onsite;
-      city.required = onsite;
-    }
-    if (location.hash === "#plans") document.getElementById("plans").open = true;
-    form.addEventListener("change", sync);
-    sync();
-    var jobs = document.getElementById("jobs"), boxes = jobs.querySelectorAll("input[type=checkbox]"),
-        other = document.getElementById("other"), label = jobs.querySelector("summary");
-    function chosen() {
-      var list = [];
-      boxes.forEach(function (b) { if (b.checked) list.push(b.value); });
-      other.value.split(",").forEach(function (w) { if (w.trim()) list.push(w.trim()); });
-      return list;
-    }
-    function syncJobs() {
-      var list = chosen();
-      label.textContent = list.length ? list.join(", ") : "Choose jobs";
-      label.className = list.length ? "" : "empty";
-      boxes.forEach(function (b) { b.disabled = !b.checked && list.length >= 5; });
-      other.setCustomValidity(list.length > 5 ? "Pick up to 5 jobs" : "");
-    }
-    jobs.addEventListener("input", syncJobs);
-    syncJobs();
-    form.addEventListener("submit", function (e) {
-      if (!chosen().length) {
-        e.preventDefault();
-        jobs.open = true;
-        other.setCustomValidity("Pick at least one job, or type your own");
-        other.reportValidity();
-        other.setCustomValidity("");
-        return;
-      }
-      var b = document.getElementById("submit");
-      b.disabled = true;
-      b.textContent = "Sending...";
-    });
-  })();
-</script>`);
+${script}`);
 }
 
 export function pay(ctx, { sub, heading, status }) {
