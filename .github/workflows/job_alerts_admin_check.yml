@@ -1,0 +1,26 @@
+name: Job alerts -- dashboard check
+
+# Opens the live dashboard the way the owner does (login page, then the password from
+# the JOB_ALERTS_ADMIN_KEY secret) and says what works. Never prints the password.
+on:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          ADMIN_KEY: ${{ secrets.JOB_ALERTS_ADMIN_KEY }}
+          BASE_URL: ${{ secrets.BASE_URL }}
+        run: |
+          SITE="${BASE_URL:-https://jobalert.me.uk}"; SITE="${SITE%/}"
+          KEY="$(printf '%s' "$ADMIN_KEY" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
+          echo "Secret JOB_ALERTS_ADMIN_KEY: ${#KEY} characters (needs 16 or more)"
+          ok=1
+          code=$(curl -sS -o /tmp/login.html -w '%{http_code}' "$SITE/admin")
+          if grep -q 'type="password"' /tmp/login.html; then echo "PASS  $SITE/admin shows the password box ($code)"
+          else echo "FAIL  $SITE/admin returned $code without the password box: the site has no usable ADMIN_KEY"; ok=0; fi
+          code=$(curl -sS -o /tmp/dash.html -w '%{http_code}' --data-urlencode "key=$KEY" "$SITE/admin")
+          if grep -q 'active users searched' /tmp/dash.html; then echo "PASS  the saved password opens the dashboard ($code)"
+          else echo "FAIL  the saved password did not open the dashboard ($code)"; ok=0; fi
+          [ "$ok" = 1 ]
