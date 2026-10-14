@@ -19,7 +19,8 @@ def main() -> None:
         sys.exit("BASE_URL is required so emails can link to the site.")
     db.init_db()
     subs = db.confirmed_subscribers()
-    if only := os.environ.get("ONLY_EMAIL", "").strip().lower():  # test run for one subscriber
+    only = os.environ.get("ONLY_EMAIL", "").strip().lower()
+    if only:  # test run for one subscriber
         subs = [s for s in subs if s["email"].strip().lower() == only]
         print(f"Test run for one address: {len(subs)} matching confirmed subscriber(s).")
     require_payment = os.environ.get("REQUIRE_PAYMENT", "1") != "0"
@@ -40,6 +41,9 @@ def main() -> None:
             sent_before = db.already_sent(sub["id"])
             if first and sent_before:
                 print(f"- subscriber {sub['id']}: already has jobs, skipping the first-search email")
+                continue
+            if not first and not only and emailed_this_morning(sub):
+                print(f"- subscriber {sub['id']}: already emailed this morning, skipping")
                 continue
             if os.environ.get("ONLY_EMAIL"):
                 print(f"- subscriber {sub['id']}: searching {first_titles(sub['keywords'], titles)!r}, country "
@@ -67,6 +71,14 @@ def main() -> None:
     print(f"Done: {sent} email(s) sent, {failed} failed.")
     if failed and not sent:
         sys.exit(1)
+
+
+def emailed_this_morning(sub: dict) -> bool:
+    """True if this subscriber already got an email since 05:00 UTC today, so a second
+    morning run (the website's 06:00 start plus GitHub's late-running fallback) sends nothing more."""
+    last = db._aware(sub.get("last_sent_at"))
+    start = db.now().replace(hour=5, minute=0, second=0, microsecond=0)
+    return bool(last) and db.now() >= start and last >= start
 
 
 def trial_info(sub: dict) -> dict:

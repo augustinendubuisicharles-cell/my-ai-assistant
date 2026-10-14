@@ -329,4 +329,8 @@ export default {
       return html("<h1>Something went wrong</h1><p>Please try again in a minute.</p>", 500);
     }
   },
+  // Cron trigger (wrangler.toml): start the morning job emails on time.
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(firstSearch.daily(env));
+  },
 };
