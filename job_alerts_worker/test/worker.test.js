@@ -169,9 +169,14 @@ test("trial then pay with Credo -> 90 days added on top, counted once", async ()
   assert.equal(txs.vs_1.amount, 500000);
   assert.equal(txs.vs_1.bearer, 1);
 
+  const before = sent.length;
   const done = await call("/paid?transRef=vs_1");
   assert.equal(done.status, 200);
   const s = await subscriber();
+  const receipts = () => sent.slice(before).filter((m) => m.subject.startsWith("Payment received"));
+  assert.equal(receipts().length, 1);
+  assert.match(receipts()[0].htmlContent, /₦5,000/);
+  assert.equal(receipts()[0].sender.name, "JobAlert");
   const days = (new Date(s.paid_until) - Date.now()) / 86400000;
   assert.ok(days > 96.9 && days < 97.1, `paid days ${days}`);
 
@@ -181,6 +186,7 @@ test("trial then pay with Credo -> 90 days added on top, counted once", async ()
   assert.equal((await call("/payments/webhook", { method: "POST", body, headers: { "x-credo-signature": sig } })).status, 200);
   assert.equal(String((await subscriber()).paid_until), String(s.paid_until));
   assert.equal((await q("SELECT count(*)::int AS n FROM payments"))[0].n, 1);
+  assert.equal(receipts().length, 1); // one receipt, even though the payment was reported twice
 
   const manage = await (await call(`/manage/${token}`)).text();
   assert.match(manage, /Active until/);

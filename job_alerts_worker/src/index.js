@@ -242,7 +242,7 @@ export async function handle(request, env, q) {
     const ref = url.searchParams.get("transRef") || url.searchParams.get("reference") || url.searchParams.get("trxref") || "";
     let sub = null;
     try {
-      sub = await applyPayment(env, q, ref);
+      sub = await applyPayment(env, q, ref, ctx);
     } catch (e) {
       console.log(`[paid] ${ref}: ${e}`);
     }
@@ -292,7 +292,7 @@ export async function handle(request, env, q) {
       return new Response(String(e.message || e), { status: e instanceof SyntaxError ? 400 : 401 });
     }
     try {
-      if (ref) await applyPayment(env, q, ref);
+      if (ref) await applyPayment(env, q, ref, ctx);
     } catch (e) {
       console.log(`[webhook] ${e}`);
     }
@@ -304,9 +304,20 @@ export async function handle(request, env, q) {
   return msg("Page not found", "There's nothing at this address.", { link: "/", linkText: "Go to sign-up", status: 404 });
 }
 
-async function applyPayment(env, q, ref) {
+async function applyPayment(env, q, ref, ctx) {
   const paid = await payments.verify(env, ref);
-  return paid ? db.recordPayment(q, paid.reference, paid.subscriberId, paid.amount, payments.periodDays(env)) : null;
+  if (!paid) return null;
+  const sub = await db.recordPayment(q, paid.reference, paid.subscriberId, paid.amount, payments.periodDays(env));
+  if (sub?.justPaid) {
+    // Our own receipt, once per payment, so the member hears from JobAlert rather than only the payment provider.
+    try {
+      await mail.send(env, sub.email, ...mail.paymentReceipt(ctx.baseUrl, sub.token, { amount: paid.amount, reference: paid.reference,
+        paidOn: fmtDate(new Date()), until: fmtDate(sub.paid_until), months: ctx.months, provider: ctx.provider, contact: ctx.contact }));
+    } catch (e) {
+      console.log(`[receipt] ${paid.reference}: ${e}`);
+    }
+  }
+  return sub;
 }
 
 export default {
