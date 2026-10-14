@@ -625,8 +625,11 @@ def score(job: dict, keywords: list[str], country: str, remote_only: bool, level
         return no("not remote")
     if not location_fits(job["location"], country, job["remote"]) or not open_to(job, country):
         return no("not open to their country")
-    if level in TOO_SENIOR and (any(w in f" {title} " for w in TOO_SENIOR[level])
-                                or job["level"].lower() in ("senior", "manager", "director", "executive")):
+    # A word that's part of the title they asked for ("manager" in "product manager") doesn't make a job too senior.
+    senior = [w for w in TOO_SENIOR.get(level, []) if w.strip(" .") not in hit]
+    if level in TOO_SENIOR and (any(w in f" {title} " for w in senior)
+                                or job["level"].lower() in ("senior", "director", "executive")
+                                or (job["level"].lower() == "manager" and "manager" not in hit)):
         return no("too senior")
     if any(w in f"{title} {job['job_type']}".lower() for w in UNPAID) or any(w in text for w in SCAM_SIGNS):
         return no("unpaid or scam signs")
