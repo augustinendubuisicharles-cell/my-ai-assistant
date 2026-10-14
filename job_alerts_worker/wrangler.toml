@@ -6,7 +6,7 @@ compatibility_date = "2026-09-01"
 workers_dev = true
 
 [vars]
-SITE_NAME = "Job Alerts"
+SITE_NAME = "JobAlert"
 
 [observability]
 enabled = true

@@ -230,3 +230,16 @@ test("user text is escaped in pages", async () => {
   assert.doesNotMatch(page, /<script>alert/);
   assert.match(page, /&lt;script&gt;/);
 });
+
+test("logo, icons and link-preview image are served, and pages point at them", async () => {
+  const home = await (await call("/")).text();
+  assert.match(home, new RegExp(`<meta property="og:image" content="${BASE}/og.jpg">`));
+  assert.match(home, /<link rel="icon" href="\/favicon.svg"/);
+  for (const [path, type, magic] of [["/og.jpg", "image/jpeg", [0xff, 0xd8]], ["/favicon.png", "image/png", [0x89, 0x50]],
+                                     ["/apple-touch-icon.png", "image/png", [0x89, 0x50]]]) {
+    const res = await call(path);
+    assert.equal(res.headers.get("content-type"), type);
+    assert.deepEqual([...new Uint8Array(await res.arrayBuffer())].slice(0, 2), magic);
+  }
+  assert.match(await (await call("/favicon.svg")).text(), /^<svg/);
+});

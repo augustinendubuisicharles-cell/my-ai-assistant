@@ -10,6 +10,7 @@ import * as db from "./db.js";
 import * as mail from "./mail.js";
 import * as payments from "./payments.js";
 import * as views from "./views.js";
+import * as assets from "./assets.js";
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
@@ -21,7 +22,7 @@ export function makeQuery(env) {
 function context(env, request) {
   const prov = payments.provider(env);
   return {
-    siteName: env.SITE_NAME || "Job Alerts",
+    siteName: env.SITE_NAME || "JobAlert",
     baseUrl: (env.BASE_URL || new URL(request.url).origin).replace(/\/$/, ""),
     paidService: Boolean(prov),
     provider: prov,
@@ -56,9 +57,24 @@ function status(ctx, sub) {
 
 const fmtDate = (d) => new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" });
 
+// Logo, icons and the link-preview image (generated into assets.js by assets/make_assets.mjs).
+const bytes = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+const STATIC = {
+  "/favicon.svg": ["image/svg+xml", () => assets.MARK_SVG],
+  "/logo.svg": ["image/svg+xml", () => assets.LOGO_SVG],
+  "/favicon.ico": ["image/png", () => bytes(assets.FAVICON_PNG)],
+  "/favicon.png": ["image/png", () => bytes(assets.FAVICON_PNG)],
+  "/apple-touch-icon.png": ["image/png", () => bytes(assets.ICON_PNG)],
+  "/og.jpg": ["image/jpeg", () => bytes(assets.OG_JPG)],
+};
+
 export async function handle(request, env, q) {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, "") || "/";
+  if (STATIC[path]) {
+    const [type, body] = STATIC[path];
+    return new Response(body(), { headers: { "content-type": type, "cache-control": "public, max-age=86400" } });
+  }
   const method = request.method;
   const ctx = context(env, request);
   const msg = (heading, text, opts = {}) => html(views.message(ctx, { heading, text, ...opts }), opts.status || 200);
@@ -75,7 +91,7 @@ export async function handle(request, env, q) {
     } catch (e) {
       console.log(`[stats] ${e}`);
     }
-    return html(views.form(ctx, { action: "/subscribe", button: "Send me jobs", heading: ctx.siteName, stats,
+    return html(views.form(ctx, { action: "/subscribe", button: "Send me jobs", heading: "Jobs that fit you, every morning", stats,
       lead: "Remote jobs matched to you and checked for scams, in your inbox every morning. Prefer on-site? Tell us where." }));
   }
 

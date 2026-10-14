@@ -7,7 +7,7 @@ export async function send(env, to, subject, text, html) {
     method: "POST",
     headers: { "api-key": (env.BREVO_API_KEY || "").trim(), "content-type": "application/json", accept: "application/json" },
     body: JSON.stringify({
-      sender: { name: env.FROM_NAME || "Job Alerts", email: (env.FROM_EMAIL || "").trim() },
+      sender: { name: env.FROM_NAME || "JobAlert", email: (env.FROM_EMAIL || "").trim() },
       to: [{ email: to }], subject, htmlContent: html, textContent: text,
     }),
   });
