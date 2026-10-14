@@ -402,7 +402,7 @@ ${statusBox}${telegramBox}
 <details class="fold info" id="plans"><summary>${sub ? "How it works" : "See what you get"}</summary>
 ${sub ? "" : strengths() + plans(ctx) + compare()}
   ${ctx.paidService && !sub ? `<p class="small"><b>Free for ${ctx.trialDays} days, then ${esc(ctx.price)} for ${ctx.months} months</b>, paid once through ${esc(ctx.provider)} if you want to continue. Nothing renews automatically. <a href="/terms">Terms and refunds</a>.</p>` : ""}
-  <p class="small">One email a day with up to ${member ? "10" : "5"} new matches, only on days we find some${member ? "" : ctx.paidService ? " (members get up to 10, plus Telegram alerts)" : ""}. Remote jobs that only hire from certain countries are left out if yours isn't one of them. We skip senior roles if you choose a lower level, and we filter out unpaid roles and listings with common scam signs. Every email has a one-click unsubscribe link. We only store your email and these preferences, never share them, and delete them when you unsubscribe.</p>
+  <p class="small">One email every morning with ${member ? "5 to 10" : "3"} new matches${member ? "" : ctx.paidService ? " (members get 5 to 10, plus tailored CVs, cover letters and Telegram alerts)" : ""}. If your own titles are quiet, we add similar roles. Remote jobs that only hire from certain countries are left out if yours isn't one of them. We skip senior roles if you choose a lower level, and we filter out unpaid roles and listings with common scam signs. Every email has a one-click unsubscribe link. We only store your email and these preferences, never share them, and delete them when you unsubscribe.</p>
 </details>
 ${inviteBox}
 ${sub ? `<p class="small"><a href="/unsubscribe/${esc(sub.token)}">Unsubscribe and delete my details</a></p>` : ""}
@@ -478,7 +478,7 @@ export function pay(ctx, { sub, heading, status }) {
 export function terms(ctx) {
   return page(ctx, `<h1>Terms, pricing and refunds</h1>
 <div class="card">
-  <p><b>What you get.</b> ${esc(ctx.siteName)} emails you up to 5 new job listings a day that match the job titles, location and
+  <p><b>What you get.</b> ${esc(ctx.siteName)} emails you new job listings every morning (3 a day on the free trial, 5 to 10 for members) that match the job titles, location and
     experience level you choose. We search public job boards and filter out listings that look unpaid, expired or like scams,
     but we don't employ anyone, can't guarantee a job, and you should always read a listing yourself before applying.</p>
   <p><b>Free trial.</b> Everyone gets ${ctx.trialDays} days of alerts free when they confirm their email. No card needed.</p>
