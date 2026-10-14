@@ -1,7 +1,8 @@
 """Finds jobs for one subscriber's preferences and ranks them.
 
 Remote jobs (no keys needed): Himalayas, Jobicy, Remotive, We Work Remotely, RemoteOK,
-Working Nomads and Arbeitnow.
+Working Nomads, Arbeitnow, The Muse and Jobspresso.
+Jooble (optional free key JOOBLE_API_KEY) searches thousands of sites, like Indeed, remote and on-site.
 On-site/hybrid jobs (optional keys): Adzuna (19 countries, free key at
 developer.adzuna.com: ADZUNA_APP_ID + ADZUNA_APP_KEY) and Reed (UK, free key:
 REED_API_KEY). Without those keys, on-site coverage is thin, so the form
@@ -265,8 +266,88 @@ def from_arbeitnow() -> tuple:
     return tuple(out)
 
 
+@lru_cache(maxsize=1)
+def from_themuse() -> tuple:
+    """The Muse: its remote ("Flexible / Remote") jobs, newest first, a few pages."""
+    out = []
+    try:
+        for page in range(1, 6):
+            data = _get("https://www.themuse.com/api/public/jobs", page=page, location="Flexible / Remote", descending="true")
+            for j in data.get("results", []):
+                posted = j.get("publication_date")
+                out.append(_raw(
+                    j.get("name"), (j.get("company") or {}).get("name"),
+                    ", ".join(l.get("name", "") for l in j.get("locations") or []) or "Flexible / Remote",
+                    (j.get("refs") or {}).get("landing_page"), "The Muse",
+                    datetime.fromisoformat(posted.replace("Z", "+00:00")) if posted else None,
+                    _clean(j.get("contents")), True, ", ".join(l.get("name", "") for l in j.get("levels") or [])))
+            if page >= (data.get("page_count") or 0):
+                break
+            time.sleep(1)
+    except Exception as e:
+        print(f"[The Muse] skipped: {e}")
+    return tuple(out)
+
+
+def _rss(url: str, source: str, location: str = "Anywhere") -> tuple:
+    """Remote job boards that publish an RSS feed of their latest jobs ("Company: Title" or plain titles)."""
+    out = []
+    try:
+        r = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
+        r.raise_for_status()
+        for item in ET.fromstring(r.content).iter("item"):
+            title, company = (item.findtext("title") or "").strip(), ""
+            for el in item:  # namespaced extras some boards add, e.g. <job_listing:company>
+                tag = el.tag.rsplit("}", 1)[-1].lower()
+                if tag in ("company", "company_name", "companyname") and el.text:
+                    company = el.text.strip()
+                elif tag in ("location", "region") and el.text:
+                    location = el.text.strip()
+            if not company and " at " in title:
+                title, _, company = title.rpartition(" at ")
+            posted = item.findtext("pubDate")
+            out.append(_raw(title, company, location, item.findtext("link"), source,
+                            parsedate_to_datetime(posted) if posted else None, _clean(item.findtext("description")), True))
+    except Exception as e:
+        print(f"[{source}] skipped: {e}")
+    return tuple(out)
+
+
+@lru_cache(maxsize=1)
+def from_jobspresso() -> tuple:
+    return _rss("https://jobspresso.co/feed/?post_type=job_listing", "Jobspresso")
+
+
 def remote_feeds() -> tuple:
-    return from_remotive() + from_weworkremotely() + from_remoteok() + from_workingnomads() + from_arbeitnow()
+    return (from_remotive() + from_weworkremotely() + from_remoteok() + from_workingnomads() + from_arbeitnow()
+            + from_themuse() + from_jobspresso())
+
+
+@lru_cache(maxsize=None)
+def from_jooble(keyword: str, where: str) -> tuple:
+    """Jooble: a job search engine like Indeed that gathers adverts from thousands of sites, including
+    Nigerian ones. Needs a free key (JOOBLE_API_KEY, from jooble.org/api/about). `where` is a country or
+    city for on-site searches, or "" for remote."""
+    key = os.environ.get("JOOBLE_API_KEY", "").strip()
+    if not key:
+        return ()
+    out = []
+    try:
+        r = requests.post(f"https://jooble.org/api/{key}", json={"keywords": keyword if where else f"{keyword} remote",
+                          "location": where, "page": "1"}, headers=HEADERS, timeout=TIMEOUT)
+        r.raise_for_status()
+        for j in r.json().get("jobs", []):
+            loc, text = j.get("location") or "", f"{j.get('title', '')} {j.get('location', '')} {j.get('snippet', '')}".lower()
+            remote = any(w in text for w in REMOTE_WORDS)
+            posted = j.get("updated")
+            out.append(_raw(
+                _clean(j.get("title")), j.get("company"), loc, j.get("link"), f"Jooble ({j['source']})" if j.get("source") else "Jooble",
+                datetime.fromisoformat(posted[:19]).replace(tzinfo=timezone.utc) if posted else None,
+                _clean(j.get("snippet")), remote, pay=j.get("salary") or "", job_type=j.get("type") or ""))
+        time.sleep(1)
+    except Exception as e:
+        print(f"[Jooble:{keyword}] skipped: {e}")
+    return tuple(out)
 
 
 @lru_cache(maxsize=None)
@@ -576,7 +657,7 @@ def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, ex
     keywords = clean_keywords(keywords_csv)[:5]
     pool = list(remote_feeds())
     for k in keywords:
-        pool += from_himalayas(k, country) + from_jobicy(k)
+        pool += from_himalayas(k, country) + from_jobicy(k) + from_jooble(k, "" if remote_only else (city or country))
         if not remote_only:
             pool += from_adzuna(k, country, city) + (from_reed(k, city) if country == "United Kingdom" else ())
 
@@ -605,7 +686,9 @@ def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, ex
         if _link_ok(job["url"]):
             picked.append(job)
             used[job["hit"]] += 1
-    print(f"  checked {len(pool)} listings, {matched} matched, picked {len(picked)}; "
+    by_source = Counter(j["source"].split(" (")[0] for j in pool)
+    print(f"  checked {len(pool)} listings ({', '.join(f'{s} {n}' for s, n in by_source.most_common())}), "
+          f"{matched} matched, picked {len(picked)}; "
           f"left out: {', '.join(f'{n} {r}' for r, n in why.most_common()) or 'none'}")
     return picked
 
