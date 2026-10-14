@@ -293,7 +293,7 @@ function plans(ctx) {
   const li = (text, yes = true) => `<li${yes ? "" : ' class="no"'}>${text}</li>`;
   return `<section class="plans" id="plans"><h2>What you get</h2>
 <div class="card plan"><h3>Free trial</h3><p class="cost"><b>₦0</b> for ${ctx.trialDays} days, no card</p><ul>
-  ${li("Up to <b>5 jobs</b> every morning")}
+  ${li("<b>3 jobs</b> every morning")}
   ${li("Searches your first <b>2 job titles</b>")}
   ${li("Remote jobs, or on-site near you")}
   ${li("Checked for scams, dead links and jobs you can't apply for from your country")}
@@ -303,7 +303,7 @@ function plans(ctx) {
 <div class="card plan best"><span class="tag">BEST VALUE</span><h3>Member</h3><p class="cost">${ctx.paidService
     ? `<b>${esc(ctx.price)}</b> for ${ctx.months} months, paid once`
     : "<b>Coming soon</b>"}</p><ul>
-  ${li("Up to <b>10 jobs</b> every morning")}
+  ${li("<b>5 to 10 jobs</b> every morning")}
   ${li("Searches all <b>5 job titles</b>")}
   ${li("<b>Telegram alerts</b> 4 times a day, so you apply first")}
   ${li("<b>Your CV tailored</b> to any job, plus an <b>AI cover letter</b>")}
@@ -457,7 +457,7 @@ export function pay(ctx, { sub, heading, status }) {
 <form class="card" method="post" action="/pay/${esc(sub.token)}" id="payform">
   <p class="price"><b>${esc(ctx.price)}</b> for ${ctx.months} months</p>
   <ul class="perks">
-    <li>Up to 10 new matches a day across all 5 of your job titles (the trial gets 5 jobs from 2 titles)</li>
+    <li>At least 5 and up to 10 new matches a day across all 5 of your job titles (the trial gets 3 jobs a day from 2 titles)</li>
     <li>New matches on Telegram during the day, so you can apply first</li>
     <li>${sub.remote_only ? "Remote jobs" : `Jobs near ${esc(sub.city)}, plus remote ones`}, checked for scams and dead links</li>
     <li>One payment. Nothing renews automatically; we'll email you before it ends</li>
