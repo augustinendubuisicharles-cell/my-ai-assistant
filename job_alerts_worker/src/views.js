@@ -38,7 +38,12 @@ const STYLE = `
   .stats li { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:10px 12px; }
   .stats b { display:block; font-size:1.3rem; }
   .stats span { color:var(--muted); font-size:.85rem; }
+  .brand { display:inline-flex; align-items:center; gap:10px; margin:0 0 20px; text-decoration:none; color:var(--text); font-size:1.35rem; font-weight:800; letter-spacing:-.3px; }
+  .brand b { color:var(--accent); }
+  .brand img { border-radius:9px; }
 `;
+
+const DESCRIPTION = "Remote and local jobs matched to you, checked for scams and never repeated, in your inbox every morning. 7 days free.";
 
 export function page(ctx, body) {
   const footer = `<footer><a href="/terms">Terms, pricing and refunds</a>${
@@ -49,9 +54,26 @@ export function page(ctx, body) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(ctx.siteName)}</title>
+<meta name="description" content="${esc(DESCRIPTION)}">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon.png" type="image/png" sizes="48x48">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="theme-color" content="#2457d6">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="${esc(ctx.siteName)}">
+<meta property="og:title" content="${esc(ctx.siteName)}: jobs in your inbox every morning">
+<meta property="og:description" content="${esc(DESCRIPTION)}">
+<meta property="og:url" content="${esc(ctx.baseUrl)}/">
+<meta property="og:image" content="${esc(ctx.baseUrl)}/og.jpg">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="${esc(ctx.siteName)}: fresh remote and local jobs in your inbox every morning">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="${esc(ctx.baseUrl)}/og.jpg">
 <style>${STYLE}</style>
 </head>
-<body><main>${body}
+<body><main><a class="brand" href="/"><img src="/favicon.svg" alt="" width="36" height="36"><span>Job<b>Alert</b></span></a>
+${body}
 ${footer}</main></body>
 </html>`;
 }
