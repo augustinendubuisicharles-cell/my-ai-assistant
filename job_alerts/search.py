@@ -768,5 +768,5 @@ if __name__ == "__main__":
     # Preview without a database or email:  python -m job_alerts.search "virtual assistant, pr" Nigeria entry
     import sys
     kw, where, lvl = (sys.argv[1:] + ["", "", "any"])[:3]
-    for j in find_jobs(kw or "virtual assistant", where, True, lvl or "any", set()):
+    for j in find_jobs(kw or "virtual assistant", where, True, lvl or "any", set(), n=10, minimum=5):
         print(f"- {j['title']} | {j['company']} | {', '.join(j['matched'])} | {j['url']}")
