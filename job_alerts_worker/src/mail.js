@@ -103,7 +103,7 @@ export function paymentReceipt(baseUrl, token, { amount, reference, paidOn, unti
     `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:18px 0 4px;font-size:15px">` +
     row("Amount", naira) + row("Membership", `${months} months`) + row("Active until", until) + row("Paid on", paidOn) +
     row("Reference", reference) + `</table>` +
-    steps([["Up to 10 jobs a day", "From all 5 of your job titles"], ["Tailored CVs and cover letters", "Your CV rewritten for any job in your email, plus a ready letter"],
+    steps([["5 to 10 jobs a day", "From all 5 of your job titles, topped up with similar roles"], ["Tailored CVs and cover letters", "Your CV rewritten for any job in your email, plus a ready letter"],
       ["Telegram alerts", "New matches during the day, so you can apply first"]]) +
     button(link, "Open my job alerts") +
     `<p style="color:${MUTED};font-size:13px;margin:6px 0 0">Paid securely through ${esc(provider || "our payment partner")}. ` +

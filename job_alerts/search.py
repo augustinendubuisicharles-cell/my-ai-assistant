@@ -436,6 +436,39 @@ RELATED = [
     ["operations associate", "operations assistant", "operations coordinator", "operations specialist"],
 ]
 
+# Neighbouring jobs: when someone's own titles don't fill their daily minimum, these are the next
+# closest roles (by the first title of each RELATED group) that the same person could apply for.
+NEIGHBOURS = {
+    "public relations": ["content writer", "social media", "digital marketing"],
+    "virtual assistant": ["customer support", "operations associate", "data entry", "live chat"],
+    "customer support": ["live chat", "virtual assistant", "sales"],
+    "social media": ["content writer", "digital marketing", "video editor"],
+    "content writer": ["social media", "seo", "email marketing", "public relations"],
+    "data analyst": ["data entry", "qa", "operations associate"],
+    "software engineer": ["qa", "ai automation"],
+    "graphic designer": ["ux designer", "video editor", "social media"],
+    "ux designer": ["graphic designer", "product manager"],
+    "accountant": ["data entry", "virtual assistant", "operations associate"],
+    "project manager": ["operations associate", "product manager", "virtual assistant"],
+    "digital marketing": ["seo", "email marketing", "social media", "content writer"],
+    "sales": ["lead generation", "customer support"],
+    "hr": ["virtual assistant", "operations associate"],
+    "product manager": ["project manager", "ux designer"],
+    "teacher": ["content writer", "transcription", "data annotation"],
+    "data entry": ["transcription", "data annotation", "virtual assistant"],
+    "video editor": ["graphic designer", "social media"],
+    "seo": ["content writer", "digital marketing"],
+    "qa": ["data annotation", "software engineer"],
+    "transcription": ["data entry", "data annotation"],
+    "data annotation": ["data entry", "transcription", "qa"],
+    "lead generation": ["sales", "customer support"],
+    "telemedicine": ["virtual assistant", "customer support", "transcription"],
+    "live chat": ["customer support", "virtual assistant"],
+    "email marketing": ["digital marketing", "content writer"],
+    "ai automation": ["software engineer", "data annotation"],
+    "operations associate": ["virtual assistant", "project manager"],
+}
+
 # What people type that should search for something more useful. "any" means they'd take most entry-level remote work.
 BROAD = ["virtual assistant", "customer support", "data entry"]
 VAGUE = {"any", "anything", "all", "any job", "any jobs", "anything remote", "remote", "online", "work from home"}
@@ -481,6 +514,16 @@ def clean_keywords(keywords_csv: str) -> list[str]:
             if t not in out:
                 out.append(t)
     return out
+
+
+def neighbours(keywords: list[str]) -> list[str]:
+    """Next-closest titles for someone's titles, nearest first, then the broad entry-level ones."""
+    out: list[str] = []
+    for k in keywords:
+        group = next((g for g in RELATED if k in g), None)
+        out += NEIGHBOURS.get(group[0], []) if group else []
+    taken = {t for k in keywords for g in RELATED if k in g for t in g} | set(keywords)
+    return [t for t in dict.fromkeys(out + BROAD) if t not in taken]
 
 
 def variants(keyword: str) -> list[str]:
@@ -650,18 +693,15 @@ def sent_keys(stored: set[str]) -> set[str]:
     return {part for value in stored for part in value.split("\t") if part}
 
 
-def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, exclude: set[str], n: int = 5,
-              city: str = "") -> list[dict]:
-    """remote_only=True searches remote jobs. False means on-site/hybrid near `city` (via Adzuna/Reed),
-    with remote jobs as a fallback."""
-    keywords = clean_keywords(keywords_csv)[:5]
+def _search(keywords: list[str], country: str, remote_only: bool, level: str, city: str,
+            seen: set[str], why: Counter) -> tuple[list[dict], Counter]:
+    """Every listing that passes the checks for these titles, best first, plus how many listings each board gave."""
     pool = list(remote_feeds())
     for k in keywords:
         pool += from_himalayas(k, country) + from_jobicy(k) + from_jooble(k, "" if remote_only else (city or country))
         if not remote_only:
             pool += from_adzuna(k, country, city) + (from_reed(k, city) if country == "United Kingdom" else ())
-
-    seen, ranked, why = sent_keys(exclude), [], Counter()
+    ranked = []
     for job in pool:
         keys = job_keys(job)
         if keys & seen:
@@ -675,9 +715,11 @@ def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, ex
                 matched = [f"{m} ({naira})" if m == job["pay"] else m for m in matched]
             ranked.append({**job, "score": result[0], "matched": matched, "hit": title_hit(job["title"], keywords)})
     ranked.sort(key=lambda j: j["score"], reverse=True)
-    matched = len(ranked)
+    return ranked, Counter(j["source"].split(" (")[0] for j in pool)
 
-    # Take turns between their keywords, so one busy job title doesn't fill every email.
+
+def _pick(ranked: list[dict], keywords: list[str], n: int) -> list[dict]:
+    """Up to n working jobs, taking turns between the titles so one busy title doesn't fill every email."""
     picked, used = [], {k: 0 for k in keywords}
     while len(picked) < n and ranked:
         fewest = min(used[j["hit"]] for j in ranked)
@@ -686,10 +728,39 @@ def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, ex
         if _link_ok(job["url"]):
             picked.append(job)
             used[job["hit"]] += 1
-    by_source = Counter(j["source"].split(" (")[0] for j in pool)
-    print(f"  checked {len(pool)} listings ({', '.join(f'{s} {n}' for s, n in by_source.most_common())}), "
-          f"{matched} matched, picked {len(picked)}; "
-          f"left out: {', '.join(f'{n} {r}' for r, n in why.most_common()) or 'none'}")
+    return picked
+
+
+def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, exclude: set[str], n: int = 5,
+              city: str = "", minimum: int = 0) -> list[dict]:
+    """remote_only=True searches remote jobs. False means on-site/hybrid near `city` (via Adzuna/Reed),
+    with remote jobs as a fallback.
+
+    Up to `n` jobs for their own titles. If that's fewer than `minimum`, the gap is filled from the
+    next-closest roles (NEIGHBOURS, then the broad entry-level titles), marked "similar role". Every job
+    still passes every check: last 7 days, open to their country, seniority, scam signs, never sent before."""
+    keywords = clean_keywords(keywords_csv)[:5]
+    seen, why = sent_keys(exclude), Counter()
+    ranked, boards = _search(keywords, country, remote_only, level, city, seen, why)
+    matched = len(ranked)
+    picked = _pick(ranked, keywords, n)
+    extra = 0
+    if len(picked) < minimum and (near := neighbours(keywords)):
+        more, _ = _search(near, country, remote_only, level, city, seen, Counter())
+        for j in more:
+            j["matched"] = ["similar role"] + j["matched"]
+        more.sort(key=lambda j: (near.index(j["hit"]), -j["score"]))  # closest roles first
+        found = []
+        for j in more:
+            if len(picked) + len(found) >= minimum:
+                break
+            if _link_ok(j["url"]):
+                found.append(j)
+        extra = len(found)
+        picked += found
+    print(f"  checked {sum(boards.values())} listings ({', '.join(f'{s} {c}' for s, c in boards.most_common())}), "
+          f"{matched} matched, picked {len(picked)}{f' ({extra} from similar roles to reach the daily minimum)' if extra else ''}; "
+          f"left out: {', '.join(f'{c} {r}' for r, c in why.most_common()) or 'none'}")
     return picked
 
 

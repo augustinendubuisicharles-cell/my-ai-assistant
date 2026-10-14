@@ -25,8 +25,9 @@ PRICE_NGN = int(os.environ.get("PRICE_NGN", "5000"))
 PERIOD_DAYS = int(os.environ.get("PERIOD_DAYS", "90"))
 TRIAL_DAYS = int(os.environ.get("TRIAL_DAYS", "7"))  # free days everyone gets when they confirm their email
 # What each plan gets per daily email: (jobs, job titles searched). Paid members also get Telegram alerts.
-TRIAL_LIMITS = (5, 2)
+TRIAL_LIMITS = (3, 2)  # jobs a day, job titles searched
 PAID_LIMITS = (10, 5)
+DAILY_MINIMUM = {True: 5, False: 3}  # members, trial: similar roles fill any gap (search.find_jobs)
 
 
 def limits(member: bool) -> tuple[int, int]:
