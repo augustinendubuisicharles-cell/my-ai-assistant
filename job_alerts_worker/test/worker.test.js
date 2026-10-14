@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { execSync } from "node:child_process";
 import { createHash, createHmac } from "node:crypto";
 import { PGlite } from "@electric-sql/pglite";
+import * as admin from "../src/admin.js";
 import worker, { handle } from "../src/index.js";
 import COUNTRIES from "../src/countries.js";
 
@@ -73,6 +74,10 @@ async function fakeFetch(url, init = {}) {
     assert.equal(init.headers.authorization, "Bearer GHTOKEN");
     gh.push(body);
     return new Response(null, { status: 204 });
+  }
+  if (u.startsWith("https://api.github.com/repos/owner/repo/actions/workflows/job_alerts_daily.yml/runs")) {
+    return Response.json({ workflow_runs: [{ status: "completed", conclusion: "success", event: "workflow_dispatch",
+      run_started_at: new Date().toISOString(), html_url: "https://github.com/owner/repo/actions/runs/1" }] });
   }
   if (u === "https://api.anthropic.com/v1/messages?beta=true" || u === "https://api.anthropic.com/v1/messages") {
     ai.push(body);
@@ -403,4 +408,38 @@ test("the 06:00 cron trigger starts the morning run for everyone", async () => {
   await worker.scheduled({ cron: "0 6 * * *" }, env, { waitUntil: (p) => waits.push(p) });
   await Promise.all(waits);
   assert.deepEqual(gh.at(-1), { ref: "main", inputs: { first: "0" } });
+});
+
+test("the owner's dashboard needs the secret key and shows who got this morning's jobs", async () => {
+  env.GH_TOKEN = "GHTOKEN";
+  env.GITHUB_REPO = "owner/repo";
+  assert.equal((await call("/admin/anything-at-all-long-enough")).status, 404); // no ADMIN_KEY: no dashboard
+  env.ADMIN_KEY = "k".repeat(32);
+  await signUp();
+  await call(`/confirm/${(await subscriber()).token}`);
+  await signUp({ email: "bo@example.com" });
+  await call(`/confirm/${(await q("SELECT token FROM subscribers WHERE email = 'bo@example.com'"))[0].token}`);
+  await signUp({ email: "<b>cy</b>@example.com" }); // never confirmed
+  await q(`UPDATE subscribers SET last_run_at = now(), last_run_result = 'sent 5 jobs' WHERE email = 'ada@example.com'`);
+  await q(`UPDATE subscribers SET last_run_at = now() - interval '3 days', last_run_result = 'no new matches' WHERE email = 'bo@example.com'`);
+
+  assert.equal((await call("/admin/" + "k".repeat(31) + "x")).status, 404);
+  assert.equal((await call("/admin/")).status, 404);
+  const r = await call("/admin/" + "k".repeat(32));
+  assert.equal(r.status, 200);
+  assert.equal(r.headers.get("cache-control"), "no-store");
+  const page = await r.text();
+  assert.match(page, /ada@example\.com[\s\S]*trial until/);
+  assert.match(page, /✓ This morning: sent 5 jobs/);
+  assert.match(page, /⚠ Not reached this morning/);
+  assert.match(page, /1 of 2 active users searched this morning/);
+  assert.match(page, /Not searched until they confirm/);
+  assert.ok(!page.includes("<b>cy</b>"), "emails are escaped");
+  assert.match(page, /noindex/);
+  assert.match(page, /passed/);
+});
+
+test("before 06:30 UTC the dashboard judges yesterday's morning run", () => {
+  assert.equal(admin.runWindow(new Date("2026-10-14T06:10:00Z")).toISOString(), "2026-10-13T05:00:00.000Z");
+  assert.equal(admin.runWindow(new Date("2026-10-14T09:00:00Z")).toISOString(), "2026-10-14T05:00:00.000Z");
 });

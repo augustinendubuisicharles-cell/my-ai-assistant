@@ -4,7 +4,7 @@
 // Actions (job_alerts/send_daily.py) against the same Neon database.
 //
 // Secrets/vars: DATABASE_URL, BREVO_API_KEY, FROM_EMAIL, CONTACT_EMAIL, and the
-// payment keys in payments.js. Optional: BASE_URL, SITE_NAME, PRICE_NGN, PERIOD_DAYS.
+// payment keys in payments.js. ADMIN_KEY turns on the owner's dashboard at /admin/<key>. Optional: BASE_URL, SITE_NAME, PRICE_NGN, PERIOD_DAYS.
 import { neon } from "@neondatabase/serverless";
 import * as db from "./db.js";
 import * as mail from "./mail.js";
@@ -14,6 +14,7 @@ import * as assets from "./assets.js";
 import * as telegram from "./telegram.js";
 import * as firstSearch from "./firstsearch.js";
 import * as letters from "./letters.js";
+import * as admin from "./admin.js";
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
@@ -103,6 +104,16 @@ export async function handle(request, env, q) {
   let m;
 
   if (path === "/healthz") return Response.json({ ok: true });
+
+  // Owner's dashboard. A wrong or missing key gets the ordinary "not found" page.
+  if ((m = path.match(/^\/admin\/([^/]+)$/)) && method === "GET") {
+    if (!(await admin.allowed(env, decodeURIComponent(m[1])))) {
+      return msg("Page not found", "There's nothing at this address.", { link: "/", linkText: "Go to sign-up", status: 404 });
+    }
+    return new Response(admin.render(ctx.siteName, await admin.load(env, q)), { headers: {
+      "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-robots-tag": "noindex, nofollow",
+      "referrer-policy": "no-referrer", "x-frame-options": "DENY" } });
+  }
 
   if (path === "/" && method === "GET") {
     const ref = (url.searchParams.get("ref") || "").replace(/[^\w]/g, "").slice(0, 16);
