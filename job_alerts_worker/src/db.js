@@ -77,13 +77,13 @@ export async function recordPayment(q, reference, subscriberId, amountNgn, days)
   return sub && { ...sub, justPaid: rows.length > 0 };
 }
 
-// --- AI cover letters (members) ---
+// --- AI cover letters and tailored CVs (members); kind is "letter" or "cv" ---
 
 export const getCv = async (q, id) => (await one(q, "SELECT cv_text FROM subscribers WHERE id = $1", [id]))?.cv_text || "";
 export const setCv = (q, id, cv) => q("UPDATE subscribers SET cv_text = $2 WHERE id = $1", [id, cv]);
-export const lettersToday = async (q, id) =>
-  (await one(q, "SELECT count(*)::int AS n FROM letters WHERE subscriber_id = $1 AND created_at > now() - interval '1 day'", [id]))?.n || 0;
-export const addLetter = (q, id) => q("INSERT INTO letters (subscriber_id, created_at) VALUES ($1, now())", [id]);
+export const lettersToday = async (q, id, kind = "letter") =>
+  (await one(q, "SELECT count(*)::int AS n FROM letters WHERE subscriber_id = $1 AND kind = $2 AND created_at > now() - interval '1 day'", [id, kind]))?.n || 0;
+export const addLetter = (q, id, kind = "letter") => q("INSERT INTO letters (subscriber_id, created_at, kind) VALUES ($1, now(), $2)", [id, kind]);
 
 // --- referrals: every 2 friends who confirm = 1 free month ---
 

@@ -306,7 +306,7 @@ function plans(ctx) {
   ${li("Up to <b>10 jobs</b> every morning")}
   ${li("Searches all <b>5 job titles</b>")}
   ${li("<b>Telegram alerts</b> 4 times a day, so you apply first")}
-  ${li("<b>AI cover letter</b> for any job in one click")}
+  ${li("<b>Your CV tailored</b> to any job, plus an <b>AI cover letter</b>")}
   ${li("Everything in the free trial")}
   ${li("No auto-renewal; we remind you before it ends")}
   ${li("Full refund within 7 days if it's not for you")}
@@ -486,8 +486,8 @@ export function terms(ctx) {
     you before it ends with a link to renew if you want to.</p>
   <p><b>Refunds.</b> If you're not happy within 7 days of paying, email us and we'll refund you in full. After that, payments
     aren't refundable, but you can stop the emails any time.</p>` : ""}
-  <p><b>Your data.</b> We store your email, your preferences, a record of your payments and, if you use cover letters,
-    the CV you paste. Your CV is only used to write your letters (it's sent to our AI provider, Anthropic, for that).
+  <p><b>Your data.</b> We store your email, your preferences, a record of your payments and, if you use cover letters or tailored CVs,
+    the CV you paste. Your CV is only used to write your letters and tailored CVs (it's sent to our AI provider, Anthropic, for that).
     We never share your details otherwise, and unsubscribing deletes your email, preferences and CV (payment records
     are kept for accounting).</p>
   ${ctx.contact ? `<p><b>Contact.</b> <a href="mailto:${esc(ctx.contact)}">${esc(ctx.contact)}</a></p>` : ""}
@@ -501,23 +501,43 @@ export { COUNTRIES };
 export const JOBS = ["Virtual assistant", "Customer support", "Software developer", "Data analyst", "Content writer",
   "Social media manager", "Graphic designer", "Digital marketing", "Project manager", "Bookkeeper"];
 
-// AI cover letter for one job (members). Shows the letter once written, and the form to (re)write it.
-export function letterPage(ctx, { sub, job, hasCv, cv = "", letter = "", left, error = "" }) {
+// AI cover letter or tailored CV for one job (members). Shows the result once written, and the form to (re)write it.
+// The tailored CV can also be downloaded as a Word file, built in the browser from the text.
+export function letterPage(ctx, { kind = "letter", sub, job, hasCv, cv = "", letter = "", left, error = "" }) {
+  const isCv = kind === "cv";
+  const noun = isCv ? "CV" : "letter";
   const cvField = `<label for="cv">Your CV <span class="hint">Paste the text once; we'll remember it</span></label>
   <textarea id="cv" name="cv" rows="8" maxlength="15000"${hasCv ? "" : " required"} placeholder="Paste your CV here">${esc(cv)}</textarea>`;
-  return page(ctx, `<h1>✍️ Cover letter</h1>
+  const other = `/${isCv ? "letter" : "cv"}/${sub.token}?${new URLSearchParams({ t: job.title, c: job.company, u: job.url })}`;
+  const fileName = `CV - ${job.title}${job.company ? ` - ${job.company}` : ""}`.replace(/[^\w .,&()-]+/g, " ").slice(0, 120);
+  return page(ctx, `<h1>${isCv ? "📄 Your CV for this job" : "✍️ Cover letter"}</h1>
 <p class="lead">${esc(job.title)}${job.company ? ` at ${esc(job.company)}` : ""}</p>
+${isCv && !letter ? `<p>We rewrite your CV for this job: a summary aimed at the role, your most relevant experience first,
+and the advert's own words where they're true of you. Nothing is made up.</p>` : ""}
 ${error ? `<p class="card status">${esc(error)}</p>` : ""}
-${letter ? `<div class="card"><textarea id="letter" rows="16" readonly>${esc(letter)}</textarea>
-<div class="actions"><button type="button" id="copy" style="margin:0">Copy letter</button>
+${letter ? `<div class="card"><textarea id="letter" rows="${isCv ? 24 : 16}" readonly>${esc(letter)}</textarea>
+<div class="actions"><button type="button" id="copy" style="margin:0">Copy ${noun}</button>
+${isCv ? `<button type="button" id="word" class="btn ghost" style="margin:0">Download for Word</button>` : ""}
 ${job.url ? `<a class="btn ghost" href="${esc(job.url)}">Open the job and apply</a>` : ""}</div>
-<p class="note">Read it through and add one detail only you know before sending.</p></div>
+<p class="note">${isCv ? "Check every line is true and your contact details are right before sending."
+    : "Read it through and add one detail only you know before sending."}
+<a href="${esc(other)}">${isCv ? "Write a cover letter for it too" : "Get your CV tailored to this job too"}</a></p></div>
 <script>document.getElementById("copy").onclick=function(){var t=document.getElementById("letter");t.select();
-navigator.clipboard?navigator.clipboard.writeText(t.value):document.execCommand("copy");this.textContent="Copied ✓";};</script>` : ""}
+navigator.clipboard?navigator.clipboard.writeText(t.value):document.execCommand("copy");this.textContent="Copied ✓";};
+${isCv ? `document.getElementById("word").onclick=function(){
+var e=function(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");},out=[],list=false;
+document.getElementById("letter").value.split("\\n").forEach(function(l,i){var t=l.trim();
+if(/^[-•*] /.test(t)){if(!list){out.push("<ul>");list=true;}out.push("<li>"+e(t.slice(2))+"</li>");return;}
+if(list){out.push("</ul>");list=false;}if(!t)return;
+if(i===0)out.push("<h1>"+e(t)+"</h1>");else if(t.length<40&&t===t.toUpperCase()&&/[A-Z]/.test(t))out.push("<h2>"+e(t)+"</h2>");else out.push("<p>"+e(t)+"</p>");});
+if(list)out.push("</ul>");
+var doc="<html><head><meta charset='utf-8'><style>body{font-family:Calibri,Arial,sans-serif;font-size:11pt}h1{font-size:18pt;margin:0}h2{font-size:12pt;border-bottom:1px solid #999;margin:14pt 0 4pt}p,li{margin:2pt 0}</style></head><body>"+out.join("")+"</body></html>";
+var a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["\\ufeff"+doc],{type:"application/msword"}));
+a.download=${JSON.stringify(fileName + ".doc").replace(/</g, "\\u003c")};document.body.appendChild(a);a.click();a.remove();};` : ""}</script>` : ""}
 <form class="card" method="post" id="write"${letter ? ' style="margin-top:16px"' : ""}>
   ${hasCv ? `<details class="fold more" style="margin-top:0"><summary>Update my CV</summary>${cvField}</details>` : cvField}
-  <button type="submit" id="go">${letter ? "Write it again" : "Write my cover letter"}</button>
+  <button type="submit" id="go">${letter ? "Write it again" : isCv ? "Tailor my CV" : "Write my cover letter"}</button>
   <p class="free">${left} of 10 left today</p>
 </form>
-<script>document.getElementById("write").addEventListener("submit",function(){var b=document.getElementById("go");b.disabled=true;b.textContent="Writing... (about 20 seconds)";});</script>`);
+<script>document.getElementById("write").addEventListener("submit",function(){var b=document.getElementById("go");b.disabled=true;b.textContent="Writing... (about ${isCv ? 40 : 20} seconds)";});</script>`);
 }

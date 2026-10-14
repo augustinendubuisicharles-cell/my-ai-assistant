@@ -202,13 +202,15 @@ export async function handle(request, env, q) {
     }
   }
 
-  // AI cover letter for one job, linked from members' emails: /letter/<token>?t=<title>&c=<company>&u=<job link>
-  if ((m = path.match(/^\/letter\/([\w-]+)$/)) && (method === "GET" || method === "POST")) {
-    const sub = await db.byToken(q, m[1]);
+  // AI cover letter or tailored CV for one job, linked from members' emails:
+  // /letter/<token> or /cv/<token>, with ?t=<title>&c=<company>&u=<job link>
+  if ((m = path.match(/^\/(letter|cv)\/([\w-]+)$/)) && (method === "GET" || method === "POST")) {
+    const kind = m[1], what = kind === "cv" ? "Tailored CVs" : "Cover letters";
+    const sub = await db.byToken(q, m[2]);
     if (!sub) return notFound();
-    if (!letters.enabled(env)) return msg("Cover letters aren't available yet", "Please check back soon.");
+    if (!letters.enabled(env)) return msg(`${what} aren't available yet`, "Please check back soon.");
     if (!(await db.isMember(q, sub))) {
-      return msg("Cover letters are for members", "Members get an AI cover letter for any job in one click, plus 10 jobs a day and Telegram alerts.",
+      return msg(`${what} are for members`, "Members get a CV tailored to any job and an AI cover letter in one click, plus 10 jobs a day and Telegram alerts.",
         ctx.paidService ? { link: `/pay/${sub.token}`, linkText: `Become a member for ${ctx.price}` } : {});
     }
     const p = url.searchParams;
@@ -217,8 +219,8 @@ export async function handle(request, env, q) {
                   url: /^https?:\/\//.test(jobUrl) ? jobUrl.slice(0, 1000) : "" };
     if (!job.title) return notFound();
     let cv = await db.getCv(q, sub.id);
-    const used = await db.lettersToday(q, sub.id);
-    const render = (extra = {}) => html(views.letterPage(ctx, { sub, job, hasCv: Boolean(cv), cv, left: Math.max(0, letters.PER_DAY - used), ...extra }));
+    const used = await db.lettersToday(q, sub.id, kind);
+    const render = (extra = {}) => html(views.letterPage(ctx, { kind, sub, job, hasCv: Boolean(cv), cv, left: Math.max(0, letters.PER_DAY - used), ...extra }));
     if (method === "GET") return render();
 
     const pasted = String((await request.formData()).get("cv") || "").trim();
@@ -226,17 +228,17 @@ export async function handle(request, env, q) {
       cv = pasted.slice(0, letters.MAX_CV);
       await db.setCv(q, sub.id, cv);
     }
-    if (!cv) return render({ error: "Paste your CV first, so the letter can be about you." });
-    if (used >= letters.PER_DAY) return render({ error: "That's today's 10 letters. You can write more tomorrow." });
+    if (!cv) return render({ error: `Paste your CV first, so the ${kind === "cv" ? "new CV" : "letter"} can be about you.` });
+    if (used >= letters.PER_DAY) return render({ error: `That's today's 10 ${kind === "cv" ? "tailored CVs" : "letters"}. You can write more tomorrow.` });
     let text = null;
     try {
-      text = await letters.write(env, { cv, ...job, advert: job.url ? await letters.advertText(job.url) : "" });
+      text = await letters.write(env, { cv, ...job, advert: job.url ? await letters.advertText(job.url) : "" }, kind);
     } catch (e) {
-      console.log(`[letter] failed for subscriber ${sub.id}: ${e}`);
+      console.log(`[${kind}] failed for subscriber ${sub.id}: ${e}`);
     }
     if (!text) return render({ error: "We couldn't write this one just now. Please try again in a minute." });
-    await db.addLetter(q, sub.id);
-    return html(views.letterPage(ctx, { sub, job, hasCv: true, cv, letter: text, left: Math.max(0, letters.PER_DAY - used - 1) }));
+    await db.addLetter(q, sub.id, kind);
+    return render({ hasCv: true, letter: text, left: Math.max(0, letters.PER_DAY - used - 1) });
   }
 
   if ((m = path.match(/^\/unsubscribe\/([\w-]+)$/)) && (method === "GET" || method === "POST")) {
