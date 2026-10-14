@@ -77,6 +77,18 @@ def confirmation(base_url: str, token: str) -> tuple[str, str, str]:
     return "Confirm your job alerts 🚀", text, html
 
 
+def confirm_reminder(base_url: str, token: str) -> tuple[str, str, str]:
+    """Sent once, a day after sign-up, to people who never tapped the confirm link."""
+    link = f"{base_url}/confirm/{token}"
+    text = (f"You signed up for JobAlert but haven't confirmed your email yet, so we can't send you jobs.\n\n"
+            f"Confirm here (one tap):\n{link}\n\nIf you didn't sign up, ignore this email. We won't remind you again.")
+    body = ("<p style=\"margin:0\">You signed up for job alerts but haven't confirmed your email yet, "
+            "so your matched jobs are waiting. One tap and they start arriving.</p>" + button(link, "Confirm and get my jobs") +
+            f'<p style="color:{MUTED};font-size:13px;margin:6px 0 0">If you didn\'t sign up, ignore this email. We won\'t remind you again.</p>')
+    html = layout(base_url, "One tap and your matched jobs start arriving.", _hero("Your jobs are waiting ⏳", "Just confirm your email."), body)
+    return "Reminder: confirm your email to get your jobs", text, html
+
+
 def manage_link(base_url: str, token: str) -> tuple[str, str, str]:
     link = f"{base_url}/manage/{token}"
     text = f"You're already signed up. To change your job alerts, open:\n{link}\n\nIf this wasn't you, ignore this email."

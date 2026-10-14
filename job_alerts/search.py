@@ -16,6 +16,7 @@ import re
 import time
 import xml.etree.ElementTree as ET
 from collections import Counter
+from difflib import get_close_matches
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
 from functools import lru_cache
@@ -345,7 +346,60 @@ RELATED = [
     ["seo", "seo specialist", "seo manager"],
     ["qa", "qa tester", "quality assurance", "software tester", "test engineer"],
     ["transcription", "transcriber", "transcriptionist"],
+    ["data annotation", "ai annotation", "data annotator", "data labeling", "ai trainer", "ai training", "ai data trainer"],
+    ["lead generation", "appointment setter", "cold caller", "telemarketer", "lead generation specialist"],
+    ["telemedicine", "telehealth", "medical assistant", "medical scribe", "medical virtual assistant", "medical billing"],
+    ["live chat", "chat support", "chat agent"],
+    ["email marketing", "email marketer", "email marketing specialist"],
+    ["ai automation", "automation specialist", "automation engineer", "no-code developer"],
+    ["operations associate", "operations assistant", "operations coordinator", "operations specialist"],
 ]
+
+# What people type that should search for something more useful. "any" means they'd take most entry-level remote work.
+BROAD = ["virtual assistant", "customer support", "data entry"]
+VAGUE = {"any", "anything", "all", "any job", "any jobs", "anything remote", "remote", "online", "work from home"}
+# Common shorthands and misspellings that fuzzy matching alone gets wrong.
+ALIASES = {"customer": "customer support", "tele medicine": "telemedicine", "tele medcine": "telemedicine",
+           "telemedcine": "telemedicine", "admin": "administrative assistant", "assistant": "virtual assistant",
+           "teaching assistant": "teacher", "online tutoring": "online tutor", "tutoring": "tutor",
+           "customer support agent": "customer support", "customer service agent": "customer service",
+           "content creation": "content creator", "copy writing": "copywriter", "copywriting": "copywriter",
+           "social media management": "social media manager", "graphics design": "graphic designer",
+           "graphic design": "graphic designer",
+           "visual assistant": "virtual assistant", "visual assistance": "virtual assistant",
+           "virtual assistance": "virtual assistant"}
+_VOCAB = sorted({t for group in RELATED for t in group} | set(ALIASES))
+
+
+def clean_title(raw: str) -> list[str]:
+    """One typed job title -> the title(s) to search for: tidied, typos fixed, joined titles split,
+    and vague words like "any" swapped for broad entry-level titles."""
+    t = re.sub(r"\s+", " ", raw.strip().lower())
+    t = re.sub(r"\b(jobs?|roles?|positions?|remote|work)\b", " ", t)
+    t = re.sub(r"\s+", " ", t).strip(" .-")
+    if raw.strip().lower() in VAGUE or t in VAGUE or not t:
+        return list(BROAD) if raw.strip() else []
+    parts = [p.strip() for p in re.split(r"\s+(?:and|&|/)\s+|\s*/\s*", t) if p.strip()]
+    if len(parts) > 1:
+        return [x for p in parts for x in clean_title(p)]
+    if t in ALIASES:
+        return [ALIASES[t]]
+    if t in _VOCAB:
+        return [t]
+    if len(t) < 3:  # "ai" or "it" alone would match far too much; real short titles (pr, va, hr) are in _VOCAB
+        return []
+    close = get_close_matches(t, _VOCAB, n=1, cutoff=0.85)
+    return [ALIASES.get(close[0], close[0])] if close else [t]
+
+
+def clean_keywords(keywords_csv: str) -> list[str]:
+    """A subscriber's titles, cleaned, without duplicates, in the order they typed them."""
+    out: list[str] = []
+    for raw in (keywords_csv or "").split(","):
+        for t in clean_title(raw):
+            if t not in out:
+                out.append(t)
+    return out
 
 
 def variants(keyword: str) -> list[str]:
@@ -519,7 +573,7 @@ def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, ex
               city: str = "") -> list[dict]:
     """remote_only=True searches remote jobs. False means on-site/hybrid near `city` (via Adzuna/Reed),
     with remote jobs as a fallback."""
-    keywords = [k.strip().lower() for k in keywords_csv.split(",") if k.strip()][:5]
+    keywords = clean_keywords(keywords_csv)[:5]
     pool = list(remote_feeds())
     for k in keywords:
         pool += from_himalayas(k, country) + from_jobicy(k)

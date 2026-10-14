@@ -10,7 +10,7 @@ import time
 from datetime import datetime, timedelta, timezone
 
 from . import db, emails, mailer, payments
-from .search import find_jobs, job_key
+from .search import clean_keywords, find_jobs, job_key
 
 
 def main() -> None:
@@ -53,11 +53,15 @@ def main() -> None:
             jobs = find_jobs(first_titles(sub["keywords"], titles), sub["country"], sub["remote_only"], sub["level"],
                              sent_before, n=n, city=sub.get("city") or "")
             if not jobs:
-                if first:  # don't leave a new subscriber wondering
+                # A new subscriber, or one who has never had a single match: tell them once, with a nudge
+                # towards broader titles, so nobody is left waiting in silence.
+                tip = first or (not sent_before and not sub.get("titles_tip_at"))
+                if tip:
                     subject, text, html = emails.no_matches_yet(base_url, sub["token"], first_titles(sub["keywords"], titles))
                     mailer.send(sub["email"], subject, text, html, unsubscribe_url=f"{base_url}/unsubscribe/{sub['token']}")
-                db.note_run(sub["id"], "no new matches" + (" (sent the we-are-searching email)" if first else ""))
-                print(f"- subscriber {sub['id']}: no new matches{', sent the we-are-searching email' if first else ', nothing sent'}")
+                    db.mark(sub["id"], "titles_tip_at")
+                db.note_run(sub["id"], "no new matches" + (" (sent the try-broader-titles email)" if tip else ""))
+                print(f"- subscriber {sub['id']}: no new matches{', sent the try-broader-titles email' if tip else ', nothing sent'}")
                 continue
             subject, text, html = emails.digest(jobs, datetime.now(timezone.utc), base_url, sub["token"],
                                                 None if member else trial_info(sub), first=first,
@@ -75,6 +79,8 @@ def main() -> None:
                 db.note_run(sub["id"], f"FAILED: {e}")
             except Exception:
                 pass
+    if not only and not first:
+        remind_unconfirmed(base_url)
     print(f"Done: {sent} email(s) sent, {failed} failed.")
     if failed and not sent:
         sys.exit(1)
@@ -98,7 +104,20 @@ def trial_info(sub: dict) -> dict:
 
 
 def first_titles(keywords_csv: str, count: int) -> str:
-    return ", ".join([k.strip() for k in keywords_csv.split(",") if k.strip()][:count])
+    """The titles their plan searches, after fixing typos and vague words (search.clean_keywords)."""
+    return ", ".join(clean_keywords(keywords_csv)[:count])
+
+
+def remind_unconfirmed(base_url: str) -> None:
+    """One reminder, a day after sign-up, to people who never confirmed their email."""
+    for sub in db.unconfirmed_to_remind():
+        try:
+            subject, text, html = emails.confirm_reminder(base_url, sub["token"])
+            mailer.send(sub["email"], subject, text, html, unsubscribe_url=f"{base_url}/unsubscribe/{sub['token']}")
+            db.mark(sub["id"], "confirm_reminded_at")
+            print(f"- subscriber {sub['id']}: confirm-your-email reminder sent")
+        except Exception as e:
+            print(f"- subscriber {sub['id']}: confirm reminder FAILED {e}")
 
 
 def remind(sub: dict, base_url: str) -> None:
