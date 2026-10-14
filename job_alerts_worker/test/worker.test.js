@@ -424,7 +424,7 @@ test("the owner's dashboard needs the secret key and shows who got this morning'
   await q(`UPDATE subscribers SET last_run_at = now() - interval '3 days', last_run_result = 'no new matches' WHERE email = 'bo@example.com'`);
 
   assert.equal((await call("/admin/" + "k".repeat(31) + "x")).status, 404);
-  assert.equal((await call("/admin/")).status, 404);
+  assert.match(await (await call("/admin/")).text(), /type="password"/); // bare /admin/ asks for the password
   const r = await call("/admin/" + "k".repeat(32));
   assert.equal(r.status, 200);
   assert.equal(r.headers.get("cache-control"), "no-store");
@@ -437,6 +437,25 @@ test("the owner's dashboard needs the secret key and shows who got this morning'
   assert.ok(!page.includes("<b>cy</b>"), "emails are escaped");
   assert.match(page, /noindex/);
   assert.match(page, /passed/);
+
+  // The login page: wrong password refused, right one (with stray spaces) opens it and is remembered.
+  assert.match(await (await call("/admin")).text(), /type="password"/);
+  const bad = await call("/admin", { method: "POST", form: { key: "nope" } });
+  assert.equal(bad.status, 401);
+  assert.match(await bad.text(), /doesn't match/);
+  const good = await call("/admin", { method: "POST", form: { key: ` ${"k".repeat(32)} ` } });
+  assert.equal(good.status, 200);
+  assert.match(await good.text(), /1 of 2 active users/);
+  const cookie = good.headers.get("set-cookie");
+  assert.match(cookie, /HttpOnly; Secure; SameSite=Strict/);
+  assert.ok(!cookie.includes("k".repeat(32)), "the cookie isn't the password");
+  const again = await call("/admin", { headers: { cookie: cookie.split(";")[0] } });
+  assert.match(await again.text(), /1 of 2 active users/);
+  assert.match(await (await call("/admin", { headers: { cookie: "ja_admin=" + "0".repeat(64) } })).text(), /type="password"/);
+  // Keys with symbols still work in the link.
+  env.ADMIN_KEY = "Ab3/x#y?z%Q+long-enough!";
+  assert.equal((await call("/admin/" + encodeURIComponent(env.ADMIN_KEY))).status, 200);
+  assert.equal((await call("/admin/Ab3/x")).status, 404);
 });
 
 test("before 06:30 UTC the dashboard judges yesterday's morning run", () => {
