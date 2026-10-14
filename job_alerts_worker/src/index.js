@@ -4,7 +4,7 @@
 // Actions (job_alerts/send_daily.py) against the same Neon database.
 //
 // Secrets/vars: DATABASE_URL, BREVO_API_KEY, FROM_EMAIL, CONTACT_EMAIL, and the
-// payment keys in payments.js. ADMIN_KEY turns on the owner's dashboard at /admin/<key>. Optional: BASE_URL, SITE_NAME, PRICE_NGN, PERIOD_DAYS.
+// payment keys in payments.js. ADMIN_KEY turns on the owner's dashboard at /admin. Optional: BASE_URL, SITE_NAME, PRICE_NGN, PERIOD_DAYS.
 import { neon } from "@neondatabase/serverless";
 import * as db from "./db.js";
 import * as mail from "./mail.js";
@@ -105,14 +105,27 @@ export async function handle(request, env, q) {
 
   if (path === "/healthz") return Response.json({ ok: true });
 
-  // Owner's dashboard. A wrong or missing key gets the ordinary "not found" page.
-  if ((m = path.match(/^\/admin\/([^/]+)$/)) && method === "GET") {
-    if (!(await admin.allowed(env, decodeURIComponent(m[1])))) {
-      return msg("Page not found", "There's nothing at this address.", { link: "/", linkText: "Go to sign-up", status: 404 });
+  // Owner's dashboard: /admin asks for the password (ADMIN_KEY) once per browser; /admin/<key>
+  // opens it directly. Without ADMIN_KEY, or with a wrong key in the link, it is "not found".
+  if (path === "/admin" || path.startsWith("/admin/")) {
+    const pageNotFound = () => msg("Page not found", "There's nothing at this address.", { link: "/", linkText: "Go to sign-up", status: 404 });
+    if (!admin.enabled(env)) return pageNotFound();
+    const headers = { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-robots-tag": "noindex, nofollow",
+      "referrer-policy": "no-referrer", "x-frame-options": "DENY" };
+    const dashboard = async (cookie) => new Response(admin.render(ctx.siteName, await admin.load(env, q)),
+      { headers: cookie ? { ...headers, "set-cookie": await admin.sessionCookie(env) } : headers });
+    if (path === "/admin" && method === "POST") {
+      const f = await request.formData();
+      if (await admin.allowed(env, f.get("key"))) return dashboard(true);
+      return new Response(admin.loginPage(ctx.siteName, true), { status: 401, headers });
     }
-    return new Response(admin.render(ctx.siteName, await admin.load(env, q)), { headers: {
-      "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "x-robots-tag": "noindex, nofollow",
-      "referrer-policy": "no-referrer", "x-frame-options": "DENY" } });
+    if (method !== "GET") return pageNotFound();
+    if (path === "/admin") {
+      return (await admin.loggedIn(env, request)) ? dashboard(false) : new Response(admin.loginPage(ctx.siteName), { headers });
+    }
+    let given = url.pathname.slice("/admin/".length).replace(/\/+$/, "");
+    try { given = decodeURIComponent(given); } catch { /* keep it as typed */ }
+    return (await admin.allowed(env, given)) ? dashboard(true) : pageNotFound();
   }
 
   if (path === "/" && method === "GET") {

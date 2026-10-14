@@ -1,4 +1,5 @@
-// The owner's private dashboard at /admin/<ADMIN_KEY>: every subscriber, whether this
+// The owner's private dashboard at /admin (password = ADMIN_KEY, remembered in a cookie)
+// or straight from /admin/<ADMIN_KEY>: every subscriber, whether this
 // morning's job search reached them (send_daily.py records last_run_at/last_run_result),
 // and a one-line verdict on the system's health. Without ADMIN_KEY the page doesn't exist.
 import { esc } from "./views.js";
@@ -9,15 +10,55 @@ import * as letters from "./letters.js";
 
 const MIN_KEY = 16;
 
-// Compares the key from the URL with ADMIN_KEY without leaking how much matched.
-export async function allowed(env, given) {
-  const key = (env.ADMIN_KEY || "").trim();
-  if (key.length < MIN_KEY || !given) return false;
-  const digest = async (s) => new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)));
-  const [a, b] = await Promise.all([digest(key), digest(given)]);
+const COOKIE = "ja_admin";
+const adminKey = (env) => (env.ADMIN_KEY || "").trim();
+export const enabled = (env) => adminKey(env).length >= MIN_KEY;
+const digest = async (s) => new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)));
+const hex = (b) => [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
+
+async function same(x, y) {
+  const [a, b] = await Promise.all([digest(x), digest(y)]);
   let diff = 0;
   for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
   return diff === 0;
+}
+
+// Compares a typed or linked password with ADMIN_KEY without leaking how much matched.
+export async function allowed(env, given) {
+  given = String(given || "").trim();
+  return enabled(env) && Boolean(given) && same(adminKey(env), given);
+}
+
+// After logging in, the browser keeps a cookie derived from the key (not the key itself),
+// so changing JOB_ALERTS_ADMIN_KEY logs everyone out.
+const sessionValue = async (env) => hex(await digest(`jobalert-admin-session:${adminKey(env)}`));
+
+export async function loggedIn(env, request) {
+  if (!enabled(env)) return false;
+  const m = (request.headers.get("cookie") || "").match(new RegExp(`(?:^|;\\s*)${COOKIE}=([0-9a-f]{64})`));
+  return Boolean(m) && same(await sessionValue(env), m[1]);
+}
+
+export const sessionCookie = async (env) =>
+  `${COOKIE}=${await sessionValue(env)}; Path=/admin; Max-Age=${60 * 60 * 24 * 30}; HttpOnly; Secure; SameSite=Strict`;
+
+export function loginPage(siteName, wrong = false) {
+  return `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow"><meta name="referrer" content="no-referrer">
+<title>${esc(siteName)} dashboard</title><style>${STYLE}
+  form { display:grid; gap:10px; } input, button { font:inherit; padding:10px 12px; border-radius:8px; border:1px solid var(--border); }
+  input { background:var(--bg); color:var(--text); } button { background:var(--accent); color:#fff; border:0; font-weight:600; cursor:pointer; }
+</style></head>
+<body><main style="max-width:420px">
+<h1>${esc(siteName)} dashboard</h1>
+<div class="card" style="margin-top:12px"><form method="post" action="/admin">
+<label for="key">Password</label>
+<input id="key" name="key" type="password" autocomplete="current-password" required autofocus>
+${wrong ? `<span class="bad small">That password doesn't match. Paste it again exactly as saved in GitHub.</span>` : ""}
+<button type="submit">Open dashboard</button></form></div>
+<p class="muted small">This browser stays logged in for 30 days.</p>
+</main></body></html>`;
 }
 
 // The morning run starts at 06:00 UTC (07:00 in Nigeria). Until 06:30 UTC we judge
