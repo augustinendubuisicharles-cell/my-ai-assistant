@@ -375,3 +375,17 @@ test("members get an AI cover letter from their CV; trial users are asked to joi
   assert.match(await (await call(link, { method: "POST", form: {} })).text(), /8 of 10 left today/);
   assert.equal(ai.length, 2);
 });
+
+test("job titles come from the list plus 'Something else', and the manage page ticks them again", async () => {
+  await signUp();
+  const { token } = await subscriber();
+  await call(`/manage/${token}`, { method: "POST", form: [["job", "Data analyst"], ["job", "Not on the list"],
+    ["job", "Virtual assistant"], ["other", "public relations, data analyst"], ["work_type", "remote"]] });
+  assert.equal((await subscriber()).keywords, "Data analyst, Virtual assistant, public relations");
+  const page = await (await call(`/manage/${token}`)).text();
+  assert.match(page, /value="Data analyst" checked/);
+  assert.doesNotMatch(page, /value="Content writer" checked/);
+  assert.match(page, /id="other"[^>]*value="public relations"/);
+  const none = await call(`/manage/${token}`, { method: "POST", form: { other: " ", work_type: "remote" } });
+  assert.equal(none.status, 400);
+});

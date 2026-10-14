@@ -1,0 +1,27 @@
+name: Job alerts -- give free membership
+
+on:
+  workflow_dispatch:
+    inputs:
+      email:
+        description: "Subscriber's email (they must have signed up already)"
+        required: true
+      days:
+        description: "Days of membership to add"
+        required: true
+        default: "365"
+
+jobs:
+  grant:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r job_alerts/requirements.txt
+      - env:
+          DATABASE_URL: ${{ secrets.JOB_ALERTS_DATABASE_URL }}
+          EMAIL: ${{ inputs.email }}
+          DAYS: ${{ inputs.days }}
+        run: python -m job_alerts.grant "$EMAIL" "$DAYS"

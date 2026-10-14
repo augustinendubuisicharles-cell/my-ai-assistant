@@ -105,6 +105,14 @@ const STYLE = `
   details.fold > summary::after { content:"▾"; display:inline-block; margin-left:6px; transition:transform .2s; }
   details.fold[open] > summary::after { transform:rotate(180deg); }
   details.more { margin-top:18px; }
+  details.pick { position:relative; }
+  details.pick > summary { list-style:none; cursor:pointer; padding:10px 36px 10px 12px; border:1px solid var(--border); border-radius:8px; background:var(--bg); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  details.pick > summary::-webkit-details-marker { display:none; }
+  details.pick > summary::after { content:"▾"; position:absolute; right:12px; top:10px; color:var(--muted); }
+  details.pick > summary.empty { color:var(--muted); }
+  details.pick .opts { border:1px solid var(--border); border-radius:8px; padding:6px 12px 10px; margin-top:4px; background:var(--bg); }
+  details.pick .row { margin:6px 0; }
+  details.pick .row label { margin:0; font-weight:400; }
   details.info { margin-top:22px; text-align:center; }
   details.info[open] { text-align:left; }
   details.info > summary { text-align:center; }
@@ -287,6 +295,10 @@ const chk = (cond) => (cond ? " checked" : "");
 export function form(ctx, { sub = null, action, button, heading, lead, stats = {}, status = "", member = false, telegramLink = null,
   ref = "", inviteBox = "" }) {
   const onsite = sub && !sub.remote_only;
+  const words = String(sub?.keywords || "").split(",").map((w) => w.trim()).filter(Boolean);
+  const listed = (w) => JOBS.find((j) => j.toLowerCase() === w.toLowerCase());
+  const picked = words.map(listed).filter(Boolean);
+  const other = words.filter((w) => !listed(w)).join(", ");
   // Home page: only the headline and a short form; everything else waits behind "See what you get".
   const proof = !sub && stats.users ? ` &middot; ${stats.users.toLocaleString("en")} people signed up` : "";
   const statusBox = sub && status ? `<p class="card status">${esc(status)}${
@@ -302,9 +314,15 @@ ${statusBox}${telegramBox}
 <form class="card" method="post" action="${esc(action)}" id="prefs">
   ${sub ? "" : `<label for="email">Your email</label>
   <input id="email" name="email" type="email" required maxlength="320" placeholder="you@example.com">`}
-  <label for="keywords">What jobs do you want? <span class="hint">Up to 5, separated by commas${sub && !member ? ". The free trial searches the first 2" : ""}</span></label>
-  <input id="keywords" name="keywords" type="text" required maxlength="200"
-         placeholder="virtual assistant, public relations, customer support" value="${esc(sub?.keywords)}">
+  <label id="jobs_label">What jobs do you want? <span class="hint">Pick up to 5${sub && !member ? ". The free trial searches the first 2" : ""}</span></label>
+  <details class="pick" id="jobs"><summary class="${picked.length || other ? "" : "empty"}" aria-labelledby="jobs_label">${
+    esc([...picked, other].filter(Boolean).join(", ") || "Choose jobs")}</summary>
+  <div class="opts">
+    ${JOBS.map((j, i) => `<div class="row"><input id="job${i}" name="job" type="checkbox" value="${esc(j)}"${chk(picked.includes(j))}>
+      <label for="job${i}">${esc(j)}</label></div>`).join("\n    ")}
+    <label for="other">Something else <span class="hint">Separate with commas</span></label>
+    <input id="other" name="other" type="text" maxlength="200" placeholder="e.g. public relations" value="${esc(other)}">
+  </div></details>
   <label for="country">Where do you live?</label>
   <select id="country" name="country">
     <option value="">Anywhere / don't filter</option>
@@ -352,7 +370,32 @@ ${sub ? `<p class="small"><a href="/unsubscribe/${esc(sub.token)}">Unsubscribe a
     if (location.hash === "#plans") document.getElementById("plans").open = true;
     form.addEventListener("change", sync);
     sync();
-    form.addEventListener("submit", function () {
+    var jobs = document.getElementById("jobs"), boxes = jobs.querySelectorAll("input[type=checkbox]"),
+        other = document.getElementById("other"), label = jobs.querySelector("summary");
+    function chosen() {
+      var list = [];
+      boxes.forEach(function (b) { if (b.checked) list.push(b.value); });
+      other.value.split(",").forEach(function (w) { if (w.trim()) list.push(w.trim()); });
+      return list;
+    }
+    function syncJobs() {
+      var list = chosen();
+      label.textContent = list.length ? list.join(", ") : "Choose jobs";
+      label.className = list.length ? "" : "empty";
+      boxes.forEach(function (b) { b.disabled = !b.checked && list.length >= 5; });
+      other.setCustomValidity(list.length > 5 ? "Pick up to 5 jobs" : "");
+    }
+    jobs.addEventListener("input", syncJobs);
+    syncJobs();
+    form.addEventListener("submit", function (e) {
+      if (!chosen().length) {
+        e.preventDefault();
+        jobs.open = true;
+        other.setCustomValidity("Pick at least one job, or type your own");
+        other.reportValidity();
+        other.setCustomValidity("");
+        return;
+      }
       var b = document.getElementById("submit");
       b.disabled = true;
       b.textContent = "Sending...";
@@ -406,6 +449,10 @@ export function terms(ctx) {
 }
 
 export { COUNTRIES };
+
+// Remote roles foreign companies most often hire for from abroad; anything else goes in "Something else".
+export const JOBS = ["Virtual assistant", "Customer support", "Software developer", "Data analyst", "Content writer",
+  "Social media manager", "Graphic designer", "Digital marketing", "Project manager", "Bookkeeper"];
 
 // AI cover letter for one job (members). Shows the letter once written, and the form to (re)write it.
 export function letterPage(ctx, { sub, job, hasCv, cv = "", letter = "", left, error = "" }) {
