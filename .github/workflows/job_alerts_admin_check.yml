@@ -12,6 +12,7 @@ jobs:
       - env:
           ADMIN_KEY: ${{ secrets.JOB_ALERTS_ADMIN_KEY }}
           PAYSTACK_SECRET_KEY: ${{ secrets.PAYSTACK_SECRET_KEY }}
+          GH_TOKEN: ${{ secrets.JOB_ALERTS_GITHUB_TOKEN }}
           BASE_URL: ${{ secrets.BASE_URL }}
         run: |
           SITE="${BASE_URL:-https://jobalert.me.uk}"; SITE="${SITE%/}"
@@ -32,4 +33,12 @@ jobs:
           esac
           if grep -q 'On</span> Payments (Paystack)' /tmp/dash.html; then echo "PASS  the dashboard shows Paystack payments switched on"
           else echo "INFO  the dashboard does not show Paystack payments on"; fi
+          # Can the site start job searches? Same call it makes after a sign-up, for an address
+          # no one has, so the run it starts finds nobody and emails no one.
+          code=$(curl -sS -o /tmp/dispatch.txt -w '%{http_code}' -X POST \
+            -H "authorization: Bearer $GH_TOKEN" -H "accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/job_alerts_daily.yml/dispatches" \
+            -d '{"ref":"main","inputs":{"only_email":"dispatch-check@example.invalid","first":"0"}}')
+          if [ "$code" = 204 ]; then echo "PASS  the site's GitHub token can start job searches"
+          else echo "FAIL  the site's GitHub token can't start job searches (GitHub said $code: $(head -c 200 /tmp/dispatch.txt))"; ok=0; fi
           [ "$ok" = 1 ]
