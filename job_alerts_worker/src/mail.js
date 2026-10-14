@@ -73,11 +73,11 @@ export function confirmation(baseUrl, token) {
 
 export function manageLink(baseUrl, token) {
   const link = `${baseUrl}/manage/${token}`;
-  const body = `<p style="margin:0">You're already signed up, so we didn't change anything. Use this button to change your job titles, location or level.</p>` +
+  const body = `<p style="margin:0">You're already signed up, so we didn't change anything. Use this button to change your job titles, location or level, or to renew your membership.</p>` +
     button(link, "Change my job alerts") +
     `<p style="color:${MUTED};font-size:13px;margin:6px 0 0">If this wasn't you, ignore this email.</p>`;
   return ["Change your job alerts",
-    `You're already signed up. To change your job alerts, open:\n${link}\n\nIf this wasn't you, ignore this email.`,
+    `You're already signed up. To change your job alerts or renew, open:\n${link}\n\nIf this wasn't you, ignore this email.`,
     layout(baseUrl, "Your link to change your job alerts.", hero("You're already in ✅"), body)];
 }
 

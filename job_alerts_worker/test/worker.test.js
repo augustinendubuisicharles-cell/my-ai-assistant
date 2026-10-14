@@ -145,9 +145,21 @@ test("on-site needs a city; bots and bad input are refused", async () => {
 test("a confirmed address can't be changed by someone else signing up again", async () => {
   await signUp();
   await call(`/confirm/${(await subscriber()).token}`);
-  await signUp({ keywords: "hacker" });
+  const r = await signUp({ keywords: "hacker" });
   assert.equal((await subscriber()).keywords, "virtual assistant, pr");
   assert.match(sent.at(-1).subject, /Change your job alerts/);
+  assert.match(sent.at(-1).htmlContent, /renew your membership/);
+  // They're recognised: a welcome-back page, not the new-user "confirm your email" steps.
+  const page = await r.text();
+  assert.match(page, /Welcome back/);
+  assert.match(page, /ada@example\.com<\/b> is already signed up/);
+  assert.ok(!page.includes("Confirm your email"));
+});
+
+test("a new address gets the confirm-your-email page", async () => {
+  const page = await (await signUp()).text();
+  assert.match(page, /Confirm your email/);
+  assert.ok(!page.includes("Welcome back"));
 });
 
 test("confirming starts a 7-day free trial, once", async () => {

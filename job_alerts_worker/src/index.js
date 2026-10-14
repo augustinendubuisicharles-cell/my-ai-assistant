@@ -161,7 +161,7 @@ export async function handle(request, env, q) {
       console.log(`[confirm email] failed for subscriber ${sub.id}: ${e}`);
       return msg("We couldn't send your email", "Please try again in a few minutes.", { status: 502 });
     }
-    return html(views.checkInbox(ctx, sub.email));
+    return html(existing?.confirmed ? views.welcomeBack(ctx, sub.email) : views.checkInbox(ctx, sub.email));
   }
 
   if ((m = path.match(/^\/confirm\/([\w-]+)$/)) && method === "GET") {
