@@ -55,6 +55,11 @@ board's expiry date, and its link doesn't come back "not found".
 6. Sign up on your own site, confirm, then run **Job alerts -- daily emails to
    subscribers** from the Actions tab to get your first email.
 
+## Free membership for a tester or a gift
+
+Actions → **Job alerts -- give free membership** → Run workflow, with the subscriber's email and the number of
+days. It is saved as a ₦0 payment, so they get everything a paying member gets.
+
 ## Running it locally
 
 ```
