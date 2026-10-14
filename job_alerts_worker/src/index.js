@@ -105,15 +105,8 @@ export async function handle(request, env, q) {
   if (path === "/healthz") return Response.json({ ok: true });
 
   if (path === "/" && method === "GET") {
-    let stats = {};
-    try {
-      const s = await db.stats(q, ctx.paidService);
-      stats = Object.fromEntries(Object.entries(s).filter(([, n]) => n >= 10)); // only once worth showing; never made up
-    } catch (e) {
-      console.log(`[stats] ${e}`);
-    }
     const ref = (url.searchParams.get("ref") || "").replace(/[^\w]/g, "").slice(0, 16);
-    return html(views.form(ctx, { action: "/subscribe", button: "Send me jobs", heading: "Remote jobs that actually hire Nigerians", stats,
+    return html(views.form(ctx, { action: "/subscribe", button: "Send me jobs", heading: "Remote jobs that actually hire Nigerians",
       lead: "Checked, scam-free jobs from abroad, in your inbox every morning.", ref }));
   }
 

@@ -34,10 +34,6 @@ const STYLE = `
   .row { margin-top:8px; }
   [hidden] { display:none !important; }
   button:disabled { opacity:.7; cursor:wait; }
-  .stats { list-style:none; padding:0; margin:0 0 20px; display:grid; grid-template-columns:repeat(auto-fit, minmax(120px, 1fr)); gap:10px; }
-  .stats li { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:10px 12px; }
-  .stats b { display:block; font-size:1.3rem; }
-  .stats span { color:var(--muted); font-size:.85rem; }
   .hero { text-align:center; margin:4px 0 22px; }
   .hero svg { width:132px; height:132px; display:block; margin:0 auto 10px; }
   .hero h1 { font-size:1.9rem; margin:0; }
@@ -292,7 +288,7 @@ function plans(ctx) {
 const sel = (cond) => (cond ? " selected" : "");
 const chk = (cond) => (cond ? " checked" : "");
 
-export function form(ctx, { sub = null, action, button, heading, lead, stats = {}, status = "", member = false, telegramLink = null,
+export function form(ctx, { sub = null, action, button, heading, lead, status = "", member = false, telegramLink = null,
   ref = "", inviteBox = "" }) {
   const onsite = sub && !sub.remote_only;
   const words = String(sub?.keywords || "").split(",").map((w) => w.trim()).filter(Boolean);
@@ -300,7 +296,6 @@ export function form(ctx, { sub = null, action, button, heading, lead, stats = {
   const picked = words.map(listed).filter(Boolean);
   const other = words.filter((w) => !listed(w)).join(", ");
   // Home page: only the headline and a short form; everything else waits behind "See what you get".
-  const proof = !sub && stats.users ? ` &middot; ${stats.users.toLocaleString("en")} people signed up` : "";
   const statusBox = sub && status ? `<p class="card status">${esc(status)}${
     ctx.paidService ? ` <a href="/pay/${esc(sub.token)}">Pay ${esc(ctx.price)} for ${ctx.months} months</a>` : ""}</p>` : "";
   const telegramBox = !telegramLink ? "" : `<p class="card status">${sub.telegram_chat_id
@@ -350,7 +345,7 @@ ${statusBox}${telegramBox}
   <input class="hp" name="website" tabindex="-1" autocomplete="off">${ref ? `
   <input type="hidden" name="ref" value="${esc(ref)}">` : ""}
   <button type="submit" id="submit">${esc(button)}</button>
-  ${sub ? "" : `<p class="free">${ctx.trialDays} days free &middot; no card${proof}</p>`}
+  ${sub ? "" : `<p class="free">${ctx.trialDays} days free &middot; no card</p>`}
 </form>
 <details class="fold info" id="plans"><summary>${sub ? "How it works" : "See what you get"}</summary>
 ${sub ? "" : strengths() + plans(ctx) + compare()}
