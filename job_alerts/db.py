@@ -22,6 +22,17 @@ subscribers = Table(
     Column("confirmed", Boolean, nullable=False, default=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
     Column("last_sent_at", DateTime(timezone=True)),
+    Column("paid_until", DateTime(timezone=True)),      # alerts are sent while this is in the future
+    Column("reminded_for", DateTime(timezone=True)),    # paid_until we last sent a renewal reminder for
+)
+
+payments = Table(
+    "payments", metadata,
+    Column("id", Integer, primary_key=True),
+    Column("reference", String(100), nullable=False, unique=True),  # our reference; unique = never counted twice
+    Column("subscriber_id", Integer, ForeignKey("subscribers.id", ondelete="SET NULL")),
+    Column("amount_ngn", Integer, nullable=False),
+    Column("paid_at", DateTime(timezone=True), nullable=False),
 )
 
 sent_jobs = Table(
@@ -49,15 +60,21 @@ engine = create_engine(_url(), pool_pre_ping=True)
 def init_db() -> None:
     metadata.create_all(engine)
     # Columns added after the first release (create_all doesn't alter existing tables).
-    if "city" not in {c["name"] for c in inspect(engine).get_columns("subscribers")}:
-        with engine.begin() as conn:
-            conn.execute(text("ALTER TABLE subscribers ADD COLUMN city VARCHAR(120) NOT NULL DEFAULT ''"))
+    have = {c["name"] for c in inspect(engine).get_columns("subscribers")}
+    added = {"city": "VARCHAR(120) NOT NULL DEFAULT ''", "paid_until": "TIMESTAMP WITH TIME ZONE",
+             "reminded_for": "TIMESTAMP WITH TIME ZONE"}
+    with engine.begin() as conn:
+        for name, sql_type in added.items():
+            if name not in have:
+                if engine.dialect.name == "sqlite":
+                    sql_type = sql_type.replace("TIMESTAMP WITH TIME ZONE", "DATETIME")
+                conn.execute(text(f"ALTER TABLE subscribers ADD COLUMN {name} {sql_type}"))
 
 
 def stats() -> dict:
     """Real numbers for the home page: confirmed subscribers, and jobs emailed in the last 30 days."""
     with engine.begin() as conn:
-        users = conn.execute(select(func.count()).select_from(subscribers).where(subscribers.c.confirmed.is_(True))).scalar()
+        users = conn.execute(select(func.count()).select_from(subscribers).where(subscribers.c.paid_until > now())).scalar()
         jobs = conn.execute(select(func.count()).select_from(sent_jobs)
                             .where(sent_jobs.c.sent_at >= now() - timedelta(days=30))).scalar()
     return {"users": users or 0, "jobs_30d": jobs or 0}
@@ -112,6 +129,7 @@ def remove(token: str) -> bool:
         if not row:
             return False
         conn.execute(delete(sent_jobs).where(sent_jobs.c.subscriber_id == row.id))
+        conn.execute(update(payments).where(payments.c.subscriber_id == row.id).values(subscriber_id=None))
         conn.execute(delete(subscribers).where(subscribers.c.id == row.id))
         return True
 
@@ -119,6 +137,47 @@ def remove(token: str) -> bool:
 def confirmed_subscribers() -> list[dict]:
     with engine.begin() as conn:
         return [dict(r) for r in conn.execute(select(subscribers).where(subscribers.c.confirmed.is_(True))).mappings()]
+
+
+def _aware(dt: datetime | None) -> datetime | None:
+    # SQLite hands back naive datetimes; everything here is UTC.
+    return dt.replace(tzinfo=timezone.utc) if dt and dt.tzinfo is None else dt
+
+
+def is_paid(sub: dict) -> bool:
+    return bool(sub.get("paid_until")) and _aware(sub["paid_until"]) > now()
+
+
+def record_payment(reference: str, subscriber_id: int, amount_ngn: int, period_days: int) -> dict | None:
+    """Adds `period_days` to the subscriber's paid time, once per payment reference
+    (the browser return and the webhook can both report the same payment)."""
+    with engine.begin() as conn:
+        sub = conn.execute(select(subscribers).where(subscribers.c.id == subscriber_id)).mappings().first()
+        if not sub:
+            return None
+        seen = conn.execute(select(payments.c.id).where(payments.c.reference == reference)).first()
+        if not seen:
+            start = max(now(), _aware(sub["paid_until"]) or now())
+            conn.execute(insert(payments).values(reference=reference, subscriber_id=sub["id"], amount_ngn=amount_ngn,
+                                                 paid_at=now()))
+            # Paying also confirms the email: they reached the payment page from their inbox.
+            conn.execute(update(subscribers).where(subscribers.c.id == sub["id"]).values(
+                paid_until=start + timedelta(days=period_days), confirmed=True))
+        return dict(conn.execute(select(subscribers).where(subscribers.c.id == sub["id"])).mappings().first())
+
+
+def start_trial(subscriber_id: int, days: int) -> dict | None:
+    """Gives `days` of free alerts to someone who has never had any (trial or paid)."""
+    with engine.begin() as conn:
+        conn.execute(update(subscribers).where(subscribers.c.id == subscriber_id, subscribers.c.paid_until.is_(None))
+                     .values(paid_until=now() + timedelta(days=days)))
+        row = conn.execute(select(subscribers).where(subscribers.c.id == subscriber_id)).mappings().first()
+        return dict(row) if row else None
+
+
+def mark_reminded(subscriber_id: int, paid_until: datetime) -> None:
+    with engine.begin() as conn:
+        conn.execute(update(subscribers).where(subscribers.c.id == subscriber_id).values(reminded_for=paid_until))
 
 
 def already_sent(subscriber_id: int) -> set[str]:

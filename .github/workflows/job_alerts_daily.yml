@@ -85,4 +85,8 @@ jobs:
           ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
           ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
           REED_API_KEY: ${{ secrets.REED_API_KEY }}
+          # Only used to tell whether payments are switched on (renew link vs "trial ending" note)
+          CREDO_PUBLIC_KEY: ${{ secrets.CREDO_PUBLIC_KEY }}
+          CREDO_SECRET_KEY: ${{ secrets.CREDO_SECRET_KEY }}
+          PAYSTACK_SECRET_KEY: ${{ secrets.PAYSTACK_SECRET_KEY }}
         run: python -m job_alerts.send_daily

@@ -5,7 +5,9 @@ want (job titles/skills, country, remote only, experience level). Every
 morning it searches job boards for each person, keeps the best new matches
 that pass its checks, and emails them up to 5. Nobody gets the same job twice.
 
-- **Sign-up site** (`app.py`): sign up, confirm by email, change preferences,
+- **Sign-up site**: runs on Cloudflare from `job_alerts_worker/` (see its README). `app.py` is the
+  same site in Python, kept for local development and the original Render setup (`render.yaml`).
+- **Python sign-up site** (`app.py`): sign up, confirm by email, change preferences,
   one-click unsubscribe (which deletes their details).
 - **Daily sender** (`send_daily.py`): run by the GitHub Actions workflow
   `job_alerts_daily.yml` at 6:00 UTC.
@@ -33,12 +35,24 @@ board's expiry date, and its link doesn't come back "not found".
    → API Keys); the site then sends through Brevo's web API. Once
    it's live, set `BASE_URL` to the site's address (e.g. `https://job-alerts.onrender.com`).
    The free plan sleeps when idle, so the first visit after a while takes ~30s.
-4. **Daily emails: GitHub** → Settings → Secrets and variables → Actions. Add
+4. **Payments: Credo or Paystack.** One payment of `PRICE_NGN` (default 5000)
+   buys `PERIOD_DAYS` (default 90) of alerts; nothing renews automatically, and
+   subscribers get a renew link by email 5 days before it ends. In Render set either
+   - Credo (credocentral.com): `CREDO_PUBLIC_KEY`, `CREDO_SECRET_KEY` (Settings →
+     Developer → API Keys) and `CREDO_LIVE=1` once you use the live keys (without it
+     the site talks to the sandbox); webhook in Settings → Webhooks; or
+   - Paystack: `PAYSTACK_SECRET_KEY`; webhook in Settings → API Keys & Webhooks.
+
+   Webhook URL for either: `<BASE_URL>/payments/webhook`. Also set `CONTACT_EMAIL`
+   (shown on the terms page). Without keys the site is free and `/pay` is off. The
+   daily sender only emails people who have paid; set `REQUIRE_PAYMENT=0` in the
+   workflow to send to everyone confirmed.
+5. **Daily emails: GitHub** → Settings → Secrets and variables → Actions. Add
    `JOB_ALERTS_DATABASE_URL`, `JOB_ALERTS_BASE_URL`, `SMTP_HOST`, `SMTP_PORT`,
    `SMTP_USER`, `SMTP_PASSWORD`, `FROM_EMAIL`, and optionally `ADZUNA_APP_ID`,
    `ADZUNA_APP_KEY`, `REED_API_KEY`. On-site/hybrid alerts need the Adzuna key
    (free at developer.adzuna.com); without it those subscribers get remote jobs only.
-5. Sign up on your own site, confirm, then run **Job alerts -- daily emails to
+6. Sign up on your own site, confirm, then run **Job alerts -- daily emails to
    subscribers** from the Actions tab to get your first email.
 
 ## Running it locally
