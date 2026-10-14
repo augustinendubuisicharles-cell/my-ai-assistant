@@ -64,6 +64,19 @@ const STYLE = `
   .btn.ghost { border:1px solid var(--border); color:var(--text); background:var(--card); }
   .btn.wa { background:#1fa855; color:#fff; }
   .note { margin-top:16px; font-size:.9rem; color:var(--muted); text-align:center; }
+  .plans { display:grid; grid-template-columns:repeat(auto-fit, minmax(230px, 1fr)); gap:12px; margin:28px 0 0; }
+  .plans h2 { grid-column:1 / -1; font-size:1.3rem; margin:0; }
+  .plan { position:relative; }
+  .plan.best { border:2px solid var(--accent); }
+  .plan .tag { position:absolute; top:-11px; right:14px; background:var(--accent); color:var(--on-accent); font-size:.75rem; font-weight:800; padding:3px 10px; border-radius:20px; }
+  .plan h3 { margin:0; font-size:1.1rem; }
+  .plan .cost { margin:4px 0 12px; color:var(--muted); }
+  .plan .cost b { color:var(--text); font-size:1.5rem; }
+  .plan ul { list-style:none; padding:0; margin:0; }
+  .plan li { padding:5px 0 5px 26px; position:relative; }
+  .plan li::before { content:"✓"; position:absolute; left:0; color:var(--ok); font-weight:800; }
+  .plan li.no { color:var(--muted); }
+  .plan li.no::before { content:"–"; color:var(--muted); }
   .brand { display:inline-flex; align-items:center; gap:10px; margin:0 0 20px; text-decoration:none; color:var(--text); font-size:1.35rem; font-weight:800; letter-spacing:-.3px; }
   .brand b { color:var(--accent); }
   .brand img { border-radius:9px; }
@@ -165,6 +178,30 @@ export function checkInbox(ctx, email) {
 <p class="note">Can't find it? Check Spam or Promotions${ctx.fromEmail ? `. It comes from <b>${esc(ctx.fromEmail)}</b>` : ""}.</p>`);
 }
 
+// "What you get": free trial vs member, shown under the sign-up form.
+function plans(ctx) {
+  const li = (text, yes = true) => `<li${yes ? "" : ' class="no"'}>${text}</li>`;
+  return `<section class="plans" id="plans"><h2>What you get</h2>
+<div class="card plan"><h3>Free trial</h3><p class="cost"><b>₦0</b> for ${ctx.trialDays} days, no card</p><ul>
+  ${li("Up to <b>5 jobs</b> every morning")}
+  ${li("Searches your first <b>2 job titles</b>")}
+  ${li("Remote jobs, or on-site near you")}
+  ${li("Checked for scams, dead links and jobs you can't apply for from your country")}
+  ${li("Never the same job twice")}
+  ${li("Telegram alerts during the day", false)}
+</ul></div>
+<div class="card plan best"><span class="tag">BEST VALUE</span><h3>Member</h3><p class="cost">${ctx.paidService
+    ? `<b>${esc(ctx.price)}</b> for ${ctx.months} months, paid once`
+    : "<b>Coming soon</b>"}</p><ul>
+  ${li("Up to <b>10 jobs</b> every morning")}
+  ${li("Searches all <b>5 job titles</b>")}
+  ${li("<b>Telegram alerts</b> 4 times a day, so you apply first")}
+  ${li("Everything in the free trial")}
+  ${li("No auto-renewal; we remind you before it ends")}
+  ${li("Full refund within 7 days if it's not for you")}
+</ul></div></section>`;
+}
+
 const sel = (cond) => (cond ? " selected" : "");
 const chk = (cond) => (cond ? " checked" : "");
 
@@ -175,7 +212,7 @@ export function form(ctx, { sub = null, action, button, heading, lead, stats = {
   ${stats.jobs_30d ? `<li><b>${stats.jobs_30d.toLocaleString("en")}</b><span>jobs sent in the last 30 days</span></li>` : ""}
   <li><b>Daily</b><span>fresh matches every morning</span></li>
   <li><b>Checked</b><span>for scams and dead links</span></li>
-  <li><b>${ctx.trialDays} days free</b><span>no card needed</span></li>
+  <li><b>${ctx.trialDays} days free</b><span>no card needed &middot; <a href="#plans">see plans</a></span></li>
   ${ctx.paidService ? `<li><b>${esc(ctx.price)}</b><span>then ${ctx.months} months, no auto-renewal</span></li>` : ""}
 </ul>`;
   const statusBox = sub && status ? `<p class="card status">${esc(status)}${
@@ -219,6 +256,7 @@ ${statusBox}${telegramBox}${statTiles}
   ${ctx.paidService && !sub ? `<p class="small"><b>Free for ${ctx.trialDays} days, then ${esc(ctx.price)} for ${ctx.months} months</b>, paid once through ${esc(ctx.provider)} if you want to continue. Nothing renews automatically. <a href="/terms">Terms and refunds</a>.</p>` : ""}
   <p class="small">One email a day with up to ${member ? "10" : "5"} new matches, only on days we find some${member ? "" : ctx.paidService ? " (members get up to 10, plus Telegram alerts)" : ""}. Remote jobs that only hire from certain countries are left out if yours isn't one of them. We skip senior roles if you choose a lower level, and we filter out unpaid roles and listings with common scam signs. Every email has a one-click unsubscribe link. We only store your email and these preferences, never share them, and delete them when you unsubscribe.</p>
 </form>
+${sub ? "" : plans(ctx)}
 ${sub ? `<p class="small"><a href="/unsubscribe/${esc(sub.token)}">Unsubscribe and delete my details</a></p>` : ""}
 <script>
   (function () {
