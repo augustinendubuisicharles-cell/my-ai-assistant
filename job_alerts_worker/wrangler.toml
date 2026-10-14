@@ -7,6 +7,7 @@ workers_dev = true
 
 [vars]
 SITE_NAME = "JobAlert"
+GITHUB_REPO = "augustinendubuisicharles-cell/my-ai-assistant"   # where the first-search workflow lives
 
 [observability]
 enabled = true

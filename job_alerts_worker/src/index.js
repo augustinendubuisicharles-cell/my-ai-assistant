@@ -12,6 +12,7 @@ import * as payments from "./payments.js";
 import * as views from "./views.js";
 import * as assets from "./assets.js";
 import * as telegram from "./telegram.js";
+import * as firstSearch from "./firstsearch.js";
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
@@ -126,6 +127,7 @@ export async function handle(request, env, q) {
   }
 
   if ((m = path.match(/^\/confirm\/([\w-]+)$/)) && method === "GET") {
+    const before = await db.byToken(q, m[1]);
     let sub = await db.confirm(q, m[1]);
     if (!sub) return notFound();
     if (!sub.paid_until) sub = await db.startTrial(q, sub.id, ctx.trialDays);
@@ -133,7 +135,9 @@ export async function handle(request, env, q) {
       if (ctx.paidService) return html(views.pay(ctx, { sub, heading: "Email confirmed. Pick up where you left off", status: status(ctx, sub) }));
       return msg("Email confirmed", "Your free trial has ended. We'll email you when paid plans open.");
     }
-    return html(views.welcome(ctx, { sub, until: fmtDate(sub.paid_until), trial: !(await db.isMember(q, sub)) }));
+    // First confirmation only: start their first search now instead of waiting for the morning run.
+    const soon = !before?.confirmed ? await firstSearch.start(env, sub.email) : false;
+    return html(views.welcome(ctx, { sub, until: fmtDate(sub.paid_until), trial: !(await db.isMember(q, sub)), soon }));
   }
 
   if ((m = path.match(/^\/manage\/([\w-]+)$/))) {

@@ -9,6 +9,10 @@ on:
         description: "Test: send only to this subscriber's email (leave empty to email everyone)"
         required: false
         default: ""
+      first:
+        description: "First search for a new subscriber (set by the website): skip anyone who already has jobs"
+        required: false
+        default: "0"
   pull_request:             # smoke test: preview a live search when the service code changes (no emails)
     paths:
       - "job_alerts/**"
@@ -90,6 +94,7 @@ jobs:
           FROM_NAME: JobAlert
           BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}   # same sender as the website; SMTP is the fallback
           ONLY_EMAIL: ${{ inputs.only_email }}
+          FIRST_SEARCH: ${{ inputs.first }}
           ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
           ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
           REED_API_KEY: ${{ secrets.REED_API_KEY }}
