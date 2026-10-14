@@ -75,16 +75,6 @@ export async function recordPayment(q, reference, subscriberId, amountNgn, days)
   return byId(q, subscriberId);
 }
 
-// Real numbers for the home page: people with paid (or, when free, confirmed)
-// alerts, and jobs emailed in the last 30 days.
-export async function stats(q, paidService) {
-  const users = await one(q, paidService
-    ? "SELECT count(*)::int AS n FROM subscribers WHERE paid_until > now()"
-    : "SELECT count(*)::int AS n FROM subscribers WHERE confirmed", []);
-  const jobs = await one(q, "SELECT count(*)::int AS n FROM sent_jobs WHERE sent_at >= now() - interval '30 days'", []);
-  return { users: users?.n || 0, jobs_30d: jobs?.n || 0 };
-}
-
 // --- AI cover letters (members) ---
 
 export const getCv = async (q, id) => (await one(q, "SELECT cv_text FROM subscribers WHERE id = $1", [id]))?.cv_text || "";
