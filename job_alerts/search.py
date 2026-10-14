@@ -1,7 +1,7 @@
 """Finds jobs for one subscriber's preferences and ranks them.
 
 Remote jobs (no keys needed): Himalayas, Jobicy, Remotive, We Work Remotely, RemoteOK,
-Working Nomads, Arbeitnow, The Muse, Jobspresso, Real Work From Anywhere and Remote.co.
+Working Nomads, Arbeitnow, The Muse and Jobspresso.
 Jooble (optional free key JOOBLE_API_KEY) searches thousands of sites, like Indeed, remote and on-site.
 On-site/hybrid jobs (optional keys): Adzuna (19 countries, free key at
 developer.adzuna.com: ADZUNA_APP_ID + ADZUNA_APP_KEY) and Reed (UK, free key:
@@ -318,19 +318,9 @@ def from_jobspresso() -> tuple:
     return _rss("https://jobspresso.co/feed/?post_type=job_listing", "Jobspresso")
 
 
-@lru_cache(maxsize=1)
-def from_realworkfromanywhere() -> tuple:
-    return _rss("https://www.realworkfromanywhere.com/rss.xml", "Real Work From Anywhere")
-
-
-@lru_cache(maxsize=1)
-def from_remoteco() -> tuple:
-    return _rss("https://remote.co/remote-jobs/feed/", "Remote.co")
-
-
 def remote_feeds() -> tuple:
     return (from_remotive() + from_weworkremotely() + from_remoteok() + from_workingnomads() + from_arbeitnow()
-            + from_themuse() + from_jobspresso() + from_realworkfromanywhere() + from_remoteco())
+            + from_themuse() + from_jobspresso())
 
 
 @lru_cache(maxsize=None)
