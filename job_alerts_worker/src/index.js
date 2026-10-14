@@ -94,7 +94,7 @@ export async function handle(request, env, q) {
       console.log(`[stats] ${e}`);
     }
     return html(views.form(ctx, { action: "/subscribe", button: "Send me jobs", heading: "Remote jobs that actually hire Nigerians", stats,
-      lead: "Jobs from companies abroad, checked as open to Nigeria and free of scams, in your inbox every morning. Prefer on-site? Tell us where." }));
+      lead: "Checked, scam-free jobs from abroad, in your inbox every morning." }));
   }
 
   if (path === "/subscribe" && method === "POST") {

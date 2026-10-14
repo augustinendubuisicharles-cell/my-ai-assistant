@@ -100,6 +100,16 @@ const STYLE = `
   .vs th { font-size:.8rem; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
   .vs td.us { color:var(--ok); font-weight:700; }
   .vs td.them { color:var(--muted); }
+  details.fold > summary { cursor:pointer; list-style:none; font-weight:700; color:var(--accent); padding:4px 0; }
+  details.fold > summary::-webkit-details-marker { display:none; }
+  details.fold > summary::after { content:"▾"; display:inline-block; margin-left:6px; transition:transform .2s; }
+  details.fold[open] > summary::after { transform:rotate(180deg); }
+  details.more { margin-top:18px; }
+  details.info { margin-top:22px; text-align:center; }
+  details.info[open] { text-align:left; }
+  details.info > summary { text-align:center; }
+  details.info .why { margin-top:16px; }
+  .free { text-align:center; margin:12px 0 0; font-size:.9rem; color:var(--muted); }
   .brand { display:inline-flex; align-items:center; gap:10px; margin:0 0 20px; text-decoration:none; color:var(--text); font-size:1.35rem; font-weight:800; letter-spacing:-.3px; }
   .brand b { color:var(--accent); }
   .brand img { border-radius:9px; }
@@ -263,12 +273,8 @@ const chk = (cond) => (cond ? " checked" : "");
 
 export function form(ctx, { sub = null, action, button, heading, lead, stats = {}, status = "", member = false, telegramLink = null }) {
   const onsite = sub && !sub.remote_only;
-  const statTiles = sub ? "" : `<ul class="stats">
-  ${stats.users ? `<li><b>${stats.users.toLocaleString("en")}</b><span>people getting alerts</span></li>` : ""}
-  ${stats.jobs_30d ? `<li><b>${stats.jobs_30d.toLocaleString("en")}</b><span>jobs sent in the last 30 days</span></li>` : ""}
-  <li><b>${ctx.trialDays} days free</b><span>no card needed &middot; <a href="#plans">see plans</a></span></li>
-  ${ctx.paidService ? `<li><b>${esc(ctx.price)}</b><span>then ${ctx.months} months, no auto-renewal</span></li>` : ""}
-</ul>`;
+  // Home page: only the headline and a short form; everything else waits behind "See what you get".
+  const proof = !sub && stats.users ? ` &middot; ${stats.users.toLocaleString("en")} people signed up` : "";
   const statusBox = sub && status ? `<p class="card status">${esc(status)}${
     ctx.paidService ? ` <a href="/pay/${esc(sub.token)}">Pay ${esc(ctx.price)} for ${ctx.months} months</a>` : ""}</p>` : "";
   const telegramBox = !telegramLink ? "" : `<p class="card status">${sub.telegram_chat_id
@@ -276,15 +282,13 @@ export function form(ctx, { sub = null, action, button, heading, lead, stats = {
     : `Get new matches on Telegram during the day, before the morning email. <a href="${esc(telegramLink)}">Connect Telegram</a>`}</p>`;
   const intro = sub ? `<h1>${esc(heading)}</h1>
 <p class="lead">${esc(lead)}</p>` : `<div class="home"><h1>Remote jobs that <em>actually hire Nigerians</em></h1>
-<p class="lead">${esc(lead)}</p>
-<a class="cta" href="#prefs">Start free for ${ctx.trialDays} days</a></div>
-${strengths()}`;
+<p class="lead">${esc(lead)}</p></div>`;
   return page(ctx, `${intro}
-${statusBox}${telegramBox}${statTiles}
+${statusBox}${telegramBox}
 <form class="card" method="post" action="${esc(action)}" id="prefs">
   ${sub ? "" : `<label for="email">Your email</label>
   <input id="email" name="email" type="email" required maxlength="320" placeholder="you@example.com">`}
-  <label for="keywords">What jobs do you want? <span class="hint">Up to 5 job titles or skills, separated by commas${member ? "" : `. The free trial searches the first 2`}</span></label>
+  <label for="keywords">What jobs do you want? <span class="hint">Up to 5, separated by commas${sub && !member ? ". The free trial searches the first 2" : ""}</span></label>
   <input id="keywords" name="keywords" type="text" required maxlength="200"
          placeholder="virtual assistant, public relations, customer support" value="${esc(sub?.keywords)}">
   <label for="country">Where do you live?</label>
@@ -292,6 +296,7 @@ ${statusBox}${telegramBox}${statTiles}
     <option value="">Anywhere / don't filter</option>
     ${COUNTRIES.map((c) => `<option value="${esc(c)}"${sel(sub?.country === c)}>${esc(c)}</option>`).join("")}
   </select>
+  <details class="fold more"${onsite || (sub && sub.level !== "entry") ? " open" : ""}><summary>More options</summary>
   <fieldset>
     <legend>How do you want to work?</legend>
     <div class="row"><input id="wt_remote" name="work_type" type="radio" value="remote"${chk(!onsite)}>
@@ -309,12 +314,16 @@ ${statusBox}${telegramBox}${statTiles}
     <option value="entry"${sel(!sub || sub.level === "entry")}>Entry level / junior</option>
     <option value="mid"${sel(sub?.level === "mid")}>Mid level (no director/head roles)</option>
   </select>
+  </details>
   <input class="hp" name="website" tabindex="-1" autocomplete="off">
   <button type="submit" id="submit">${esc(button)}</button>
+  ${sub ? "" : `<p class="free">${ctx.trialDays} days free &middot; no card${proof}</p>`}
+</form>
+<details class="fold info" id="plans"><summary>${sub ? "How it works" : "See what you get"}</summary>
+${sub ? "" : strengths() + plans(ctx) + compare()}
   ${ctx.paidService && !sub ? `<p class="small"><b>Free for ${ctx.trialDays} days, then ${esc(ctx.price)} for ${ctx.months} months</b>, paid once through ${esc(ctx.provider)} if you want to continue. Nothing renews automatically. <a href="/terms">Terms and refunds</a>.</p>` : ""}
   <p class="small">One email a day with up to ${member ? "10" : "5"} new matches, only on days we find some${member ? "" : ctx.paidService ? " (members get up to 10, plus Telegram alerts)" : ""}. Remote jobs that only hire from certain countries are left out if yours isn't one of them. We skip senior roles if you choose a lower level, and we filter out unpaid roles and listings with common scam signs. Every email has a one-click unsubscribe link. We only store your email and these preferences, never share them, and delete them when you unsubscribe.</p>
-</form>
-${sub ? "" : compare() + plans(ctx)}
+</details>
 ${sub ? `<p class="small"><a href="/unsubscribe/${esc(sub.token)}">Unsubscribe and delete my details</a></p>` : ""}
 <script>
   (function () {
@@ -324,6 +333,7 @@ ${sub ? `<p class="small"><a href="/unsubscribe/${esc(sub.token)}">Unsubscribe a
       box.hidden = !onsite;
       city.required = onsite;
     }
+    if (location.hash === "#plans") document.getElementById("plans").open = true;
     form.addEventListener("change", sync);
     sync();
     form.addEventListener("submit", function () {
