@@ -32,7 +32,7 @@ def _base_url(request: Request) -> str:
 def _page(request: Request, name: str, **ctx) -> HTMLResponse:
     return templates.TemplateResponse(request, name, {
         "site_name": SITE_NAME, "base_url": _base_url(request), "paid_service": payments.enabled(), "provider": payments.provider(),
-        "price": f"₦{payments.PRICE_NGN:,}", "months": round(payments.PERIOD_DAYS / 30), "contact": CONTACT_EMAIL, **ctx})
+        "price": f"₦{payments.PRICE_NGN:,}", "months": round(payments.PERIOD_DAYS / 30), "trial_days": payments.TRIAL_DAYS, "contact": CONTACT_EMAIL, **ctx})
 
 
 def _message(request, heading, message, ok=False, link=None, link_text=None, status=200):
@@ -100,9 +100,14 @@ def confirm(request: Request, token: str):
     sub = db.confirm(token)
     if not sub:
         return _message(request, "Link not recognised", "This link is invalid or you've already unsubscribed.", status=404)
-    if payments.enabled() and not db.is_paid(sub):
-        return _pay_page(request, sub, heading="Email confirmed. One last step")
-    return _message(request, "You're in!", "Your first matches arrive tomorrow morning.", ok=True,
+    if not sub["paid_until"]:
+        sub = db.start_trial(sub["id"], payments.TRIAL_DAYS)
+    if not db.is_paid(sub):  # trial (or paid time) already used up
+        if payments.enabled():
+            return _pay_page(request, sub, heading="Email confirmed. Pick up where you left off")
+        return _message(request, "Email confirmed", "Your free trial has ended. We'll email you when paid plans open.")
+    return _message(request, "You're in!", f"Your free {payments.TRIAL_DAYS}-day trial runs until "
+                    f"{db._aware(sub['paid_until']):%d %b %Y}. Your first matches arrive tomorrow morning.", ok=True,
                     link=f"/manage/{token}", link_text="Change my preferences")
 
 
@@ -134,11 +139,11 @@ def unsubscribe(request: Request, token: str):
 
 
 def _status(sub: dict) -> str:
-    if not payments.enabled():
-        return ""
     if db.is_paid(sub):
         return f"Active until {db._aware(sub['paid_until']):%d %b %Y}."
-    return "Not active. Pay to start receiving jobs."
+    if not sub.get("confirmed"):
+        return ""
+    return "Not active. Pay to start receiving jobs." if payments.enabled() else "Your free trial has ended."
 
 
 def _pay_page(request: Request, sub: dict, heading: str) -> HTMLResponse:

@@ -7,7 +7,7 @@ Works with Credo (eTranzact) or Paystack, whichever has keys set (Credo wins if 
             Webhooks: <BASE_URL>/payments/webhook
   Paystack: PAYSTACK_SECRET_KEY (sk_test_... or sk_live_...). Dashboard → Settings
             → API Keys & Webhooks: <BASE_URL>/payments/webhook
-Also: PRICE_NGN (default 5000), PERIOD_DAYS (default 90).
+Also: PRICE_NGN (default 5000), PERIOD_DAYS (default 90), TRIAL_DAYS (default 7).
 
 Every payment is re-checked with the provider's API before it counts; the
 browser return and the webhook are only hints to go and check.
@@ -23,6 +23,7 @@ import requests
 
 PRICE_NGN = int(os.environ.get("PRICE_NGN", "5000"))
 PERIOD_DAYS = int(os.environ.get("PERIOD_DAYS", "90"))
+TRIAL_DAYS = int(os.environ.get("TRIAL_DAYS", "7"))  # free days everyone gets when they confirm their email
 REF_RE = re.compile(r"^ja(\d+)x[0-9a-f]+$")  # our reference: ja<subscriber id>x<random>
 
 

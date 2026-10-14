@@ -20,9 +20,12 @@ def manage_link(base_url: str, token: str) -> tuple[str, str, str]:
     return "Change your job alerts", text, html
 
 
-def renewal_reminder(base_url: str, token: str, paid_until, price: str) -> tuple[str, str, str]:
-    link = f"{base_url}/pay/{token}"
+def renewal_reminder(base_url: str, token: str, paid_until, price: str, can_pay: bool = True) -> tuple[str, str, str]:
     when = f"{paid_until:%d %b %Y}"
+    if not can_pay:  # free trial while paid plans aren't open yet
+        text = f"Your free job alerts end on {when}. Paid plans open soon, and we'll email you when you can continue."
+        return f"Your free job alerts end on {when}", text, f"<p>{escape(text)}</p>"
+    link = f"{base_url}/pay/{token}"
     text = (f"Your job alerts end on {when}. To keep getting them, renew for {price} here:\n{link}\n\n"
             "Nothing renews automatically, so if you do nothing the emails simply stop.")
     html = (f"<p>Your job alerts end on <b>{when}</b>.</p><p><a href=\"{escape(link, quote=True)}\"><b>Renew for {escape(price)}</b></a></p>"

@@ -80,11 +80,12 @@ test("countries match the Python list", () => {
   assert.deepEqual(COUNTRIES, py);
 });
 
-test("home page shows the price and the form", async () => {
+test("home page shows the trial, the price and the form", async () => {
   const r = await call("/");
   const page = await r.text();
   assert.equal(r.status, 200);
   assert.match(page, /₦5,000/);
+  assert.match(page, /7 days free/);
   assert.match(page, /How do you want to work\?/);
   assert.doesNotMatch(page, /people getting alerts/); // no counts until there are 10+
 });
@@ -119,11 +120,23 @@ test("a confirmed address can't be changed by someone else signing up again", as
   assert.match(sent.at(-1).subject, /Change your job alerts/);
 });
 
-test("confirm -> pay with Credo -> active for 90 days, counted once", async () => {
+test("confirming starts a 7-day free trial, once", async () => {
   await signUp();
   const { token } = await subscriber();
-  const confirmPage = await (await call(`/confirm/${token}`)).text();
-  assert.match(confirmPage, /Pay ₦5,000 securely with Credo/);
+  assert.match(await (await call(`/confirm/${token}`)).text(), /free 7-day trial runs until/);
+  const first = (await subscriber()).paid_until;
+  const days = (new Date(first) - Date.now()) / 86400000;
+  assert.ok(days > 6.9 && days < 7.1, `trial days ${days}`);
+  await call(`/confirm/${token}`);
+  assert.equal(String((await subscriber()).paid_until), String(first));
+  assert.match(await (await call(`/manage/${token}`)).text(), /Active until/);
+});
+
+test("trial then pay with Credo -> 90 days added on top, counted once", async () => {
+  await signUp();
+  const { token } = await subscriber();
+  await call(`/confirm/${token}`);
+  assert.match(await (await call(`/pay/${token}`)).text(), /Pay ₦5,000 securely with Credo/);
 
   const r = await call(`/pay/${token}`, { method: "POST" });
   assert.equal(r.status, 303);
@@ -135,7 +148,7 @@ test("confirm -> pay with Credo -> active for 90 days, counted once", async () =
   assert.equal(done.status, 200);
   const s = await subscriber();
   const days = (new Date(s.paid_until) - Date.now()) / 86400000;
-  assert.ok(days > 89.9 && days < 90.1, `paid days ${days}`);
+  assert.ok(days > 96.9 && days < 97.1, `paid days ${days}`);
 
   // The webhook reports the same payment: valid signature, but no double count.
   const body = JSON.stringify({ event: "transaction.successful", data: { transRef: "vs_1", businessCode: "700607001" } });
@@ -146,7 +159,7 @@ test("confirm -> pay with Credo -> active for 90 days, counted once", async () =
 
   const manage = await (await call(`/manage/${token}`)).text();
   assert.match(manage, /Active until/);
-  assert.match(manage, /Renew/);
+  assert.match(manage, /Pay ₦5,000 for 3 months/);
 });
 
 test("forged or unknown payments don't count", async () => {
@@ -186,7 +199,9 @@ test("Paystack works when only its key is set", async () => {
 
 test("without payment keys the site is free", async () => {
   env = { BREVO_API_KEY: "b", FROM_EMAIL: "hi@jobs.test" };
-  assert.match(await (await call("/")).text(), /<b>Free<\/b>/);
+  const home = await (await call("/")).text();
+  assert.match(home, /7 days free/);
+  assert.doesNotMatch(home, /₦5,000/);
   await signUp();
   const { token } = await subscriber();
   assert.match(await (await call(`/confirm/${token}`)).text(), /You&#39;re in!/);

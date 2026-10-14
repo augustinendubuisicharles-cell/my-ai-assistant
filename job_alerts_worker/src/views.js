@@ -72,11 +72,11 @@ export function form(ctx, { sub = null, action, button, heading, lead, stats = {
   ${stats.jobs_30d ? `<li><b>${stats.jobs_30d.toLocaleString("en")}</b><span>jobs sent in the last 30 days</span></li>` : ""}
   <li><b>Daily</b><span>fresh matches every morning</span></li>
   <li><b>Checked</b><span>for scams and dead links</span></li>
-  ${ctx.paidService ? `<li><b>${esc(ctx.price)}</b><span>for ${ctx.months} months, no auto-renewal</span></li>`
-    : `<li><b>Free</b><span>unsubscribe any time</span></li>`}
+  <li><b>${ctx.trialDays} days free</b><span>no card needed</span></li>
+  ${ctx.paidService ? `<li><b>${esc(ctx.price)}</b><span>then ${ctx.months} months, no auto-renewal</span></li>` : ""}
 </ul>`;
   const statusBox = sub && status ? `<p class="card status">${esc(status)}${
-    ctx.paidService ? ` <a href="/pay/${esc(sub.token)}">${sub.paid_until ? "Renew" : "Pay now"}</a>` : ""}</p>` : "";
+    ctx.paidService ? ` <a href="/pay/${esc(sub.token)}">Pay ${esc(ctx.price)} for ${ctx.months} months</a>` : ""}</p>` : "";
   return page(ctx, `<h1>${esc(heading)}</h1>
 <p class="lead">${esc(lead)}</p>
 ${statusBox}${statTiles}
@@ -110,7 +110,7 @@ ${statusBox}${statTiles}
   </select>
   <input class="hp" name="website" tabindex="-1" autocomplete="off">
   <button type="submit" id="submit">${esc(button)}</button>
-  ${ctx.paidService && !sub ? `<p class="small"><b>${esc(ctx.price)} for ${ctx.months} months.</b> After confirming your email you'll pay once through ${esc(ctx.provider)}. Nothing renews automatically. <a href="/terms">Terms and refunds</a>.</p>` : ""}
+  ${ctx.paidService && !sub ? `<p class="small"><b>Free for ${ctx.trialDays} days, then ${esc(ctx.price)} for ${ctx.months} months</b>, paid once through ${esc(ctx.provider)} if you want to continue. Nothing renews automatically. <a href="/terms">Terms and refunds</a>.</p>` : ""}
   <p class="small">One email a day with up to 5 new matches, only on days we find some. We skip senior roles if you choose a lower level, and we filter out unpaid roles and listings with common scam signs. Every email has a one-click unsubscribe link. We only store your email and these preferences, never share them, and delete them when you unsubscribe.</p>
 </form>
 ${sub ? `<p class="small"><a href="/unsubscribe/${esc(sub.token)}">Unsubscribe and delete my details</a></p>` : ""}
@@ -162,6 +162,7 @@ export function terms(ctx) {
   <p><b>What you get.</b> ${esc(ctx.siteName)} emails you up to 5 new job listings a day that match the job titles, location and
     experience level you choose. We search public job boards and filter out listings that look unpaid, expired or like scams,
     but we don't employ anyone, can't guarantee a job, and you should always read a listing yourself before applying.</p>
+  <p><b>Free trial.</b> Everyone gets ${ctx.trialDays} days of alerts free when they confirm their email. No card needed.</p>
   ${ctx.paidService ? `<p><b>Price.</b> ${esc(ctx.price)} for ${ctx.months} months, paid once through ${esc(ctx.provider)}. It does not renew automatically; we email
     you before it ends with a link to renew if you want to.</p>
   <p><b>Refunds.</b> If you're not happy within 7 days of paying, email us and we'll refund you in full. After that, payments

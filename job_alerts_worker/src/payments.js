@@ -6,6 +6,7 @@ const v = (env, k) => (env[k] || "").trim();
 
 export const priceNgn = (env) => parseInt(env.PRICE_NGN || "5000", 10);
 export const periodDays = (env) => parseInt(env.PERIOD_DAYS || "90", 10);
+export const trialDays = (env) => parseInt(env.TRIAL_DAYS || "7", 10); // free days on confirming
 
 export function provider(env) {
   if (v(env, "CREDO_PUBLIC_KEY") && v(env, "CREDO_SECRET_KEY")) return "Credo";

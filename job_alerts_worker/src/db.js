@@ -43,6 +43,11 @@ export async function remove(q, token) {
   return true;
 }
 
+// Gives `days` of free alerts to someone who has never had any (trial or paid).
+export const startTrial = (q, id, days) =>
+  one(q, `UPDATE subscribers SET paid_until = now() + make_interval(days => $2)
+          WHERE id = $1 AND paid_until IS NULL RETURNING ${COLS}`, [id, days]).then((s) => s || byId(q, id));
+
 export const isPaid = (sub) => Boolean(sub?.paid_until) && new Date(sub.paid_until) > new Date();
 
 // Adds `days` of paid time, once per payment reference: the browser return and the

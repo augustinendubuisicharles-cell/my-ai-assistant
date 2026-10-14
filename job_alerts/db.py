@@ -166,6 +166,15 @@ def record_payment(reference: str, subscriber_id: int, amount_ngn: int, period_d
         return dict(conn.execute(select(subscribers).where(subscribers.c.id == sub["id"])).mappings().first())
 
 
+def start_trial(subscriber_id: int, days: int) -> dict | None:
+    """Gives `days` of free alerts to someone who has never had any (trial or paid)."""
+    with engine.begin() as conn:
+        conn.execute(update(subscribers).where(subscribers.c.id == subscriber_id, subscribers.c.paid_until.is_(None))
+                     .values(paid_until=now() + timedelta(days=days)))
+        row = conn.execute(select(subscribers).where(subscribers.c.id == subscriber_id)).mappings().first()
+        return dict(row) if row else None
+
+
 def mark_reminded(subscriber_id: int, paid_until: datetime) -> None:
     with engine.begin() as conn:
         conn.execute(update(subscribers).where(subscribers.c.id == subscriber_id).values(reminded_for=paid_until))

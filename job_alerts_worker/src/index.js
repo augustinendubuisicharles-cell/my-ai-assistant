@@ -27,6 +27,7 @@ function context(env, request) {
     provider: prov,
     price: `₦${payments.priceNgn(env).toLocaleString("en")}`,
     months: Math.round(payments.periodDays(env) / 30),
+    trialDays: payments.trialDays(env),
     contact: (env.CONTACT_EMAIL || env.FROM_EMAIL || "").trim(),
   };
 }
@@ -48,9 +49,9 @@ export function cleanPrefs(f) {
 }
 
 function status(ctx, sub) {
-  if (!ctx.paidService) return "";
   if (db.isPaid(sub)) return `Active until ${fmtDate(sub.paid_until)}.`;
-  return "Not active. Pay to start receiving jobs.";
+  if (!sub.confirmed) return "";
+  return ctx.paidService ? "Not active. Pay to start receiving jobs." : "Your free trial has ended.";
 }
 
 const fmtDate = (d) => new Date(d).toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric", timeZone: "UTC" });
@@ -107,12 +108,15 @@ export async function handle(request, env, q) {
   }
 
   if ((m = path.match(/^\/confirm\/([\w-]+)$/)) && method === "GET") {
-    const sub = await db.confirm(q, m[1]);
+    let sub = await db.confirm(q, m[1]);
     if (!sub) return notFound();
-    if (ctx.paidService && !db.isPaid(sub)) {
-      return html(views.pay(ctx, { sub, heading: "Email confirmed. One last step", status: status(ctx, sub) }));
+    if (!sub.paid_until) sub = await db.startTrial(q, sub.id, ctx.trialDays);
+    if (!db.isPaid(sub)) { // trial (or paid time) already used up
+      if (ctx.paidService) return html(views.pay(ctx, { sub, heading: "Email confirmed. Pick up where you left off", status: status(ctx, sub) }));
+      return msg("Email confirmed", "Your free trial has ended. We'll email you when paid plans open.");
     }
-    return msg("You're in!", "Your first matches arrive tomorrow morning.", { ok: true, link: `/manage/${sub.token}`, linkText: "Change my preferences" });
+    return msg("You're in!", `Your free ${ctx.trialDays}-day trial runs until ${fmtDate(sub.paid_until)}. Your first matches arrive tomorrow morning.`,
+      { ok: true, link: `/manage/${sub.token}`, linkText: "Change my preferences" });
   }
 
   if ((m = path.match(/^\/manage\/([\w-]+)$/))) {

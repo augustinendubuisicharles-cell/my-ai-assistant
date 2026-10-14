@@ -23,6 +23,8 @@ def main() -> None:
     sent = failed = 0
     for sub in subs:
         if require_payment:
+            if not sub.get("paid_until"):  # confirmed before trials existed: start theirs now
+                sub = db.start_trial(sub["id"], payments.TRIAL_DAYS)
             remind(sub, base_url)
             if not db.is_paid(sub):
                 continue
@@ -47,12 +49,14 @@ def main() -> None:
 
 
 def remind(sub: dict, base_url: str) -> None:
-    """Emails a renew link once, when 5 or fewer days of paid time are left."""
+    """Emails once when 2 or fewer days of trial or paid time are left: a renew link, or
+    (before payments are switched on) a note that the free alerts are ending."""
     until = db._aware(sub.get("paid_until"))
-    if not until or not (-timedelta(days=1) < until - db.now() <= timedelta(days=5)) or db._aware(sub.get("reminded_for")) == until:
+    if not until or not (-timedelta(days=1) < until - db.now() <= timedelta(days=2)) or db._aware(sub.get("reminded_for")) == until:
         return
     try:
-        subject, text, html = emails.renewal_reminder(base_url, sub["token"], until, f"NGN {payments.PRICE_NGN:,}")
+        subject, text, html = emails.renewal_reminder(base_url, sub["token"], until, f"NGN {payments.PRICE_NGN:,}",
+                                                      can_pay=payments.enabled())
         mailer.send(sub["email"], subject, text, html, unsubscribe_url=f"{base_url}/unsubscribe/{sub['token']}")
         db.mark_reminded(sub["id"], until)
         print(f"- subscriber {sub['id']}: renewal reminder sent")
