@@ -13,6 +13,7 @@ import * as views from "./views.js";
 import * as assets from "./assets.js";
 import * as telegram from "./telegram.js";
 import * as firstSearch from "./firstsearch.js";
+import * as letters from "./letters.js";
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
@@ -82,6 +83,18 @@ export async function handle(request, env, q) {
   const ctx = context(env, request);
   const msg = (heading, text, opts = {}) => html(views.message(ctx, { heading, text, ...opts }), opts.status || 200);
   const notFound = () => msg("Link not recognised", "This link is invalid or you've already unsubscribed.", { status: 404 });
+  const refLink = async (sub) => `${ctx.baseUrl}/?ref=${await db.refCode(q, sub)}`;
+  // Every 2 invited friends who confirm earn the inviter a free month; tell them by email.
+  const rewardReferrer = async (referrerId) => {
+    const months = await db.rewardReferrer(q, referrerId);
+    if (!months) return;
+    const ref = await db.byId(q, referrerId);
+    try {
+      await mail.send(env, ref.email, ...mail.referralReward(ctx.baseUrl, ref.token, months, fmtDate(ref.paid_until)));
+    } catch (e) {
+      console.log(`[referral email] failed for subscriber ${referrerId}: ${e}`);
+    }
+  };
   let m;
 
   if (path === "/healthz") return Response.json({ ok: true });
@@ -94,8 +107,9 @@ export async function handle(request, env, q) {
     } catch (e) {
       console.log(`[stats] ${e}`);
     }
+    const ref = (url.searchParams.get("ref") || "").replace(/[^\w]/g, "").slice(0, 16);
     return html(views.form(ctx, { action: "/subscribe", button: "Send me jobs", heading: "Remote jobs that actually hire Nigerians", stats,
-      lead: "Checked, scam-free jobs from abroad, in your inbox every morning." }));
+      lead: "Checked, scam-free jobs from abroad, in your inbox every morning.", ref }));
   }
 
   if (path === "/subscribe" && method === "POST") {
@@ -115,6 +129,8 @@ export async function handle(request, env, q) {
       letter = mail.manageLink(ctx.baseUrl, sub.token);
     } else {
       sub = await db.upsertSubscriber(q, email, prefs);
+      const referrer = !existing && f.get("ref") ? await db.byRefCode(q, String(f.get("ref"))) : null;
+      if (referrer) await db.setReferredBy(q, sub.id, referrer.id);
       letter = mail.confirmation(ctx.baseUrl, sub.token);
     }
     try {
@@ -137,7 +153,9 @@ export async function handle(request, env, q) {
     }
     // First confirmation only: start their first search now instead of waiting for the morning run.
     const soon = !before?.confirmed ? await firstSearch.start(env, sub.email) : false;
-    return html(views.welcome(ctx, { sub, until: fmtDate(sub.paid_until), trial: !(await db.isMember(q, sub)), soon }));
+    if (!before?.confirmed && sub.referred_by) await rewardReferrer(sub.referred_by);
+    return html(views.welcome(ctx, { sub, until: fmtDate(sub.paid_until), trial: !(await db.isMember(q, sub)), soon,
+      refLink: await refLink(sub), joined: await db.confirmedReferrals(q, sub.id) }));
   }
 
   if ((m = path.match(/^\/manage\/([\w-]+)$/))) {
@@ -148,7 +166,8 @@ export async function handle(request, env, q) {
       const bot = member ? await telegram.botUsername(env) : null;
       return html(views.form(ctx, { sub, action: `/manage/${sub.token}`, button: "Save", heading: "Your job alerts",
         lead: `Alerts for ${sub.email}`, status: status(ctx, sub), member,
-        telegramLink: bot ? `https://t.me/${bot}?start=${sub.token}` : null }));
+        telegramLink: bot ? `https://t.me/${bot}?start=${sub.token}` : null,
+        inviteBox: views.invite(ctx, { refLink: await refLink(sub), joined: await db.confirmedReferrals(q, sub.id) }) }));
     }
     if (method === "POST") {
       const prefs = cleanPrefs(await request.formData());
@@ -159,6 +178,43 @@ export async function handle(request, env, q) {
       await db.updatePrefs(q, sub.token, prefs);
       return msg("Saved", "Your new preferences apply from the next email.", { ok: true });
     }
+  }
+
+  // AI cover letter for one job, linked from members' emails: /letter/<token>?t=<title>&c=<company>&u=<job link>
+  if ((m = path.match(/^\/letter\/([\w-]+)$/)) && (method === "GET" || method === "POST")) {
+    const sub = await db.byToken(q, m[1]);
+    if (!sub) return notFound();
+    if (!letters.enabled(env)) return msg("Cover letters aren't available yet", "Please check back soon.");
+    if (!(await db.isMember(q, sub))) {
+      return msg("Cover letters are for members", "Members get an AI cover letter for any job in one click, plus 10 jobs a day and Telegram alerts.",
+        ctx.paidService ? { link: `/pay/${sub.token}`, linkText: `Become a member for ${ctx.price}` } : {});
+    }
+    const p = url.searchParams;
+    const jobUrl = String(p.get("u") || "");
+    const job = { title: String(p.get("t") || "").slice(0, 200), company: String(p.get("c") || "").slice(0, 200),
+                  url: /^https?:\/\//.test(jobUrl) ? jobUrl.slice(0, 1000) : "" };
+    if (!job.title) return notFound();
+    let cv = await db.getCv(q, sub.id);
+    const used = await db.lettersToday(q, sub.id);
+    const render = (extra = {}) => html(views.letterPage(ctx, { sub, job, hasCv: Boolean(cv), cv, left: Math.max(0, letters.PER_DAY - used), ...extra }));
+    if (method === "GET") return render();
+
+    const pasted = String((await request.formData()).get("cv") || "").trim();
+    if (pasted) {
+      cv = pasted.slice(0, letters.MAX_CV);
+      await db.setCv(q, sub.id, cv);
+    }
+    if (!cv) return render({ error: "Paste your CV first, so the letter can be about you." });
+    if (used >= letters.PER_DAY) return render({ error: "That's today's 10 letters. You can write more tomorrow." });
+    let text = null;
+    try {
+      text = await letters.write(env, { cv, ...job, advert: job.url ? await letters.advertText(job.url) : "" });
+    } catch (e) {
+      console.log(`[letter] failed for subscriber ${sub.id}: ${e}`);
+    }
+    if (!text) return render({ error: "We couldn't write this one just now. Please try again in a minute." });
+    await db.addLetter(q, sub.id);
+    return html(views.letterPage(ctx, { sub, job, hasCv: true, cv, letter: text, left: Math.max(0, letters.PER_DAY - used - 1) }));
   }
 
   if ((m = path.match(/^\/unsubscribe\/([\w-]+)$/)) && (method === "GET" || method === "POST")) {

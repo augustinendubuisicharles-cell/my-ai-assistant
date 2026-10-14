@@ -55,3 +55,16 @@ that person, so their first matches arrive within minutes instead of the next mo
 This needs one GitHub secret, `JOB_ALERTS_GITHUB_TOKEN`: a fine-grained token
 (GitHub → Settings → Developer settings → Fine-grained tokens) for this repository only,
 with **Actions: Read and write**. Without it, first matches simply come the next morning.
+
+## AI cover letters (members)
+
+Members' daily emails link each job to `/letter/<token>`, where they paste their CV once and
+get a cover letter written by Claude from their CV and the job advert (10 a day). Needs one
+GitHub secret, `JOB_ALERTS_ANTHROPIC_KEY` (an API key from console.anthropic.com). Without it
+the links don't appear and the page says letters aren't available yet.
+
+## Referrals
+
+Everyone gets an invite link (`/?ref=<code>`) on their welcome and settings pages, with a
+WhatsApp share button. Every 2 invited friends who confirm their email add 30 days to the
+inviter's alerts, and the inviter gets an email saying so.
