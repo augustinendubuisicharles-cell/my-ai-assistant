@@ -8,7 +8,7 @@ import * as telegram from "./telegram.js";
 import * as firstSearch from "./firstsearch.js";
 import * as letters from "./letters.js";
 
-const MIN_KEY = 16;
+const MIN_KEY = 12; // shorter keys leave the dashboard off
 
 const COOKIE = "ja_admin";
 const adminKey = (env) => (env.ADMIN_KEY || "").trim();

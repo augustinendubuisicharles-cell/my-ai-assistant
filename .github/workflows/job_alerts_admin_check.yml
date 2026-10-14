@@ -15,7 +15,7 @@ jobs:
         run: |
           SITE="${BASE_URL:-https://jobalert.me.uk}"; SITE="${SITE%/}"
           KEY="$(printf '%s' "$ADMIN_KEY" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-          echo "Secret JOB_ALERTS_ADMIN_KEY: ${#KEY} characters (needs 16 or more)"
+          echo "Secret JOB_ALERTS_ADMIN_KEY: ${#KEY} characters (needs 12 or more)"
           ok=1
           code=$(curl -sS -o /tmp/login.html -w '%{http_code}' "$SITE/admin")
           if grep -q 'type="password"' /tmp/login.html; then echo "PASS  $SITE/admin shows the password box ($code)"

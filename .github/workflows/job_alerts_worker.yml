@@ -101,6 +101,7 @@ jobs:
                            "CREDO_SECRET_KEY", "CREDO_LIVE", "CREDO_BUSINESS_CODE", "PAYSTACK_SECRET_KEY", "TELEGRAM_TOKEN", "GH_TOKEN", "ANTHROPIC_API_KEY", "ADMIN_KEY"];
             const out = Object.fromEntries(names.filter((n) => (process.env[n] || "").trim()).map((n) => [n, process.env[n].trim()]));
             console.error("Setting: " + Object.keys(out).join(", "));
+            if (out.ADMIN_KEY && out.ADMIN_KEY.length < 12) console.log("::warning::JOB_ALERTS_ADMIN_KEY is under 12 characters, so the dashboard stays off");
             require("fs").writeFileSync("/tmp/secrets.json", JSON.stringify(out));
           '
           npx wrangler secret bulk /tmp/secrets.json
