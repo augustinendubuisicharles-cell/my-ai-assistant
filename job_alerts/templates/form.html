@@ -2,13 +2,15 @@
 {% block body %}
 <h1>{{ heading }}</h1>
 <p class="lead">{{ lead }}</p>
+{% if sub and status %}<p class="card status">{{ status }}{% if paid_service %} <a href="/pay/{{ sub.token }}">{{ 'Renew' if sub.paid_until else 'Pay now' }}</a>{% endif %}</p>{% endif %}
 {% if not sub %}
 <ul class="stats">
   {% if stats.users %}<li><b>{{ "{:,}".format(stats.users) }}</b><span>people getting alerts</span></li>{% endif %}
   {% if stats.jobs_30d %}<li><b>{{ "{:,}".format(stats.jobs_30d) }}</b><span>jobs sent in the last 30 days</span></li>{% endif %}
   <li><b>Daily</b><span>fresh matches every morning</span></li>
   <li><b>Checked</b><span>for scams and dead links</span></li>
-  <li><b>Free</b><span>unsubscribe any time</span></li>
+  {% if paid_service %}<li><b>{{ price }}</b><span>for {{ months }} months, no auto-renewal</span></li>
+  {% else %}<li><b>Free</b><span>unsubscribe any time</span></li>{% endif %}
 </ul>
 {% endif %}
 <form class="card" method="post" action="{{ action }}" id="prefs">
@@ -44,6 +46,7 @@
   </select>
   <input class="hp" name="website" tabindex="-1" autocomplete="off">
   <button type="submit" id="submit">{{ button }}</button>
+  {% if paid_service and not sub %}<p class="small"><b>{{ price }} for {{ months }} months.</b> After confirming your email you'll pay once through Paystack. Nothing renews automatically. <a href="/terms">Terms and refunds</a>.</p>{% endif %}
   <p class="small">One email a day with up to 5 new matches, only on days we find some. We skip senior roles if you choose a lower level, and we filter out unpaid roles and listings with common scam signs. Every email has a one-click unsubscribe link. We only store your email and these preferences, never share them, and delete them when you unsubscribe.</p>
 </form>
 {% if sub %}<p class="small"><a href="{{ base_url }}/unsubscribe/{{ sub.token }}">Unsubscribe and delete my details</a></p>{% endif %}

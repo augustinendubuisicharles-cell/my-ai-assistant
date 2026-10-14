@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>{{ heading }}</h1>
+<p class="lead">Alerts for {{ sub.email }}{% if status %}. {{ status }}{% endif %}</p>
+<form class="card" method="post" action="/pay/{{ sub.token }}" id="payform">
+  <p class="price"><b>{{ price }}</b> for {{ months }} months</p>
+  <ul class="perks">
+    <li>Up to 5 new matches for "{{ sub.keywords }}" every morning</li>
+    <li>{% if sub.remote_only %}Remote jobs{% else %}Jobs near {{ sub.city }}, plus remote ones{% endif %}, checked for scams and dead links</li>
+    <li>One payment. Nothing renews automatically; we'll email you before it ends</li>
+  </ul>
+  <button type="submit" id="paybtn">Pay {{ price }} securely with Paystack</button>
+  <p class="small">You'll pay on Paystack's page by card, bank transfer or USSD. We never see your card details.
+    See our <a href="/terms">terms and refund policy</a>.</p>
+</form>
+<p class="small"><a href="/manage/{{ sub.token }}">Change my preferences</a> &middot;
+  <a href="/unsubscribe/{{ sub.token }}">Unsubscribe and delete my details</a></p>
+<script>
+  document.getElementById("payform").addEventListener("submit", function () {
+    var b = document.getElementById("paybtn"); b.disabled = true; b.textContent = "Opening Paystack...";
+  });
+</script>
+{% endblock %}

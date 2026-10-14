@@ -6,9 +6,9 @@ Run from the repo root:  python -m job_alerts.send_daily
 import os
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-from . import db, emails, mailer
+from . import db, emails, mailer, payments
 from .search import find_jobs, job_key
 
 
@@ -18,9 +18,14 @@ def main() -> None:
         sys.exit("BASE_URL is required so emails can link to the site.")
     db.init_db()
     subs = db.confirmed_subscribers()
-    print(f"{len(subs)} confirmed subscriber(s).")
+    require_payment = os.environ.get("REQUIRE_PAYMENT", "1") != "0"
+    print(f"{len(subs)} confirmed subscriber(s); payment {'required' if require_payment else 'not required'}.")
     sent = failed = 0
     for sub in subs:
+        if require_payment:
+            remind(sub, base_url)
+            if not db.is_paid(sub):
+                continue
         try:
             jobs = find_jobs(sub["keywords"], sub["country"], sub["remote_only"], sub["level"], db.already_sent(sub["id"]),
                              city=sub.get("city") or "")
@@ -39,6 +44,20 @@ def main() -> None:
     print(f"Done: {sent} email(s) sent, {failed} failed.")
     if failed and not sent:
         sys.exit(1)
+
+
+def remind(sub: dict, base_url: str) -> None:
+    """Emails a renew link once, when 5 or fewer days of paid time are left."""
+    until = db._aware(sub.get("paid_until"))
+    if not until or not (-timedelta(days=1) < until - db.now() <= timedelta(days=5)) or db._aware(sub.get("reminded_for")) == until:
+        return
+    try:
+        subject, text, html = emails.renewal_reminder(base_url, sub["token"], until, f"NGN {payments.PRICE_NGN:,}")
+        mailer.send(sub["email"], subject, text, html, unsubscribe_url=f"{base_url}/unsubscribe/{sub['token']}")
+        db.mark_reminded(sub["id"], until)
+        print(f"- subscriber {sub['id']}: renewal reminder sent")
+    except Exception as e:
+        print(f"- subscriber {sub['id']}: reminder FAILED {e}")
 
 
 if __name__ == "__main__":

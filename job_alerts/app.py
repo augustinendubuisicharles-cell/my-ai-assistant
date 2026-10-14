@@ -5,18 +5,20 @@ Run locally:  uvicorn job_alerts.app:app --reload   (from the repo root)
 Env: DATABASE_URL, BASE_URL (the site's public address), SITE_NAME, plus the
 email settings in mailer.py (BREVO_API_KEY on Render).
 """
+import json
 import os
 import re
 from pathlib import Path
 
 from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
-from . import db, emails, mailer
+from . import db, emails, mailer, payments
 from .search import COUNTRIES
 
 SITE_NAME = os.environ.get("SITE_NAME", "Job Alerts")
+CONTACT_EMAIL = os.environ.get("CONTACT_EMAIL") or os.environ.get("FROM_EMAIL", "")
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 app = FastAPI(title=SITE_NAME, docs_url=None, redoc_url=None)
@@ -29,7 +31,9 @@ def _base_url(request: Request) -> str:
 
 
 def _page(request: Request, name: str, **ctx) -> HTMLResponse:
-    return templates.TemplateResponse(request, name, {"site_name": SITE_NAME, "base_url": _base_url(request), **ctx})
+    return templates.TemplateResponse(request, name, {
+        "site_name": SITE_NAME, "base_url": _base_url(request), "paid_service": payments.enabled(),
+        "price": f"₦{payments.PRICE_NGN:,}", "months": round(payments.PERIOD_DAYS / 30), "contact": CONTACT_EMAIL, **ctx})
 
 
 def _message(request, heading, message, ok=False, link=None, link_text=None, status=200):
@@ -97,6 +101,8 @@ def confirm(request: Request, token: str):
     sub = db.confirm(token)
     if not sub:
         return _message(request, "Link not recognised", "This link is invalid or you've already unsubscribed.", status=404)
+    if payments.enabled() and not db.is_paid(sub):
+        return _pay_page(request, sub, heading="Email confirmed. One last step")
     return _message(request, "You're in!", "Your first matches arrive tomorrow morning.", ok=True,
                     link=f"/manage/{token}", link_text="Change my preferences")
 
@@ -107,7 +113,7 @@ def manage(request: Request, token: str):
     if not sub:
         return _message(request, "Link not recognised", "This link is invalid or you've already unsubscribed.", status=404)
     return _page(request, "form.html", sub=sub, countries=list(COUNTRIES), action=f"/manage/{token}", button="Save",
-                 heading="Your job alerts", lead=f"Alerts for {sub['email']}")
+                 heading="Your job alerts", lead=f"Alerts for {sub['email']}", status=_status(sub))
 
 
 @app.post("/manage/{token}", response_class=HTMLResponse)
@@ -126,6 +132,83 @@ def save(request: Request, token: str, keywords: str = Form(""), country: str = 
 def unsubscribe(request: Request, token: str):
     db.remove(token)
     return _message(request, "Unsubscribed", "You won't get any more emails, and your details have been deleted.", ok=True)
+
+
+def _status(sub: dict) -> str:
+    if not payments.enabled():
+        return ""
+    if db.is_paid(sub):
+        return f"Active until {db._aware(sub['paid_until']):%d %b %Y}."
+    return "Not active. Pay to start receiving jobs."
+
+
+def _pay_page(request: Request, sub: dict, heading: str) -> HTMLResponse:
+    return _page(request, "pay.html", sub=sub, heading=heading, status=_status(sub))
+
+
+@app.get("/pay/{token}", response_class=HTMLResponse)
+def pay(request: Request, token: str):
+    sub = db.by_token(token)
+    if not sub or not payments.enabled():
+        return _message(request, "Link not recognised", "This link is invalid or you've already unsubscribed.", status=404)
+    return _pay_page(request, sub, heading="Renew your job alerts" if sub.get("paid_until") else "Start your job alerts")
+
+
+@app.post("/pay/{token}")
+def checkout(request: Request, token: str):
+    sub = db.by_token(token)
+    if not sub or not payments.enabled():
+        return _message(request, "Link not recognised", "This link is invalid or you've already unsubscribed.", status=404)
+    try:
+        url = payments.start_checkout(sub["email"], token, f"{_base_url(request)}/paid")
+    except Exception as e:
+        print(f"[checkout] subscriber {sub['id']}: {e}")
+        return _message(request, "Payment page unavailable", "Please try again in a few minutes.",
+                        link=f"/pay/{token}", link_text="Try again", status=502)
+    return RedirectResponse(url, status_code=303)
+
+
+def _apply_payment(reference: str) -> dict | None:
+    paid = payments.verify(reference)
+    return db.record_payment(paid["reference"], paid["token"], paid["amount"], payments.PERIOD_DAYS) if paid else None
+
+
+@app.get("/paid", response_class=HTMLResponse)
+def paid(request: Request, reference: str = "", trxref: str = ""):
+    try:
+        sub = _apply_payment(reference or trxref)
+    except Exception as e:
+        print(f"[paid] {reference or trxref}: {e}")
+        sub = None
+    if not sub:
+        return _message(request, "We couldn't confirm your payment yet",
+                        "If you were charged, it will show on your account within a few minutes and we'll email you. "
+                        f"Otherwise you can try again from the link in your email{f' or contact {CONTACT_EMAIL}' if CONTACT_EMAIL else ''}.",
+                        status=402)
+    return _message(request, "Payment received. You're in!",
+                    f"Your alerts are active until {db._aware(sub['paid_until']):%d %b %Y}. Your first matches arrive tomorrow morning.",
+                    ok=True, link=f"/manage/{sub['token']}", link_text="Change my preferences")
+
+
+@app.post("/payments/webhook")
+async def webhook(request: Request):
+    """Paystack calls this on every successful charge, so a payment counts even if the
+    buyer closed the page before coming back. Each event is re-checked with Paystack."""
+    body = await request.body()
+    if not payments.signature_ok(body, request.headers.get("x-paystack-signature", "")):
+        return HTMLResponse("bad signature", status_code=401)
+    try:
+        event = json.loads(body)
+        if event.get("event") == "charge.success":
+            _apply_payment(event["data"]["reference"])
+    except Exception as e:
+        print(f"[webhook] {e}")
+    return HTMLResponse("ok")
+
+
+@app.get("/terms", response_class=HTMLResponse)
+def terms(request: Request):
+    return _page(request, "terms.html")
 
 
 @app.get("/healthz")

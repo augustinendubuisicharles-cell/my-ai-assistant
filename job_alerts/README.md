@@ -33,12 +33,20 @@ board's expiry date, and its link doesn't come back "not found".
    → API Keys); the site then sends through Brevo's web API. Once
    it's live, set `BASE_URL` to the site's address (e.g. `https://job-alerts.onrender.com`).
    The free plan sleeps when idle, so the first visit after a while takes ~30s.
-4. **Daily emails: GitHub** → Settings → Secrets and variables → Actions. Add
+4. **Payments: Paystack** (paystack.com). One payment of `PRICE_NGN` (default
+   5000) buys `PERIOD_DAYS` (default 90) of alerts; nothing renews automatically,
+   and subscribers get a renew link by email 5 days before it ends. In Render set
+   `PAYSTACK_SECRET_KEY` (`sk_test_...` to try it, `sk_live_...` to take real money)
+   and `CONTACT_EMAIL`. In Paystack → Settings → API Keys & Webhooks set the webhook
+   URL to `<BASE_URL>/payments/webhook`. Without the key the site is free and
+   `/pay` is switched off. The daily sender only emails people who have paid; set
+   `REQUIRE_PAYMENT=0` in the workflow to send to everyone confirmed.
+5. **Daily emails: GitHub** → Settings → Secrets and variables → Actions. Add
    `JOB_ALERTS_DATABASE_URL`, `JOB_ALERTS_BASE_URL`, `SMTP_HOST`, `SMTP_PORT`,
    `SMTP_USER`, `SMTP_PASSWORD`, `FROM_EMAIL`, and optionally `ADZUNA_APP_ID`,
    `ADZUNA_APP_KEY`, `REED_API_KEY`. On-site/hybrid alerts need the Adzuna key
    (free at developer.adzuna.com); without it those subscribers get remote jobs only.
-5. Sign up on your own site, confirm, then run **Job alerts -- daily emails to
+6. Sign up on your own site, confirm, then run **Job alerts -- daily emails to
    subscribers** from the Actions tab to get your first email.
 
 ## Running it locally

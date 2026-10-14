@@ -1,4 +1,4 @@
-"""The two emails the service sends: the sign-up confirmation and the daily digest."""
+"""The emails the service sends: sign-up confirmation, manage link, renewal reminder and the daily digest."""
 from html import escape
 
 FOOTER = "Always read the full listing before applying, and never pay anyone to apply for a job."
@@ -18,6 +18,16 @@ def manage_link(base_url: str, token: str) -> tuple[str, str, str]:
     html = (f"<p>You're already signed up. To change your job alerts:</p><p><a href=\"{escape(link, quote=True)}\">"
             "<b>Change my job alerts</b></a></p><p style=\"color:#666\">If this wasn't you, ignore this email.</p>")
     return "Change your job alerts", text, html
+
+
+def renewal_reminder(base_url: str, token: str, paid_until, price: str) -> tuple[str, str, str]:
+    link = f"{base_url}/pay/{token}"
+    when = f"{paid_until:%d %b %Y}"
+    text = (f"Your job alerts end on {when}. To keep getting them, renew for {price} here:\n{link}\n\n"
+            "Nothing renews automatically, so if you do nothing the emails simply stop.")
+    html = (f"<p>Your job alerts end on <b>{when}</b>.</p><p><a href=\"{escape(link, quote=True)}\"><b>Renew for {escape(price)}</b></a></p>"
+            "<p style=\"color:#666\">Nothing renews automatically, so if you do nothing the emails simply stop.</p>")
+    return f"Your job alerts end on {when}", text, html
 
 
 def digest(jobs: list[dict], today, base_url: str, token: str) -> tuple[str, str, str]:
