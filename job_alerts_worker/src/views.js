@@ -24,6 +24,24 @@ const STYLE = `
   .small { font-size:.85rem; color:var(--muted); margin-top:18px; }
   a { color:var(--accent); }
   .status { padding:12px 16px; margin:0 0 16px; }
+  .plan { --tone:var(--accent); position:relative; overflow:hidden; margin:0 0 16px; padding:20px; border-radius:16px; color:var(--text);
+    background:linear-gradient(135deg, color-mix(in srgb, var(--tone) 16%, var(--card)), var(--card) 70%); border:1px solid color-mix(in srgb, var(--tone) 35%, var(--border));
+    box-shadow:0 10px 30px -18px color-mix(in srgb, var(--tone) 70%, transparent); }
+  .plan::after { content:""; position:absolute; right:-40px; top:-40px; width:140px; height:140px; border-radius:50%; background:color-mix(in srgb, var(--tone) 14%, transparent); }
+  .plan.member { --tone:var(--ok); } .plan.off { --tone:#d92d20; }
+  .plan-top { display:flex; justify-content:space-between; align-items:center; gap:10px; position:relative; z-index:1; }
+  .badge { font-size:.78rem; font-weight:800; letter-spacing:.04em; text-transform:uppercase; padding:4px 10px; border-radius:99px; color:var(--tone); background:color-mix(in srgb, var(--tone) 14%, transparent); }
+  .plan-price { font-weight:700; } .plan-price small { color:var(--muted); font-weight:500; }
+  .plan-head { font-size:1.7rem; font-weight:800; margin:14px 0 0; letter-spacing:-.01em; position:relative; z-index:1; }
+  .plan-sub { color:var(--muted); margin:2px 0 0; }
+  .meter { height:8px; border-radius:99px; background:color-mix(in srgb, var(--tone) 15%, var(--bg)); margin:14px 0 0; overflow:hidden; }
+  .meter span { display:block; height:100%; border-radius:inherit; background:linear-gradient(90deg, var(--tone), color-mix(in srgb, var(--tone) 60%, #fff)); }
+  .plan-cta { display:flex; justify-content:center; gap:8px; margin-top:18px; padding:13px 16px; border-radius:12px; font-weight:700; text-decoration:none; position:relative; z-index:1;
+    color:var(--on-accent); background:linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 70%, #7c3aed)); box-shadow:0 8px 20px -10px var(--accent); transition:transform .15s, box-shadow .15s; }
+  .plan-cta:hover { transform:translateY(-1px); box-shadow:0 12px 24px -10px var(--accent); }
+  .plan-cta span { transition:transform .15s; } .plan-cta:hover span { transform:translateX(3px); }
+  .plan-note { font-size:.8rem; color:var(--muted); text-align:center; margin:10px 0 0; }
+  @media (prefers-reduced-motion: reduce) { .plan-cta, .plan-cta span { transition:none; } }
   .price { font-size:1.2rem; margin:0 0 8px; }
   .price b { font-size:1.8rem; }
   .perks { padding-left:20px; margin:0; }
@@ -298,6 +316,30 @@ function plans(ctx) {
 const sel = (cond) => (cond ? " selected" : "");
 const chk = (cond) => (cond ? " checked" : "");
 
+// The plan card at the top of the manage page: where they stand, time left, and the pay button.
+export function membershipCard(ctx, sub, member, now = new Date()) {
+  const until = sub.paid_until ? new Date(sub.paid_until) : null;
+  const active = Boolean(until && until > now);
+  const daysLeft = active ? Math.ceil((until - now) / 86400000) : 0;
+  const date = until ? until.toLocaleDateString("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }) : "";
+  const [kind, badge] = !active ? ["off", "Not active"] : member ? ["member", "Member"] : ["trial", "Free trial"];
+  const headline = !active ? (until ? `Ended on ${date}` : "No jobs being sent")
+    : `${daysLeft} day${daysLeft === 1 ? "" : "s"} left`;
+  const sub2 = !active ? "Join to start getting matched jobs every morning again." : `Active until ${date}`;
+  // Bar: share of one paid period (or the trial) still left, so it visibly runs down.
+  const span = member ? Math.max(daysLeft, ctx.months * 30) : ctx.trialDays;
+  const pct = active ? Math.max(4, Math.min(100, Math.round((daysLeft / span) * 100))) : 0;
+  const cta = !active ? "Reactivate my alerts" : member ? "Add 3 more months" : "Become a member";
+  return `<section class="plan ${kind}">
+  <div class="plan-top"><span class="badge">${badge}</span><span class="plan-price">${esc(ctx.price)} <small>/ ${ctx.months} months</small></span></div>
+  <p class="plan-head">${esc(headline)}</p>
+  <p class="plan-sub">${esc(sub2)}</p>
+  ${active ? `<div class="meter" role="progressbar" aria-label="Time left" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><span style="width:${pct}%"></span></div>` : ""}
+  <a class="plan-cta" href="/pay/${esc(sub.token)}">${esc(cta)} <span aria-hidden="true">→</span></a>
+  <p class="plan-note">${member || active ? "Added on top of your current time · " : ""}One payment · No auto-renewal · Secure checkout by ${esc(ctx.provider)}</p>
+</section>`;
+}
+
 export function form(ctx, { sub = null, action, button, heading, lead, status = "", member = false, telegramLink = null,
   ref = "", inviteBox = "" }) {
   const onsite = sub && !sub.remote_only;
@@ -306,8 +348,8 @@ export function form(ctx, { sub = null, action, button, heading, lead, status = 
   const picked = words.map(listed).filter(Boolean);
   const other = words.filter((w) => !listed(w)).join(", ");
   // Home page: only the headline and a short form; everything else waits behind "See what you get".
-  const statusBox = sub && status ? `<p class="card status">${esc(status)}${
-    ctx.paidService ? ` <a href="/pay/${esc(sub.token)}">Pay ${esc(ctx.price)} for ${ctx.months} months</a>` : ""}</p>` : "";
+  const statusBox = !sub || !status ? "" : ctx.paidService ? membershipCard(ctx, sub, member)
+    : `<p class="card status">${esc(status)}</p>`;
   const telegramBox = !telegramLink ? "" : `<p class="card status">${sub.telegram_chat_id
     ? "Telegram alerts are on: new matches arrive there during the day. Send /stop to the bot to turn them off."
     : `Get new matches on Telegram during the day, before the morning email. <a href="${esc(telegramLink)}">Connect Telegram</a>`}</p>`;

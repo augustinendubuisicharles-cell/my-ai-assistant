@@ -7,6 +7,7 @@ import { execSync } from "node:child_process";
 import { createHash, createHmac } from "node:crypto";
 import { PGlite } from "@electric-sql/pglite";
 import * as admin from "../src/admin.js";
+import * as views from "../src/views.js";
 import worker, { handle } from "../src/index.js";
 import COUNTRIES from "../src/countries.js";
 
@@ -207,7 +208,23 @@ test("trial then pay with Credo -> 90 days added on top, counted once", async ()
 
   const manage = await (await call(`/manage/${token}`)).text();
   assert.match(manage, /Active until/);
-  assert.match(manage, /Pay ₦5,000 for 3 months/);
+  assert.match(manage, /class="plan member"/);
+  assert.match(manage, /9\d days left/);
+  assert.match(manage, new RegExp(`href="/pay/${token}">Add 3 more months`));
+});
+
+test("the plan card shows trial, member and ended states", () => {
+  const ctx = { price: "₦5,000", months: 3, trialDays: 7, provider: "Paystack" };
+  const now = new Date("2026-10-14T12:00:00Z");
+  const trial = views.membershipCard(ctx, { token: "t", paid_until: "2026-10-17T12:00:00Z" }, false, now);
+  assert.match(trial, /Free trial/);
+  assert.match(trial, /3 days left/);
+  assert.match(trial, /Become a member/);
+  const ended = views.membershipCard(ctx, { token: "t", paid_until: "2026-10-01T00:00:00Z" }, false, now);
+  assert.match(ended, /Not active/);
+  assert.match(ended, /Ended on 1 Oct 2026/);
+  assert.match(ended, /Reactivate my alerts/);
+  assert.ok(!ended.includes("progressbar"));
 });
 
 test("forged or unknown payments don't count", async () => {
