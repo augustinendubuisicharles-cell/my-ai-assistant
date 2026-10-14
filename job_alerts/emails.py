@@ -1,51 +1,146 @@
-"""The emails the service sends: sign-up confirmation, manage link, renewal reminder and the daily digest."""
+"""The emails the service sends: sign-up confirmation, manage link, renewal reminder and the daily digest.
+
+Every email is a branded card (logo header, big button, footer) built with tables and inline
+styles, which is what Gmail, Outlook and phone mail apps reliably display. Each one also has a
+plain-text version. Keep the look in step with job_alerts_worker/src/mail.js.
+"""
 from html import escape
 
 FOOTER = "Always read the full listing before applying, and never pay anyone to apply for a job."
+BLUE, INK, MUTED, LINE, BG, GOLD, GREEN = "#2457d6", "#1d2433", "#5b6475", "#e3e7ee", "#f3f5f9", "#ffc75a", "#127a3e"
+FONT = "font-family:Inter,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
+
+
+def _a(url: str) -> str:
+    return escape(url, quote=True)
+
+
+def button(url: str, label: str, color: str = BLUE) -> str:
+    return (f'<table role="presentation" cellpadding="0" cellspacing="0" style="margin:22px 0 6px"><tr>'
+            f'<td style="background:{color};border-radius:10px"><a href="{_a(url)}" style="display:inline-block;'
+            f'padding:14px 28px;{FONT};font-size:16px;font-weight:700;color:#fff;text-decoration:none">{escape(label)}</a>'
+            f"</td></tr></table>")
+
+
+def layout(base_url: str, preheader: str, hero: str, body: str, footer: str = "") -> str:
+    """hero: big headline area on the blue band; body: the white card's contents."""
+    return f"""<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<meta name="color-scheme" content="light"></head>
+<body style="margin:0;padding:0;background:{BG}">
+<div style="display:none;max-height:0;overflow:hidden;opacity:0">{escape(preheader)}</div>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:{BG}"><tr><td align="center" style="padding:24px 12px">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px">
+<tr><td style="background:{BLUE};background-image:linear-gradient(135deg,#0f1f4d,{BLUE});border-radius:16px 16px 0 0;padding:26px 28px 30px">
+  <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+    <td><img src="{_a(base_url)}/apple-touch-icon.png" width="40" height="40" alt="" style="display:block;border-radius:10px"></td>
+    <td style="padding-left:12px;{FONT};font-size:22px;font-weight:800;color:#fff">Job<span style="color:{GOLD}">Alert</span></td>
+  </tr></table>
+  <div style="{FONT};color:#fff;margin-top:22px">{hero}</div>
+</td></tr>
+<tr><td style="background:#fff;border-radius:0 0 16px 16px;padding:26px 28px;{FONT};font-size:15px;line-height:1.55;color:{INK}">
+{body}
+</td></tr>
+<tr><td style="padding:18px 8px;{FONT};font-size:12px;line-height:1.5;color:{MUTED};text-align:center">
+{footer or 'You get this because you signed up at <a href="' + _a(base_url) + '" style="color:' + MUTED + '">' + escape(base_url.split("//")[-1]) + '</a>.'}
+</td></tr>
+</table></td></tr></table></body></html>"""
+
+
+def _hero(title: str, sub: str = "") -> str:
+    return (f'<div style="font-size:26px;line-height:1.25;font-weight:800">{title}</div>'
+            + (f'<div style="font-size:15px;opacity:.88;margin-top:8px">{sub}</div>' if sub else ""))
+
+
+def _steps(steps: list[tuple[str, str, bool]]) -> str:
+    """A small vertical timeline: (title, detail, done)."""
+    rows = "".join(
+        f'<tr><td valign="top" style="padding:0 12px 14px 0"><div style="width:28px;height:28px;border-radius:14px;'
+        f'background:{GREEN if done else "#eef3ff"};color:{"#fff" if done else BLUE};text-align:center;line-height:28px;'
+        f'font-weight:800;font-size:14px">{"&#10003;" if done else i}</div></td>'
+        f'<td valign="top" style="padding-bottom:14px"><b>{escape(t)}</b><br><span style="color:{MUTED};font-size:14px">{escape(d)}</span></td></tr>'
+        for i, (t, d, done) in enumerate(steps, 1))
+    return f'<table role="presentation" cellpadding="0" cellspacing="0" style="margin:18px 0 4px">{rows}</table>'
 
 
 def confirmation(base_url: str, token: str) -> tuple[str, str, str]:
     link = f"{base_url}/confirm/{token}"
-    text = f"Please confirm your job alerts by opening this link:\n{link}\n\nIf you didn't sign up, ignore this email."
-    html = (f"<p>Please confirm your job alerts:</p><p><a href=\"{escape(link, quote=True)}\"><b>Confirm my job alerts</b></a></p>"
-            "<p style=\"color:#666\">If you didn't sign up, ignore this email and nothing more will be sent.</p>")
-    return "Confirm your job alerts", text, html
+    text = (f"One click and your jobs are on their way.\n\nConfirm your job alerts here:\n{link}\n\n"
+            "If you didn't sign up, ignore this email and nothing more will be sent.")
+    body = ("<p style=\"margin:0\">Tap the button to confirm your email. That's the last step. "
+            "We'll start searching straight away.</p>" + button(link, "Confirm my job alerts") +
+            _steps([("Confirm your email", "One tap, right now", False),
+                    ("We search the job boards", "Remote and local jobs, checked for scams and dead links", False),
+                    ("Your matches arrive", "Every morning, only jobs that fit you, never repeated", False)]) +
+            f'<p style="color:{MUTED};font-size:13px;margin:6px 0 0">If you didn\'t sign up, ignore this email and nothing more will be sent.</p>')
+    html = layout(base_url, "One click and your job alerts start.", _hero("Your jobs are on their way 🚀", "Just confirm it's you."), body)
+    return "Confirm your job alerts 🚀", text, html
 
 
 def manage_link(base_url: str, token: str) -> tuple[str, str, str]:
     link = f"{base_url}/manage/{token}"
     text = f"You're already signed up. To change your job alerts, open:\n{link}\n\nIf this wasn't you, ignore this email."
-    html = (f"<p>You're already signed up. To change your job alerts:</p><p><a href=\"{escape(link, quote=True)}\">"
-            "<b>Change my job alerts</b></a></p><p style=\"color:#666\">If this wasn't you, ignore this email.</p>")
-    return "Change your job alerts", text, html
+    body = ("<p style=\"margin:0\">You're already signed up, so we didn't change anything. "
+            "Use this button to change your job titles, location or level.</p>" + button(link, "Change my job alerts") +
+            f'<p style="color:{MUTED};font-size:13px;margin:6px 0 0">If this wasn\'t you, ignore this email.</p>')
+    return "Change your job alerts", text, layout(base_url, "Your link to change your job alerts.", _hero("You're already in ✅"), body)
 
 
 def renewal_reminder(base_url: str, token: str, paid_until, price: str, can_pay: bool = True) -> tuple[str, str, str]:
     when = f"{paid_until:%d %b %Y}"
     if not can_pay:  # free trial while paid plans aren't open yet
         text = f"Your free job alerts end on {when}. Paid plans open soon, and we'll email you when you can continue."
-        return f"Your free job alerts end on {when}", text, f"<p>{escape(text)}</p>"
+        body = (f"<p style=\"margin:0\">Your free trial ends on <b>{when}</b>. Paid plans open soon, and we'll email you "
+                "as soon as you can continue. Until then, keep an eye out for your morning matches.</p>")
+        return (f"Your free job alerts end on {when}", text,
+                layout(base_url, text, _hero("Your trial ends soon ⏳", f"Last day: {when}"), body))
     link = f"{base_url}/pay/{token}"
     text = (f"Your job alerts end on {when}. To keep getting them, renew for {price} here:\n{link}\n\n"
             "Nothing renews automatically, so if you do nothing the emails simply stop.")
-    html = (f"<p>Your job alerts end on <b>{when}</b>.</p><p><a href=\"{escape(link, quote=True)}\"><b>Renew for {escape(price)}</b></a></p>"
-            "<p style=\"color:#666\">Nothing renews automatically, so if you do nothing the emails simply stop.</p>")
-    return f"Your job alerts end on {when}", text, html
+    body = (f"<p style=\"margin:0\">Your job alerts stop on <b>{when}</b>. Keep the matches coming for "
+            f"<b>{escape(price)}</b>: one payment, no subscription.</p>" + button(link, f"Keep my alerts for {price}") +
+            f'<p style="color:{MUTED};font-size:13px;margin:6px 0 0">Nothing renews automatically, so if you do nothing the emails simply stop.</p>')
+    return f"Your job alerts end on {when}", text, layout(base_url, text, _hero("Don't miss your next job ⏳", f"Your alerts end on {when}"), body)
 
 
-def digest(jobs: list[dict], today, base_url: str, token: str) -> tuple[str, str, str]:
-    manage, unsub = f"{base_url}/manage/{token}", f"{base_url}/unsubscribe/{token}"
+def _chip(label: str) -> str:
+    good = label.startswith("open to ")
+    color, bg = (GREEN, "#e7f6ed") if good else (MUTED, "#f1f3f7")
+    return (f'<span style="display:inline-block;margin:6px 6px 0 0;padding:3px 10px;border-radius:20px;background:{bg};'
+            f'color:{color};font-size:12px;font-weight:600">{"✓ " if good else ""}{escape(label)}</span>')
+
+
+def _job_card(j: dict) -> str:
+    company = f'<div style="color:{MUTED};font-size:14px;margin-top:2px">{escape(j["company"])} · via {escape(j["source"])}</div>' \
+        if j["company"] else f'<div style="color:{MUTED};font-size:14px;margin-top:2px">via {escape(j["source"])}</div>'
+    return (f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 14px;border:1px solid {LINE};'
+            f'border-radius:12px"><tr><td style="padding:16px 18px">'
+            f'<a href="{_a(j["url"])}" style="color:{INK};text-decoration:none;font-size:17px;font-weight:700">{escape(j["title"])}</a>'
+            f'{company}<div>{"".join(_chip(m) for m in j["matched"])}</div>'
+            f'<div style="margin-top:12px"><a href="{_a(j["url"])}" style="color:{BLUE};font-weight:700;text-decoration:none">'
+            f"View and apply &rarr;</a></div></td></tr></table>")
+
+
+def digest(jobs: list[dict], today, base_url: str, token: str, upgrade: str = "") -> tuple[str, str, str]:
+    """`upgrade`: optional line telling trial users what paying adds."""
+    manage, unsub, pay = f"{base_url}/manage/{token}", f"{base_url}/unsubscribe/{token}", f"{base_url}/pay/{token}"
+    n = len(jobs)
     lines = [f"Your job matches -- {today:%a %d %b}", ""]
-    items = []
     for i, j in enumerate(jobs, 1):
         company = f" at {j['company']}" if j["company"] else ""
         lines += [f"{i}. {j['title']}{company}", f"   {', '.join(j['matched'])} (via {j['source']})", f"   {j['url']}", ""]
-        items.append(
-            f'<li style="margin-bottom:14px"><a href="{escape(j["url"], quote=True)}"><b>{escape(j["title"])}</b></a>'
-            f"{' at <b>' + escape(j['company']) + '</b>' if j['company'] else ''}"
-            f"<br><i>{escape(', '.join(j['matched']))}</i> (via {escape(j['source'])})</li>")
+    if upgrade:
+        lines += [f"{upgrade} {pay}", ""]
     lines += [FOOTER, "", f"Change what you get: {manage}", f"Unsubscribe: {unsub}"]
-    html = (f"<h2>Your job matches &mdash; {today:%a %d %b}</h2><ol>{''.join(items)}</ol><p><i>{FOOTER}</i></p>"
-            f'<p style="color:#666;font-size:13px"><a href="{escape(manage, quote=True)}">Change what you get</a> &middot; '
-            f'<a href="{escape(unsub, quote=True)}">Unsubscribe</a></p>')
-    return f"{len(jobs)} new job match{'es' if len(jobs) != 1 else ''} for you -- {today:%d %b}", "\n".join(lines), html
+
+    extra = (f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:6px 0 16px"><tr>'
+             f'<td style="background:#eef3ff;border-radius:12px;padding:16px 18px"><b>⚡ Want more?</b> {escape(upgrade)}'
+             f'<div style="margin-top:10px"><a href="{_a(pay)}" style="color:{BLUE};font-weight:700;text-decoration:none">'
+             f"Upgrade &rarr;</a></div></td></tr></table>") if upgrade else ""
+    tip = (f'<p style="background:#fff8e6;border-radius:12px;padding:14px 18px;margin:6px 0 0;font-size:14px">'
+           f"💡 <b>Tip:</b> apply within a day or two. Early applicants are far more likely to hear back. {escape(FOOTER)}</p>")
+    body = "".join(_job_card(j) for j in jobs) + extra + tip
+    footer = (f'<a href="{_a(manage)}" style="color:{MUTED}">Change what you get</a> &middot; '
+              f'<a href="{_a(unsub)}" style="color:{MUTED}">Unsubscribe</a>')
+    hero = _hero(f"{n} new job{'s' if n != 1 else ''} for you ☀️", f"{today:%A %d %B} · picked for you, checked for scams")
+    html = layout(base_url, f"{jobs[0]['title']} and more, picked for you today." if jobs else "", hero, body, footer)
+    return f"☀️ {n} new job match{'es' if n != 1 else ''} for you -- {today:%d %b}", "\n".join(lines), html

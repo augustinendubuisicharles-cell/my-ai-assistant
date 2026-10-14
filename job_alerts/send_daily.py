@@ -20,6 +20,7 @@ def main() -> None:
     subs = db.confirmed_subscribers()
     require_payment = os.environ.get("REQUIRE_PAYMENT", "1") != "0"
     print(f"{len(subs)} confirmed subscriber(s); payment {'required' if require_payment else 'not required'}.")
+    paid_ids = db.paid_subscriber_ids()
     sent = failed = 0
     for sub in subs:
         if require_payment:
@@ -29,12 +30,17 @@ def main() -> None:
             if not db.is_paid(sub):
                 continue
         try:
-            jobs = find_jobs(sub["keywords"], sub["country"], sub["remote_only"], sub["level"], db.already_sent(sub["id"]),
-                             city=sub.get("city") or "")
+            member = db.is_member(sub, paid_ids)
+            n, titles = payments.limits(member)
+            jobs = find_jobs(first_titles(sub["keywords"], titles), sub["country"], sub["remote_only"], sub["level"],
+                             db.already_sent(sub["id"]), n=n, city=sub.get("city") or "")
             if not jobs:
                 print(f"- subscriber {sub['id']}: no new matches, nothing sent")
                 continue
-            subject, text, html = emails.digest(jobs, datetime.now(timezone.utc), base_url, sub["token"])
+            upgrade = "" if member or not payments.enabled() else (
+                f"Members get up to {payments.PAID_LIMITS[0]} jobs a day across all {payments.PAID_LIMITS[1]} of your job titles, "
+                "plus Telegram alerts as soon as jobs appear.")
+            subject, text, html = emails.digest(jobs, datetime.now(timezone.utc), base_url, sub["token"], upgrade)
             mailer.send(sub["email"], subject, text, html, unsubscribe_url=f"{base_url}/unsubscribe/{sub['token']}")
             db.record_sent(sub["id"], [job_key(j) for j in jobs])
             sent += 1
@@ -46,6 +52,10 @@ def main() -> None:
     print(f"Done: {sent} email(s) sent, {failed} failed.")
     if failed and not sent:
         sys.exit(1)
+
+
+def first_titles(keywords_csv: str, count: int) -> str:
+    return ", ".join([k.strip() for k in keywords_csv.split(",") if k.strip()][:count])
 
 
 def remind(sub: dict, base_url: str) -> None:

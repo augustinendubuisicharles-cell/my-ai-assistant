@@ -24,6 +24,7 @@ subscribers = Table(
     Column("last_sent_at", DateTime(timezone=True)),
     Column("paid_until", DateTime(timezone=True)),      # alerts are sent while this is in the future
     Column("reminded_for", DateTime(timezone=True)),    # paid_until we last sent a renewal reminder for
+    Column("telegram_chat_id", String(32)),              # set when a paid member connects Telegram
 )
 
 payments = Table(
@@ -62,7 +63,7 @@ def init_db() -> None:
     # Columns added after the first release (create_all doesn't alter existing tables).
     have = {c["name"] for c in inspect(engine).get_columns("subscribers")}
     added = {"city": "VARCHAR(120) NOT NULL DEFAULT ''", "paid_until": "TIMESTAMP WITH TIME ZONE",
-             "reminded_for": "TIMESTAMP WITH TIME ZONE"}
+             "reminded_for": "TIMESTAMP WITH TIME ZONE", "telegram_chat_id": "VARCHAR(32)"}
     with engine.begin() as conn:
         for name, sql_type in added.items():
             if name not in have:
@@ -164,6 +165,17 @@ def record_payment(reference: str, subscriber_id: int, amount_ngn: int, period_d
             conn.execute(update(subscribers).where(subscribers.c.id == sub["id"]).values(
                 paid_until=start + timedelta(days=period_days), confirmed=True))
         return dict(conn.execute(select(subscribers).where(subscribers.c.id == sub["id"])).mappings().first())
+
+
+def paid_subscriber_ids() -> set[int]:
+    """Subscribers who have paid at least once (the trial alone doesn't count)."""
+    with engine.begin() as conn:
+        return {r[0] for r in conn.execute(select(payments.c.subscriber_id).where(payments.c.subscriber_id.is_not(None)).distinct())}
+
+
+def is_member(sub: dict, paid_ids: set[int]) -> bool:
+    """A paying member with time left: gets the bigger limits and Telegram alerts."""
+    return sub["id"] in paid_ids and is_paid(sub)
 
 
 def start_trial(subscriber_id: int, days: int) -> dict | None:

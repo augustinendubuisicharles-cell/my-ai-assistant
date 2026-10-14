@@ -79,13 +79,26 @@ jobs:
           CREDO_LIVE: ${{ secrets.CREDO_LIVE }}
           CREDO_BUSINESS_CODE: ${{ secrets.CREDO_BUSINESS_CODE }}
           PAYSTACK_SECRET_KEY: ${{ secrets.PAYSTACK_SECRET_KEY }}
+          TELEGRAM_TOKEN: ${{ secrets.JOB_ALERTS_TELEGRAM_TOKEN }}
         run: |
           node -e '
             const names = ["DATABASE_URL", "BREVO_API_KEY", "FROM_EMAIL", "CONTACT_EMAIL", "CREDO_PUBLIC_KEY",
-                           "CREDO_SECRET_KEY", "CREDO_LIVE", "CREDO_BUSINESS_CODE", "PAYSTACK_SECRET_KEY"];
+                           "CREDO_SECRET_KEY", "CREDO_LIVE", "CREDO_BUSINESS_CODE", "PAYSTACK_SECRET_KEY", "TELEGRAM_TOKEN"];
             const out = Object.fromEntries(names.filter((n) => (process.env[n] || "").trim()).map((n) => [n, process.env[n].trim()]));
             console.error("Setting: " + Object.keys(out).join(", "));
             require("fs").writeFileSync("/tmp/secrets.json", JSON.stringify(out));
           '
           npx wrangler secret bulk /tmp/secrets.json
           rm -f /tmp/secrets.json
+      - if: steps.check.outputs.ready == 'true'
+        name: Point the Telegram bot at the site (only when JOB_ALERTS_TELEGRAM_TOKEN and JOB_ALERTS_BASE_URL are set)
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.JOB_ALERTS_TELEGRAM_TOKEN }}
+          BASE_URL: ${{ secrets.JOB_ALERTS_BASE_URL }}
+        run: |
+          if [ -z "$TELEGRAM_TOKEN" ] || [ -z "$BASE_URL" ]; then echo "Telegram alerts not set up -- skipping."; exit 0; fi
+          # Same secret the Worker derives in src/telegram.js
+          SECRET=$(printf 'jobalert-webhook:%s' "$TELEGRAM_TOKEN" | sha256sum | cut -c1-48)
+          curl -sS --fail-with-body "https://api.telegram.org/bot${TELEGRAM_TOKEN}/setWebhook" \
+            --data-urlencode "url=${BASE_URL%/}/telegram/webhook" --data-urlencode "secret_token=${SECRET}" \
+            --data-urlencode 'allowed_updates=["message"]' | grep -o '"ok":true'
