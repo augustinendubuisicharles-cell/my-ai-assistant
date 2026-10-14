@@ -1,6 +1,7 @@
 """Finds jobs for one subscriber's preferences and ranks them.
 
-Remote jobs (no keys needed): Himalayas, Jobicy, Remotive.
+Remote jobs (no keys needed): Himalayas, Jobicy, Remotive, We Work Remotely, RemoteOK,
+Working Nomads and Arbeitnow.
 On-site/hybrid jobs (optional keys): Adzuna (19 countries, free key at
 developer.adzuna.com: ADZUNA_APP_ID + ADZUNA_APP_KEY) and Reed (UK, free key:
 REED_API_KEY). Without those keys, on-site coverage is thin, so the form
@@ -13,8 +14,10 @@ expiry date, and its link doesn't come back "not found".
 import os
 import re
 import time
+import xml.etree.ElementTree as ET
 from collections import Counter
 from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 from functools import lru_cache
 from html import unescape
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
@@ -65,17 +68,65 @@ def _get(url: str, **params):
     return r.json()
 
 
-def _raw(title, company, location, url, source, posted, desc, remote, level="", pay="", job_type="") -> dict:
+def _raw(title, company, location, url, source, posted, desc, remote, level="", pay="", job_type="",
+         pay_month=None) -> dict:
     return {"title": (title or "").strip(), "company": (company or "").strip(), "location": location or "",
             "url": url or "", "source": source, "posted": posted, "desc": desc or "", "remote": remote,
-            "level": level or "", "pay": pay or "", "job_type": job_type or ""}
+            "level": level or "", "pay": pay or "", "job_type": job_type or "", "pay_month": pay_month}
+
+
+def _num(x) -> float:
+    try:
+        return float(x or 0)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def _pay(lo, hi, currency, period) -> str:
+    lo, hi = _num(lo), _num(hi)
     if not (lo or hi) or not currency:
         return ""
     rng = f"{lo:,.0f}-{hi:,.0f}" if lo and hi and lo != hi else f"{(lo or hi):,.0f}"
     return f"{currency} {rng}/{(period or '').replace('ly', '').replace('annual', 'year') or 'period'}"
+
+
+PER_MONTH = {"year": 1 / 12, "annual": 1 / 12, "month": 1, "week": 52 / 12, "day": 21.7, "hour": 160}
+
+
+def _monthly(lo, hi, currency, period) -> tuple[float, str] | None:
+    """(pay per month, currency), from the middle of the range, for showing it in naira."""
+    lo, hi = _num(lo), _num(hi)
+    amount = (lo + hi) / 2 if lo and hi else (lo or hi)
+    if not amount or not currency:
+        return None
+    period = (period or "").lower()
+    factor = next((f for p, f in PER_MONTH.items() if p in period), 1 / 12 if amount > 20000 else 1)
+    return amount * factor, currency.upper()
+
+
+@lru_cache(maxsize=1)
+def _rates() -> dict:
+    """Exchange rates against USD (free, no key). Empty if unavailable: then naira just isn't shown."""
+    try:
+        return _get("https://open.er-api.com/v6/latest/USD").get("rates") or {}
+    except Exception as e:
+        print(f"[rates] skipped: {e}")
+        return {}
+
+
+def in_naira(pay_month: tuple[float, str] | None) -> str:
+    """"≈ ₦2.3m a month", or "" when the amount or the rate is unknown."""
+    if not pay_month:
+        return ""
+    amount, currency = pay_month
+    rates = _rates()
+    if currency == "NGN" or not rates.get("NGN") or not rates.get(currency):
+        return ""
+    ngn = amount * rates["NGN"] / rates[currency]
+    if ngn < 1000:
+        return ""
+    short = f"{ngn / 1e6:.1f}m".replace(".0m", "m") if ngn >= 1e6 else f"{ngn / 1e3:.0f}k"
+    return f"≈ ₦{short} a month"
 
 
 def _in_country(place: str | None, country: str) -> str:
@@ -102,7 +153,8 @@ def from_himalayas(keyword: str, country: str) -> tuple:
                 datetime.fromtimestamp(j["pubDate"], timezone.utc) if j.get("pubDate") else None,
                 _clean(j.get("description") or j.get("excerpt")), True, ", ".join(j.get("seniority") or []),
                 _pay(j.get("minSalary"), j.get("maxSalary"), j.get("currency"), j.get("salaryPeriod")),
-                j.get("employmentType")))
+                j.get("employmentType"),
+                _monthly(j.get("minSalary"), j.get("maxSalary"), j.get("currency"), j.get("salaryPeriod"))))
         time.sleep(1)
     except Exception as e:
         print(f"[Himalayas:{keyword}] skipped: {e}")
@@ -119,26 +171,101 @@ def from_jobicy(keyword: str) -> tuple:
                 "Jobicy", datetime.fromisoformat(j["pubDate"]) if j.get("pubDate") else None,
                 _clean(j.get("jobExcerpt") or j.get("jobDescription")), True, j.get("jobLevel"),
                 _pay(j.get("salaryMin"), j.get("salaryMax"), j.get("salaryCurrency"), j.get("salaryPeriod")),
-                str(j.get("jobType") or "")))
+                str(j.get("jobType") or ""),
+                _monthly(j.get("salaryMin"), j.get("salaryMax"), j.get("salaryCurrency"), j.get("salaryPeriod"))))
         time.sleep(1)
     except Exception as e:
         print(f"[Jobicy:{keyword}] skipped: {e}")
     return tuple(out)
 
 
-@lru_cache(maxsize=None)
-def from_remotive(keyword: str) -> tuple:
+# Whole-feed sources: fetched once per run and matched against every subscriber's job titles.
+
+@lru_cache(maxsize=1)
+def from_remotive() -> tuple:
     out = []
     try:
-        for j in _get("https://remotive.com/api/remote-jobs", search=keyword, limit=100).get("jobs", []):
+        for j in _get("https://remotive.com/api/remote-jobs").get("jobs", []):
             posted = j.get("publication_date")
             out.append(_raw(
                 j.get("title"), j.get("company_name"), j.get("candidate_required_location"), j.get("url"), "Remotive",
                 datetime.fromisoformat(posted).replace(tzinfo=timezone.utc) if posted else None,
                 _clean(j.get("description")), True, pay=j.get("salary") or "", job_type=j.get("job_type") or ""))
     except Exception as e:
-        print(f"[Remotive:{keyword}] skipped: {e}")
+        print(f"[Remotive] skipped: {e}")
     return tuple(out)
+
+
+@lru_cache(maxsize=1)
+def from_weworkremotely() -> tuple:
+    out = []
+    try:
+        r = requests.get("https://weworkremotely.com/remote-jobs.rss", headers=HEADERS, timeout=TIMEOUT)
+        r.raise_for_status()
+        for item in ET.fromstring(r.content).iter("item"):
+            company, _, title = (item.findtext("title") or "").partition(": ")
+            if not title:
+                company, title = "", company
+            posted = item.findtext("pubDate")
+            out.append(_raw(
+                title, company, item.findtext("region") or "Anywhere", item.findtext("link"), "We Work Remotely",
+                parsedate_to_datetime(posted) if posted else None, _clean(item.findtext("description")), True,
+                job_type=item.findtext("type") or ""))
+    except Exception as e:
+        print(f"[We Work Remotely] skipped: {e}")
+    return tuple(out)
+
+
+@lru_cache(maxsize=1)
+def from_remoteok() -> tuple:
+    out = []
+    try:
+        for j in _get("https://remoteok.com/api"):
+            if not isinstance(j, dict) or not j.get("position"):
+                continue  # the first entry is RemoteOK's terms notice
+            lo, hi = j.get("salary_min"), j.get("salary_max")
+            out.append(_raw(
+                j.get("position"), j.get("company"), j.get("location") or "Worldwide", j.get("url") or j.get("apply_url"),
+                "RemoteOK", datetime.fromisoformat(j["date"]) if j.get("date") else None, _clean(j.get("description")),
+                True, pay=_pay(lo, hi, "USD", "year"), pay_month=_monthly(lo, hi, "USD", "year")))
+    except Exception as e:
+        print(f"[RemoteOK] skipped: {e}")
+    return tuple(out)
+
+
+@lru_cache(maxsize=1)
+def from_workingnomads() -> tuple:
+    out = []
+    try:
+        for j in _get("https://www.workingnomads.com/api/exposed_jobs/"):
+            posted = j.get("pub_date")
+            out.append(_raw(
+                j.get("title"), j.get("company_name"), j.get("location") or "Anywhere", j.get("url"), "Working Nomads",
+                datetime.fromisoformat(posted) if posted else None, _clean(j.get("description")), True))
+    except Exception as e:
+        print(f"[Working Nomads] skipped: {e}")
+    return tuple(out)
+
+
+@lru_cache(maxsize=1)
+def from_arbeitnow() -> tuple:
+    """Mostly Europe; only its remote jobs are used."""
+    out = []
+    try:
+        for j in _get("https://www.arbeitnow.com/api/job-board-api").get("data", []):
+            if not j.get("remote"):
+                continue
+            out.append(_raw(
+                j.get("title"), j.get("company_name"), j.get("location") or "", j.get("url"), "Arbeitnow",
+                datetime.fromtimestamp(j["created_at"], timezone.utc) if j.get("created_at") else None,
+                _clean(j.get("description")), True, job_type=", ".join(j.get("job_types") or [])))
+    except Exception as e:
+        print(f"[Arbeitnow] skipped: {e}")
+    return tuple(out)
+
+
+def remote_feeds() -> tuple:
+    return from_remotive() + from_weworkremotely() + from_remoteok() + from_workingnomads() + from_arbeitnow()
 
 
 @lru_cache(maxsize=None)
@@ -185,13 +312,67 @@ def from_reed(keyword: str, city: str = "") -> tuple:
                 j.get("jobTitle"), j.get("employerName"), _in_country(j.get("locationName"), "United Kingdom"), j.get("jobUrl"),
                 "Reed", datetime.strptime(posted, "%d/%m/%Y").replace(tzinfo=timezone.utc) if posted else None,
                 desc, any(w in f"{j.get('jobTitle', '')} {desc}".lower() for w in REMOTE_WORDS),
-                pay=f"GBP {j['minimumSalary']:,.0f}+" if j.get("minimumSalary") else ""))
+                pay=f"GBP {j['minimumSalary']:,.0f}+" if j.get("minimumSalary") else "",
+                pay_month=_monthly(j.get("minimumSalary"), j.get("maximumSalary"), "GBP", "year")))
     except Exception as e:
         print(f"[Reed:{keyword}] skipped: {e}")
     return tuple(out)
 
 
 # --- matching ---
+
+# Job titles that mean the same thing. Searching for any one also finds the others.
+RELATED = [
+    ["public relations", "pr", "communications", "comms", "media relations", "press officer", "publicist"],
+    ["virtual assistant", "va", "executive assistant", "personal assistant", "administrative assistant", "admin assistant"],
+    ["customer support", "customer service", "customer success", "customer care", "support agent", "support specialist"],
+    ["social media", "social media manager", "community manager", "social media marketing"],
+    ["content writer", "copywriter", "writer", "content creator", "content marketing", "blog writer"],
+    ["data analyst", "data analytics", "business intelligence", "bi analyst", "reporting analyst"],
+    ["software engineer", "software developer", "full stack", "fullstack", "backend developer", "backend engineer",
+     "frontend developer", "frontend engineer", "web developer"],
+    ["graphic designer", "visual designer", "brand designer"],
+    ["ux designer", "ui designer", "ui/ux", "ux/ui", "product designer"],
+    ["accountant", "bookkeeper", "accounting", "accounts assistant"],
+    ["project manager", "project coordinator", "program coordinator", "delivery manager"],
+    ["digital marketing", "marketing", "growth marketing", "performance marketing", "marketing specialist"],
+    ["sales", "sales representative", "business development", "sdr", "bdr", "account executive"],
+    ["hr", "human resources", "recruiter", "talent acquisition", "people operations"],
+    ["product manager", "product owner"],
+    ["teacher", "tutor", "online tutor", "english teacher", "esl teacher"],
+    ["data entry", "data entry clerk", "data entry specialist"],
+    ["video editor", "video producer", "motion designer"],
+    ["seo", "seo specialist", "seo manager"],
+    ["qa", "qa tester", "quality assurance", "software tester", "test engineer"],
+    ["transcription", "transcriber", "transcriptionist"],
+]
+
+
+def variants(keyword: str) -> list[str]:
+    """The keyword itself first, then the titles related to it."""
+    k = keyword.strip().lower()
+    for group in RELATED:
+        if k in group:
+            return [k] + [g for g in group if g != k]
+    return [k]
+
+
+@lru_cache(maxsize=4096)
+def _title_re(phrase: str) -> re.Pattern:
+    # Whole words only, so "pr" doesn't match "product"; plurals allowed ("assistants").
+    return re.compile(rf"(?<![a-z0-9]){re.escape(phrase)}s?(?![a-z0-9])")
+
+
+def title_hit(title: str, keywords: list[str]) -> str | None:
+    """Which of the subscriber's keywords this job title matches, directly or through a related title."""
+    title = title.lower()
+    for k in keywords:
+        if _title_re(k).search(title):
+            return k
+    for k in keywords:
+        if any(_title_re(v).search(title) for v in variants(k)[1:]):
+            return k
+    return None
 
 def location_fits(job_location: str, country: str, remote: bool) -> bool:
     """Can someone in `country` take this job?"""
@@ -255,7 +436,7 @@ def score(job: dict, keywords: list[str], country: str, remote_only: bool, level
         return None
 
     title, text = job["title"].lower(), f"{job['title']} {job['desc']}".lower()
-    hit = next((k for k in keywords if k in title), None)
+    hit = title_hit(title, keywords)
     if not hit:
         return no("title doesn't match")
     if not job["url"] or not job["posted"]:
@@ -339,9 +520,9 @@ def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, ex
     """remote_only=True searches remote jobs. False means on-site/hybrid near `city` (via Adzuna/Reed),
     with remote jobs as a fallback."""
     keywords = [k.strip().lower() for k in keywords_csv.split(",") if k.strip()][:5]
-    pool = []
+    pool = list(remote_feeds())
     for k in keywords:
-        pool += from_himalayas(k, country) + from_jobicy(k) + from_remotive(k)
+        pool += from_himalayas(k, country) + from_jobicy(k)
         if not remote_only:
             pool += from_adzuna(k, country, city) + (from_reed(k, city) if country == "United Kingdom" else ())
 
@@ -354,8 +535,10 @@ def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, ex
         result = score(job, keywords, country, remote_only, level, city, why)
         if result:
             seen |= keys
-            hit = next(k for k in keywords if k in job["title"].lower())
-            ranked.append({**job, "score": result[0], "matched": result[1], "hit": hit})
+            matched = list(result[1])
+            if country == "Nigeria" and job["pay"] and (naira := in_naira(job.get("pay_month"))):
+                matched = [f"{m} ({naira})" if m == job["pay"] else m for m in matched]
+            ranked.append({**job, "score": result[0], "matched": matched, "hit": title_hit(job["title"], keywords)})
     ranked.sort(key=lambda j: j["score"], reverse=True)
     matched = len(ranked)
 

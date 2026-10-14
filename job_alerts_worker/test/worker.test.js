@@ -18,7 +18,7 @@ from job_alerts import db
 print(';'.join(str(CreateTable(t).compile(dialect=postgresql.dialect())) for t in db.metadata.sorted_tables) + ';')
 "`, { cwd: repo }).toString();
 
-let pg, q, sent, txs, env, tg, gh;
+let pg, q, sent, txs, env, tg, gh, ai;
 const BASE = "https://job-alerts.example.workers.dev";
 
 beforeEach(async () => {
@@ -29,6 +29,7 @@ beforeEach(async () => {
   txs = {};
   tg = [];
   gh = [];
+  ai = [];
   env = { BREVO_API_KEY: "brevo", FROM_EMAIL: "hi@jobs.test", CREDO_PUBLIC_KEY: "0PUBkey", CREDO_SECRET_KEY: "secret" };
   globalThis.fetch = fakeFetch;
 });
@@ -72,6 +73,16 @@ async function fakeFetch(url, init = {}) {
     assert.equal(init.headers.authorization, "Bearer GHTOKEN");
     gh.push(body);
     return new Response(null, { status: 204 });
+  }
+  if (u === "https://api.anthropic.com/v1/messages?beta=true" || u === "https://api.anthropic.com/v1/messages") {
+    ai.push(body);
+    return Response.json({ id: "msg_1", type: "message", role: "assistant", model: body.model, stop_reason: "end_turn",
+      content: [{ type: "text", text: "Dear Hiring Manager,\n\nI would love to join Acme." }],
+      usage: { input_tokens: 10, output_tokens: 10 } });
+  }
+  if (u === "https://jobs.example/pr-1") {
+    return new Response("<html><body><h1>PR Associate</h1><script>x()</script><p>Write press releases.</p></body></html>",
+      { headers: { "content-type": "text/html" } });
   }
   throw new Error(`unexpected fetch ${u}`);
 }
@@ -307,4 +318,60 @@ test("confirming starts the first job search once, and says jobs arrive in minut
   assert.deepEqual(gh, [{ ref: "main", inputs: { only_email: "new@example.com", first: "1" } }]);
   await call(`/confirm/${fresh}`); // clicking the link again doesn't search again
   assert.equal(gh.length, 1);
+});
+
+test("every 2 invited friends who confirm give the inviter a free month", async () => {
+  await signUp();
+  const ada = await subscriber();
+  await call(`/confirm/${ada.token}`);
+  const page = await (await call(`/manage/${ada.token}`)).text();
+  const code = page.match(/\?ref=(\w+)/)[1];
+  assert.match(page, /Invite 2 friends, get a month free/);
+  const before = new Date((await subscriber()).paid_until);
+
+  const friend = async (email) => {
+    assert.match(await (await call(`/?ref=${code}`)).text(), new RegExp(`name="ref" value="${code}"`));
+    await call("/subscribe", { method: "POST", form: { email, keywords: "pr", work_type: "remote", ref: code } });
+    const { token } = (await q("SELECT token FROM subscribers WHERE email = $1", [email]))[0];
+    await call(`/confirm/${token}`);
+    await call(`/confirm/${token}`); // a second click counts once
+  };
+  await friend("one@example.com");
+  assert.equal(new Date((await subscriber()).paid_until).getTime(), before.getTime());
+  sent.length = 0;
+  await friend("two@example.com");
+  const after = new Date((await q("SELECT paid_until FROM subscribers WHERE id = $1", [ada.id]))[0].paid_until);
+  assert.equal(Math.round((after - before) / 86400000), 30);
+  assert.ok(sent.some((m) => m.to[0].email === "ada@example.com" && /free month/.test(m.subject)));
+
+  // Re-subscribing an existing address through someone's link doesn't count.
+  await call("/subscribe", { method: "POST", form: { email: "Ada@Example.com", keywords: "pr", work_type: "remote", ref: code } });
+  assert.equal((await q("SELECT referred_by FROM subscribers WHERE id = $1", [ada.id]))[0].referred_by, null);
+});
+
+test("members get an AI cover letter from their CV; trial users are asked to join", async () => {
+  env.ANTHROPIC_API_KEY = "sk-test";
+  await signUp();
+  const { token } = await subscriber();
+  await call(`/confirm/${token}`);
+  const link = `/letter/${token}?t=PR%20Associate&c=Acme&u=${encodeURIComponent("https://jobs.example/pr-1")}`;
+  assert.match(await (await call(link)).text(), /Cover letters are for members/);
+
+  await call(`/pay/${token}`, { method: "POST" });
+  await call("/paid?transRef=vs_1");
+  const form = await (await call(link)).text();
+  assert.match(form, /PR Associate at Acme/);
+  assert.match(form, /name="cv"[^>]*required/);
+
+  const done = await (await call(link, { method: "POST", form: { cv: "Ada Obi. Comms officer at Lagos NGO, 2 years." } })).text();
+  assert.match(done, /Dear Hiring Manager/);
+  assert.match(done, /9 of 10 left today/);
+  assert.equal(ai[0].model, "claude-opus-5-5");
+  assert.match(ai[0].messages[0].content, /Comms officer at Lagos NGO/);
+  assert.match(ai[0].messages[0].content, /Write press releases\./);
+  assert.doesNotMatch(ai[0].messages[0].content, /x\(\)/);
+
+  // The CV is remembered: writing again needs no paste.
+  assert.match(await (await call(link, { method: "POST", form: {} })).text(), /8 of 10 left today/);
+  assert.equal(ai.length, 2);
 });

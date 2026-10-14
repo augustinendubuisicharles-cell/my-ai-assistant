@@ -16,7 +16,7 @@ const STYLE = `
   .card { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:20px; }
   label { display:block; font-weight:600; margin:16px 0 6px; }
   .hint { font-weight:400; color:var(--muted); font-size:.9rem; }
-  input[type=email], input[type=text], select { width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; background:var(--bg); color:var(--text); font-size:1rem; }
+  input[type=email], input[type=text], select, textarea { width:100%; padding:10px 12px; border:1px solid var(--border); border-radius:8px; background:var(--bg); color:var(--text); font-size:1rem; }
   .row { display:flex; gap:10px; align-items:center; margin-top:14px; }
   button { margin-top:22px; width:100%; padding:12px; border:0; border-radius:8px; background:var(--accent); color:var(--on-accent); font-size:1rem; font-weight:600; cursor:pointer; }
   .hp { position:absolute; left:-9999px; }
@@ -110,6 +110,10 @@ const STYLE = `
   details.info > summary { text-align:center; }
   details.info .why { margin-top:16px; }
   .free { text-align:center; margin:12px 0 0; font-size:.9rem; color:var(--muted); }
+  textarea { font:inherit; line-height:1.5; resize:vertical; }
+  .invite { margin-top:16px; }
+  .invite .bar { height:8px; border-radius:4px; background:var(--border); margin:10px 0 4px; overflow:hidden; }
+  .invite .bar i { display:block; height:100%; background:var(--ok); }
   .brand { display:inline-flex; align-items:center; gap:10px; margin:0 0 20px; text-decoration:none; color:var(--text); font-size:1.35rem; font-weight:800; letter-spacing:-.3px; }
   .brand b { color:var(--accent); }
   .brand img { border-radius:9px; }
@@ -184,8 +188,18 @@ const steps = (list) => `<ol class="steps">${list.map(([state, title, detail], i
   `<li class="${state}"><span class="dot">${state === "done" ? "&#10003;" : i + 1}</span><b>${esc(title)}</b><span>${esc(detail)}</span></li>`).join("")}</ol>`;
 
 // "You're in": shown after confirming an email or paying.
-export function welcome(ctx, { title = "You're in! 🎉", until, trial = true, sub, soon = false }) {
-  const share = `I get job matches in my inbox every morning from JobAlert, checked for scams. ${trial ? `Free for ${ctx.trialDays} days: ` : ""}${ctx.baseUrl}`;
+// "Invite 2 friends, get a month free": the WhatsApp share carries their invite link.
+export function invite(ctx, { refLink, joined = 0, perReward = 2 }) {
+  const share = `I get remote jobs that hire Nigerians in my inbox every morning, checked for scams. Free for ${ctx.trialDays} days: ${refLink}`;
+  const n = joined % perReward;
+  return `<div class="card invite"><b>🎁 Invite ${perReward} friends, get a month free</b>
+<div class="bar"><i style="width:${Math.round((n / perReward) * 100)}%"></i></div>
+<p class="small" style="margin:0">${n} of ${perReward} friends joined${joined >= perReward ? ` &middot; ${Math.floor(joined / perReward)} free month${joined >= 2 * perReward ? "s" : ""} earned` : ""}</p>
+<div class="actions"><a class="btn wa" href="https://wa.me/?text=${encodeURIComponent(share)}">Invite on WhatsApp</a></div>
+<p class="small" style="margin:10px 0 0;overflow-wrap:anywhere">Or share your link: <a href="${esc(refLink)}">${esc(refLink)}</a></p></div>`;
+}
+
+export function welcome(ctx, { title = "You're in! 🎉", until, trial = true, sub, soon = false, refLink, joined = 0 }) {
   return page(ctx, `<div class="hero">${ART_ROCKET}<h1>${esc(title)}</h1><p>Your jobs are on their way.</p>
 <span class="pill">${trial ? "Free trial" : "Active"} until ${esc(until)}</span></div>
 <div class="card">${steps([
@@ -193,10 +207,8 @@ export function welcome(ctx, { title = "You're in! 🎉", until, trial = true, s
     ["now", "Searching for your jobs", "Remote and local job boards, checked for scams and dead links"],
     ["", "First matches in your inbox", soon ? "In a few minutes, then every morning" : "Tomorrow morning, and every morning after"],
   ])}
-<div class="actions">
-  <a class="btn wa" href="https://wa.me/?text=${encodeURIComponent(share)}">Tell a friend on WhatsApp</a>
-  <a class="btn ghost" href="/manage/${esc(sub.token)}">Change my preferences</a>
-</div></div>
+<div class="actions"><a class="btn ghost" href="/manage/${esc(sub.token)}">Change my preferences</a></div></div>
+${invite(ctx, { refLink, joined })}
 ${ctx.fromEmail ? `<p class="note">📌 Add <b>${esc(ctx.fromEmail)}</b> to your contacts so your jobs don't land in spam.</p>` : ""}`);
 }
 
@@ -262,6 +274,7 @@ function plans(ctx) {
   ${li("Up to <b>10 jobs</b> every morning")}
   ${li("Searches all <b>5 job titles</b>")}
   ${li("<b>Telegram alerts</b> 4 times a day, so you apply first")}
+  ${li("<b>AI cover letter</b> for any job in one click")}
   ${li("Everything in the free trial")}
   ${li("No auto-renewal; we remind you before it ends")}
   ${li("Full refund within 7 days if it's not for you")}
@@ -271,7 +284,8 @@ function plans(ctx) {
 const sel = (cond) => (cond ? " selected" : "");
 const chk = (cond) => (cond ? " checked" : "");
 
-export function form(ctx, { sub = null, action, button, heading, lead, stats = {}, status = "", member = false, telegramLink = null }) {
+export function form(ctx, { sub = null, action, button, heading, lead, stats = {}, status = "", member = false, telegramLink = null,
+  ref = "", inviteBox = "" }) {
   const onsite = sub && !sub.remote_only;
   // Home page: only the headline and a short form; everything else waits behind "See what you get".
   const proof = !sub && stats.users ? ` &middot; ${stats.users.toLocaleString("en")} people signed up` : "";
@@ -315,7 +329,8 @@ ${statusBox}${telegramBox}
     <option value="mid"${sel(sub?.level === "mid")}>Mid level (no director/head roles)</option>
   </select>
   </details>
-  <input class="hp" name="website" tabindex="-1" autocomplete="off">
+  <input class="hp" name="website" tabindex="-1" autocomplete="off">${ref ? `
+  <input type="hidden" name="ref" value="${esc(ref)}">` : ""}
   <button type="submit" id="submit">${esc(button)}</button>
   ${sub ? "" : `<p class="free">${ctx.trialDays} days free &middot; no card${proof}</p>`}
 </form>
@@ -324,6 +339,7 @@ ${sub ? "" : strengths() + plans(ctx) + compare()}
   ${ctx.paidService && !sub ? `<p class="small"><b>Free for ${ctx.trialDays} days, then ${esc(ctx.price)} for ${ctx.months} months</b>, paid once through ${esc(ctx.provider)} if you want to continue. Nothing renews automatically. <a href="/terms">Terms and refunds</a>.</p>` : ""}
   <p class="small">One email a day with up to ${member ? "10" : "5"} new matches, only on days we find some${member ? "" : ctx.paidService ? " (members get up to 10, plus Telegram alerts)" : ""}. Remote jobs that only hire from certain countries are left out if yours isn't one of them. We skip senior roles if you choose a lower level, and we filter out unpaid roles and listings with common scam signs. Every email has a one-click unsubscribe link. We only store your email and these preferences, never share them, and delete them when you unsubscribe.</p>
 </details>
+${inviteBox}
 ${sub ? `<p class="small"><a href="/unsubscribe/${esc(sub.token)}">Unsubscribe and delete my details</a></p>` : ""}
 <script>
   (function () {
@@ -380,11 +396,34 @@ export function terms(ctx) {
     you before it ends with a link to renew if you want to.</p>
   <p><b>Refunds.</b> If you're not happy within 7 days of paying, email us and we'll refund you in full. After that, payments
     aren't refundable, but you can stop the emails any time.</p>` : ""}
-  <p><b>Your data.</b> We store your email, your preferences and a record of your payments. We never share them, and
-    unsubscribing deletes your email and preferences (payment records are kept for accounting).</p>
+  <p><b>Your data.</b> We store your email, your preferences, a record of your payments and, if you use cover letters,
+    the CV you paste. Your CV is only used to write your letters (it's sent to our AI provider, Anthropic, for that).
+    We never share your details otherwise, and unsubscribing deletes your email, preferences and CV (payment records
+    are kept for accounting).</p>
   ${ctx.contact ? `<p><b>Contact.</b> <a href="mailto:${esc(ctx.contact)}">${esc(ctx.contact)}</a></p>` : ""}
 </div>
 <p class="small"><a href="/">Back to sign-up</a></p>`);
 }
 
 export { COUNTRIES };
+
+// AI cover letter for one job (members). Shows the letter once written, and the form to (re)write it.
+export function letterPage(ctx, { sub, job, hasCv, cv = "", letter = "", left, error = "" }) {
+  const cvField = `<label for="cv">Your CV <span class="hint">Paste the text once; we'll remember it</span></label>
+  <textarea id="cv" name="cv" rows="8" maxlength="15000"${hasCv ? "" : " required"} placeholder="Paste your CV here">${esc(cv)}</textarea>`;
+  return page(ctx, `<h1>✍️ Cover letter</h1>
+<p class="lead">${esc(job.title)}${job.company ? ` at ${esc(job.company)}` : ""}</p>
+${error ? `<p class="card status">${esc(error)}</p>` : ""}
+${letter ? `<div class="card"><textarea id="letter" rows="16" readonly>${esc(letter)}</textarea>
+<div class="actions"><button type="button" id="copy" style="margin:0">Copy letter</button>
+${job.url ? `<a class="btn ghost" href="${esc(job.url)}">Open the job and apply</a>` : ""}</div>
+<p class="note">Read it through and add one detail only you know before sending.</p></div>
+<script>document.getElementById("copy").onclick=function(){var t=document.getElementById("letter");t.select();
+navigator.clipboard?navigator.clipboard.writeText(t.value):document.execCommand("copy");this.textContent="Copied ✓";};</script>` : ""}
+<form class="card" method="post" id="write"${letter ? ' style="margin-top:16px"' : ""}>
+  ${hasCv ? `<details class="fold more" style="margin-top:0"><summary>Update my CV</summary>${cvField}</details>` : cvField}
+  <button type="submit" id="go">${letter ? "Write it again" : "Write my cover letter"}</button>
+  <p class="free">${left} of 10 left today</p>
+</form>
+<script>document.getElementById("write").addEventListener("submit",function(){var b=document.getElementById("go");b.disabled=true;b.textContent="Writing... (about 20 seconds)";});</script>`);
+}

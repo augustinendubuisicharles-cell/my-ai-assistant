@@ -5,6 +5,7 @@ styles, which is what Gmail, Outlook and phone mail apps reliably display. Each 
 plain-text version. Keep the look in step with job_alerts_worker/src/mail.js.
 """
 from html import escape
+from urllib.parse import urlencode
 
 FOOTER = "Always read the full listing before applying, and never pay anyone to apply for a job."
 BLUE, INK, MUTED, LINE, BG, GOLD, GREEN = "#2457d6", "#1d2433", "#5b6475", "#e3e7ee", "#f3f5f9", "#ffc75a", "#127a3e"
@@ -109,7 +110,7 @@ def _chip(label: str) -> str:
             f'color:{color};font-size:12px;font-weight:600">{"✓ " if good else ""}{escape(label)}</span>')
 
 
-def _job_card(j: dict) -> str:
+def _job_card(j: dict, letter_url: str = "") -> str:
     company = f'<div style="color:{MUTED};font-size:14px;margin-top:2px">{escape(j["company"])} · via {escape(j["source"])}</div>' \
         if j["company"] else f'<div style="color:{MUTED};font-size:14px;margin-top:2px">via {escape(j["source"])}</div>'
     return (f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 14px;border:1px solid {LINE};'
@@ -117,7 +118,10 @@ def _job_card(j: dict) -> str:
             f'<a href="{_a(j["url"])}" style="color:{INK};text-decoration:none;font-size:17px;font-weight:700">{escape(j["title"])}</a>'
             f'{company}<div>{"".join(_chip(m) for m in j["matched"])}</div>'
             f'<div style="margin-top:12px"><a href="{_a(j["url"])}" style="color:{BLUE};font-weight:700;text-decoration:none">'
-            f"View and apply &rarr;</a></div></td></tr></table>")
+            f"View and apply &rarr;</a>"
+            + (f'<a href="{_a(letter_url)}" style="color:{MUTED};font-weight:600;text-decoration:none;margin-left:16px">'
+               f"✍️ Cover letter</a>" if letter_url else "")
+            + "</div></td></tr></table>")
 
 
 def _trial_box(trial: dict, pay: str) -> str:
@@ -134,10 +138,14 @@ def _trial_box(trial: dict, pay: str) -> str:
             f"{action}</td></tr></table>")
 
 
+def letter_link(base_url: str, token: str, j: dict) -> str:
+    return f"{base_url}/letter/{token}?" + urlencode({"t": j["title"], "c": j["company"], "u": j["url"]})
+
+
 def digest(jobs: list[dict], today, base_url: str, token: str, trial: dict | None = None,
-           first: bool = False) -> tuple[str, str, str]:
+           first: bool = False, letters: bool = False) -> tuple[str, str, str]:
     """`trial`: for free-trial users, {"days_left", "perks", "price", "can_pay"} adds a short countdown box.
-    `first`: the email sent right after someone confirms."""
+    `first`: the email sent right after someone confirms. `letters`: members get a cover-letter link per job."""
     manage, unsub, pay = f"{base_url}/manage/{token}", f"{base_url}/unsubscribe/{token}", f"{base_url}/pay/{token}"
     n = len(jobs)
     lines = [f"Your first job matches" if first else f"Your job matches -- {today:%a %d %b}", ""]
@@ -149,9 +157,10 @@ def digest(jobs: list[dict], today, base_url: str, token: str, trial: dict | Non
                   + (f" Become a member: {pay}" if trial.get("can_pay") else " Membership opens soon."), ""]
     lines += [FOOTER, "", f"Change what you get: {manage}", f"Unsubscribe: {unsub}"]
 
-    body = "".join(_job_card(j) for j in jobs) + (_trial_box(trial, pay) if trial else "")
+    body = "".join(_job_card(j, letter_link(base_url, token, j) if letters else "") for j in jobs) + (_trial_box(trial, pay) if trial else "")
     body += f'<p style="color:{MUTED};font-size:13px;margin:6px 0 0">💡 Apply early. {escape(FOOTER)}</p>'
-    footer = (f'<a href="{_a(manage)}" style="color:{MUTED}">Change what you get</a> &middot; '
+    footer = (f'<a href="{_a(manage)}" style="color:{MUTED}">🎁 Invite 2 friends, get a month free</a><br>'
+              f'<a href="{_a(manage)}" style="color:{MUTED}">Change what you get</a> &middot; '
               f'<a href="{_a(unsub)}" style="color:{MUTED}">Unsubscribe</a>')
     jobs_word = f"{n} job{'s' if n != 1 else ''}"
     hero = (_hero(f"Your first {jobs_word} are here 🎉" if n != 1 else "Your first job is here 🎉", "More every morning, never repeated")

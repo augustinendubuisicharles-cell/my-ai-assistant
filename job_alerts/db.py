@@ -25,6 +25,10 @@ subscribers = Table(
     Column("paid_until", DateTime(timezone=True)),      # alerts are sent while this is in the future
     Column("reminded_for", DateTime(timezone=True)),    # paid_until we last sent a renewal reminder for
     Column("telegram_chat_id", String(32)),              # set when a paid member connects Telegram
+    Column("cv_text", Text),                             # pasted CV, used for AI cover letters (members)
+    Column("ref_code", String(16), unique=True),         # their invite link: /?ref=<ref_code>
+    Column("referred_by", Integer),                      # subscriber id whose invite link they used
+    Column("ref_rewards", Integer, nullable=False, server_default="0"),  # free months already given for invites
 )
 
 payments = Table(
@@ -34,6 +38,13 @@ payments = Table(
     Column("subscriber_id", Integer, ForeignKey("subscribers.id", ondelete="SET NULL")),
     Column("amount_ngn", Integer, nullable=False),
     Column("paid_at", DateTime(timezone=True), nullable=False),
+)
+
+letters = Table(  # one row per AI cover letter written, for the daily limit
+    "letters", metadata,
+    Column("id", Integer, primary_key=True),
+    Column("subscriber_id", Integer, ForeignKey("subscribers.id", ondelete="CASCADE"), nullable=False),
+    Column("created_at", DateTime(timezone=True), nullable=False),
 )
 
 sent_jobs = Table(
@@ -63,13 +74,16 @@ def init_db() -> None:
     # Columns added after the first release (create_all doesn't alter existing tables).
     have = {c["name"] for c in inspect(engine).get_columns("subscribers")}
     added = {"city": "VARCHAR(120) NOT NULL DEFAULT ''", "paid_until": "TIMESTAMP WITH TIME ZONE",
-             "reminded_for": "TIMESTAMP WITH TIME ZONE", "telegram_chat_id": "VARCHAR(32)"}
+             "reminded_for": "TIMESTAMP WITH TIME ZONE", "telegram_chat_id": "VARCHAR(32)", "cv_text": "TEXT",
+             "ref_code": "VARCHAR(16)", "referred_by": "INTEGER", "ref_rewards": "INTEGER NOT NULL DEFAULT 0"}
     with engine.begin() as conn:
         for name, sql_type in added.items():
             if name not in have:
                 if engine.dialect.name == "sqlite":
                     sql_type = sql_type.replace("TIMESTAMP WITH TIME ZONE", "DATETIME")
                 conn.execute(text(f"ALTER TABLE subscribers ADD COLUMN {name} {sql_type}"))
+        if "ref_code" not in have:  # create_all only adds the unique index on new databases
+            conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS subscribers_ref_code_key ON subscribers (ref_code)"))
 
 
 def stats() -> dict:
@@ -130,6 +144,7 @@ def remove(token: str) -> bool:
         if not row:
             return False
         conn.execute(delete(sent_jobs).where(sent_jobs.c.subscriber_id == row.id))
+        conn.execute(delete(letters).where(letters.c.subscriber_id == row.id))
         conn.execute(update(payments).where(payments.c.subscriber_id == row.id).values(subscriber_id=None))
         conn.execute(delete(subscribers).where(subscribers.c.id == row.id))
         return True

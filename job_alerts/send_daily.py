@@ -54,7 +54,8 @@ def main() -> None:
                 print(f"- subscriber {sub['id']}: no new matches{', sent the we-are-searching email' if first else ', nothing sent'}")
                 continue
             subject, text, html = emails.digest(jobs, datetime.now(timezone.utc), base_url, sub["token"],
-                                                None if member else trial_info(sub), first=first)
+                                                None if member else trial_info(sub), first=first,
+                                                letters=member and os.environ.get("COVER_LETTERS") == "1")
             mailer.send(sub["email"], subject, text, html, unsubscribe_url=f"{base_url}/unsubscribe/{sub['token']}")
             db.record_sent(sub["id"], [job_key(j) for j in jobs])
             sent += 1
@@ -73,7 +74,8 @@ def trial_info(sub: dict) -> dict:
     left = (db._aware(sub["paid_until"]) - db.now()).total_seconds() / 86400 if sub.get("paid_until") else 0
     jobs, titles = payments.PAID_LIMITS
     return {"days_left": max(1, math.ceil(left)), "price": f"₦{payments.PRICE_NGN:,}",
-            "perks": f"{jobs} jobs a day, all {titles} job titles and Telegram alerts, for {payments.PERIOD_DAYS // 30} months", "can_pay": payments.enabled()}
+            "perks": f"{jobs} jobs a day, all {titles} job titles, AI cover letters and Telegram alerts, "
+                     f"for {payments.PERIOD_DAYS // 30} months", "can_pay": payments.enabled()}
 
 
 def first_titles(keywords_csv: str, count: int) -> str:

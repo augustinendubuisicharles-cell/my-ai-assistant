@@ -65,6 +65,18 @@ jobs:
       - if: steps.check.outputs.ready == 'true'
         run: npm ci
       - if: steps.check.outputs.ready == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - if: steps.check.outputs.ready == 'true'
+        name: Add any new database columns before the new code goes live
+        working-directory: .
+        env:
+          DATABASE_URL: ${{ secrets.JOB_ALERTS_DATABASE_URL }}
+        run: |
+          pip install -r job_alerts/requirements.txt
+          python -c "from job_alerts import db; db.init_db(); print('database up to date')"
+      - if: steps.check.outputs.ready == 'true'
         name: Deploy the Worker
         run: npx wrangler deploy
       - if: steps.check.outputs.ready == 'true'
@@ -81,10 +93,11 @@ jobs:
           PAYSTACK_SECRET_KEY: ${{ secrets.PAYSTACK_SECRET_KEY }}
           TELEGRAM_TOKEN: ${{ secrets.JOB_ALERTS_TELEGRAM_TOKEN }}
           GH_TOKEN: ${{ secrets.JOB_ALERTS_GITHUB_TOKEN }}
+          ANTHROPIC_API_KEY: ${{ secrets.JOB_ALERTS_ANTHROPIC_KEY }}
         run: |
           node -e '
             const names = ["DATABASE_URL", "BREVO_API_KEY", "FROM_EMAIL", "CONTACT_EMAIL", "CREDO_PUBLIC_KEY",
-                           "CREDO_SECRET_KEY", "CREDO_LIVE", "CREDO_BUSINESS_CODE", "PAYSTACK_SECRET_KEY", "TELEGRAM_TOKEN", "GH_TOKEN"];
+                           "CREDO_SECRET_KEY", "CREDO_LIVE", "CREDO_BUSINESS_CODE", "PAYSTACK_SECRET_KEY", "TELEGRAM_TOKEN", "GH_TOKEN", "ANTHROPIC_API_KEY"];
             const out = Object.fromEntries(names.filter((n) => (process.env[n] || "").trim()).map((n) => [n, process.env[n].trim()]));
             console.error("Setting: " + Object.keys(out).join(", "));
             require("fs").writeFileSync("/tmp/secrets.json", JSON.stringify(out));
