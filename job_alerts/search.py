@@ -36,6 +36,7 @@ from . import ai_match
 TIMEOUT = 20
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; JobAlertsBot/1.0)"}
 MAX_AGE = timedelta(days=7)
+OLDER_AGE = timedelta(days=14)  # only to reach the daily minimum, when the last 7 days don't have enough
 
 # name: (ISO code, Adzuna code or "", regions the country belongs to)
 COUNTRIES = {
@@ -817,20 +818,22 @@ def is_part_time(job: dict) -> bool:
 
 
 def score(job: dict, keywords: list[str], country: str, remote_only: bool, level: str,
-          city: str = "", why: Counter | None = None, hours: str = "any") -> tuple[int, list[str]] | None:
-    """Returns (score, reasons), or None if the job fails a check (counted in `why` by reason)."""
+          city: str = "", why: Counter | None = None, hours: str = "any", max_age: timedelta = MAX_AGE,
+          any_title: bool = False) -> tuple[int, list[str]] | None:
+    """Returns (score, reasons), or None if the job fails a check (counted in `why` by reason).
+    any_title: the last resort for the daily minimum: every other check still applies."""
     def no(reason):
         if why is not None:
             why[reason] += 1
         return None
 
     title, text = job["title"].lower(), f"{job['title']} {job['desc']}".lower()
-    hit = title_hit(title, keywords)
-    if not hit:
+    hit = "" if any_title else title_hit(title, keywords)
+    if not hit and not any_title:
         return no("title doesn't match")
     if not job["url"] or not job["posted"]:
         return no("no link or date")
-    if datetime.now(timezone.utc) - job["posted"] > MAX_AGE:
+    if datetime.now(timezone.utc) - job["posted"] > max_age:
         return no("too old")
     if remote_only and not job["remote"]:
         return no("not remote")
@@ -849,7 +852,7 @@ def score(job: dict, keywords: list[str], country: str, remote_only: bool, level
     if any(w in f"{title} {job['job_type']}".lower() for w in UNPAID) or any(w in text for w in SCAM_SIGNS):
         return no("unpaid or scam signs")
 
-    pts, reasons = 10, [f"matches \"{hit}\"", f"{'remote, ' if job['remote'] else ''}{job['location'] or 'location not stated'}"]
+    pts, reasons = 10, [f"matches \"{hit}\"" if hit else "other role", f"{'remote, ' if job['remote'] else ''}{job['location'] or 'location not stated'}"]
     if country and job["remote"] and says_open_to(job, country):
         pts += 1
         reasons.insert(0, f"open to {country}")
@@ -917,8 +920,10 @@ def sent_keys(stored: set[str]) -> set[str]:
 
 
 def _search(keywords: list[str], country: str, remote_only: bool, level: str, city: str,
-            seen: set[str], why: Counter, hours: str = "any") -> tuple[list[dict], Counter]:
-    """Every listing that passes the checks for these titles, best first, plus how many listings each board gave."""
+            seen: set[str], why: Counter, hours: str = "any", max_age: timedelta = MAX_AGE,
+            any_title: bool = False) -> tuple[list[dict], Counter]:
+    """Every listing that passes the checks for these titles, best first, plus how many listings each board gave.
+    any_title (keywords empty): every open job, whatever the title, from the feeds already read."""
     pool = list(remote_feeds()) + ([] if remote_only else list(from_local_pages()))
     # Sign-up boards' jobs only count for VA and support titles (SIGNUP_ROLES).
     pool = [j for j in pool if j["source"] not in SIGNUP_BOARDS or any(SIGNUP_ROLES.search(k) for k in keywords)]
@@ -935,13 +940,14 @@ def _search(keywords: list[str], country: str, remote_only: bool, level: str, ci
         if keys & seen:
             why["already sent or duplicate"] += 1
             continue
-        result = score(job, keywords, country, remote_only, level, city, why, hours)
+        result = score(job, keywords, country, remote_only, level, city, why, hours, max_age, any_title)
         if result:
             seen |= keys
             matched = list(result[1])
             if country == "Nigeria" and job["pay"] and (naira := in_naira(job.get("pay_month"))):
                 matched = [f"{m} ({naira})" if m == job["pay"] else m for m in matched]
-            ranked.append({**job, "score": result[0], "matched": matched, "hit": title_hit(job["title"], keywords)})
+            ranked.append({**job, "score": result[0], "matched": matched,
+                           "hit": "other role" if any_title else title_hit(job["title"], keywords)})
     ranked.sort(key=lambda j: j["score"], reverse=True)
     return ranked, Counter(j["source"].split(" (")[0] for j in pool)
 
@@ -1008,6 +1014,18 @@ def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, ex
     gated = fill([j for j in ranked if gated_ok(j)])
     extra = fill([j for j in more if not signup(j)])
     gated += fill([j for j in more if gated_ok(j)])
+    # Still short: nobody gets fewer than the minimum. First their own and similar titles posted in the last
+    # 14 days, then the best other open roles at their level, open to their country.
+    older = other = 0
+    if len(picked) < minimum:
+        pool, _ = _search(keywords + near, country, remote_only, level, city, seen, Counter(), hours, max_age=OLDER_AGE)
+        older = fill([j for j in pool if not signup(j)])
+    if len(picked) < minimum:
+        pool, _ = _search([], country, remote_only, level, city, seen, Counter(), hours, any_title=True)
+        pool = [j for j in pool if not signup(j)]
+        if cv is not None:
+            pool = ai_match.rerank(pool, keywords, level, country, cv)
+        other = fill(pool)
     if spares is not None:
         taken = {id(j) for j in picked}
         rest = [j for j in open_jobs + more if id(j) not in taken and not signup(j)][:SPARES * 2]
@@ -1017,6 +1035,7 @@ def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, ex
     print(f"  checked {sum(boards.values())} listings ({', '.join(f'{s} {c}' for s, c in boards.most_common())}), "
           f"{matched} matched, picked {len(picked)}{f' ({extra} from similar roles to reach the daily minimum)' if extra else ''}"
           f"{f', {gated} from sign-up boards to fill the gap' if gated else ''}"
+          f"{f', {older} posted 8-14 days ago' if older else ''}{f', {other} from other roles' if other else ''}"
           f"{f', {len(spares)} spare for More jobs' if spares is not None else ''}; "
           f"left out: {', '.join(f'{c} {r}' for r, c in why.most_common()) or 'none'}")
     return picked
