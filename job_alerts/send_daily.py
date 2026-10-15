@@ -9,6 +9,8 @@ import sys
 import time
 from datetime import datetime, timedelta, timezone
 
+import requests
+
 from . import db, emails, mailer, payments
 from .search import clean_keywords, find_jobs, job_key
 
@@ -63,14 +65,26 @@ def main() -> None:
                 db.note_run(sub["id"], "no new matches" + (" (sent the try-broader-titles email)" if tip else ""))
                 print(f"- subscriber {sub['id']}: no new matches{', sent the try-broader-titles email' if tip else ', nothing sent'}")
                 continue
-            subject, text, html = emails.digest(jobs, datetime.now(timezone.utc), base_url, sub["token"],
-                                                None if member else trial_info(sub), first=first,
-                                                letters=member and os.environ.get("COVER_LETTERS") == "1")
-            mailer.send(sub["email"], subject, text, html, unsubscribe_url=f"{base_url}/unsubscribe/{sub['token']}")
-            db.record_sent(sub["id"], [job_key(j) for j in jobs])
+            # Members' application tracker: ask about jobs they opened, and bring back the "Not yet" ones.
+            ask = db.jobs_to_ask(sub["id"]) if member else []
+            waiting = [w for w in db.jobs_waiting(sub["id"]) if still_open(w["url"])] if member else []
+            ids = db.record_sent(sub["id"], [{**j, "key": job_key(j)} for j in jobs])
+            for j, job_id in zip(jobs, ids):
+                j["id"] = job_id
+            try:
+                subject, text, html = emails.digest(jobs, datetime.now(timezone.utc), base_url, sub["token"],
+                                                    None if member else trial_info(sub), first=first,
+                                                    letters=member and os.environ.get("COVER_LETTERS") == "1",
+                                                    ask=ask, waiting=waiting, tracker=member)
+                mailer.send(sub["email"], subject, text, html, unsubscribe_url=f"{base_url}/unsubscribe/{sub['token']}")
+            except Exception:
+                db.unsend(ids)
+                raise
+            db.mark_asked([a["id"] for a in ask])
             sent += 1
-            db.note_run(sub["id"], f"sent {len(jobs)} job{'s' if len(jobs) != 1 else ''}")
-            print(f"- subscriber {sub['id']}: sent {len(jobs)} job(s)")
+            extra = (f", asked about {len(ask)}" if ask else "") + (f", {len(waiting)} waiting" if waiting else "")
+            db.note_run(sub["id"], f"sent {len(jobs)} job{'s' if len(jobs) != 1 else ''}{extra}")
+            print(f"- subscriber {sub['id']}: sent {len(jobs)} job(s){extra}")
             time.sleep(1)
         except Exception as e:  # one bad subscriber shouldn't stop everyone else's email
             failed += 1
@@ -101,6 +115,17 @@ def trial_info(sub: dict) -> dict:
     return {"days_left": max(1, math.ceil(left)), "price": f"₦{payments.PRICE_NGN:,}",
             "perks": f"{jobs} jobs a day, all {titles} job titles, a CV tailored to each job, AI cover letters and Telegram alerts, "
                      f"for {payments.PERIOD_DAYS // 30} months", "can_pay": payments.enabled()}
+
+
+def still_open(url: str) -> bool:
+    """False only when the advert's page is clearly gone (404 or 410); anything else counts as open."""
+    if not url:
+        return False
+    try:
+        r = requests.get(url, timeout=10, allow_redirects=True, headers={"User-Agent": "Mozilla/5.0 (JobAlert link check)"})
+        return r.status_code not in (404, 410)
+    except requests.RequestException:
+        return True
 
 
 def first_titles(keywords_csv: str, count: int) -> str:

@@ -139,6 +139,46 @@ const STYLE = `
   .brand { display:inline-flex; align-items:center; gap:10px; margin:0 0 20px; text-decoration:none; color:var(--text); font-size:1.35rem; font-weight:800; letter-spacing:-.3px; }
   .brand b { color:var(--accent); }
   .brand img { border-radius:9px; }
+  .apps-link { display:flex; justify-content:space-between; align-items:center; margin:0 0 16px; padding:14px 18px; text-decoration:none; color:var(--text); font-weight:700; }
+  .apps-link span { color:var(--accent); }
+  .tiles { display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; margin:0 0 22px; }
+  .tile { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:14px 12px; text-align:center; }
+  .tile b { display:block; font-size:1.8rem; line-height:1.1; letter-spacing:-.02em; }
+  .tile span { font-size:.82rem; color:var(--muted); font-weight:600; }
+  .tile.int b { color:var(--accent); } .tile.off b { color:var(--ok); }
+  .apps h2 { font-size:.8rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:22px 0 10px; }
+  .app { padding:16px 18px; margin:0 0 10px; transition:border-color .3s; }
+  .app.saved { border-color:var(--ok); box-shadow:0 0 0 3px color-mix(in srgb, var(--ok) 18%, transparent); }
+  .app-top { display:flex; justify-content:space-between; gap:10px; align-items:baseline; }
+  .app-top a { color:var(--text); font-weight:700; text-decoration:none; }
+  .app-top time { color:var(--muted); font-size:.8rem; white-space:nowrap; }
+  .app .co { color:var(--muted); font-size:.9rem; }
+  .seg { display:flex; flex-wrap:wrap; gap:6px; margin-top:12px; }
+  .seg button { width:auto; margin:0; padding:7px 13px; border-radius:99px; font-size:.85rem; font-weight:700; background:var(--bg); color:var(--muted); border:1px solid var(--border); }
+  .seg button.on { background:var(--accent); color:var(--on-accent); border-color:var(--accent); }
+  .seg button.on.good { background:var(--ok); border-color:var(--ok); color:#fff; }
+  .seg button.skip { color:var(--muted); background:transparent; border-color:transparent; }
+  .empty { text-align:center; color:var(--muted); padding:28px 20px; }
+  .me-top { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+  .me-top form button { width:auto; margin:4px 0 0; padding:8px 14px; font-size:.85rem; background:transparent; color:var(--muted); border:1px solid var(--border); }
+  .mtiles { display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; margin:0 0 24px; }
+  .mtile { display:block; background:var(--card); border:1px solid var(--border); border-radius:14px; padding:14px; text-decoration:none; color:var(--text); transition:border-color .15s, transform .15s; }
+  .mtile:hover { border-color:var(--accent); transform:translateY(-1px); }
+  .mtile i { font-style:normal; font-size:1.3rem; }
+  .mtile b { display:block; margin-top:6px; font-size:.95rem; }
+  .mtile span { display:block; color:var(--muted); font-size:.8rem; margin-top:2px; }
+  @media (max-width:420px) { .mtiles { grid-template-columns:1fr; } .mtile { display:grid; grid-template-columns:32px 1fr; align-items:center; } .mtile i { grid-row:span 2; } .mtile b { margin:0; } }
+  .mtiles.locked .mtile { position:relative; background:color-mix(in srgb, var(--card) 70%, var(--bg)); border-style:dashed; }
+  .mtiles.locked .mtile::after { content:"🔒"; position:absolute; top:10px; right:12px; font-size:.8rem; opacity:.8; }
+  .mtiles.locked .mtile b, .mtiles.locked .mtile i { opacity:.75; }
+  @media (max-width:420px) { .mtiles.locked { grid-template-columns:1fr 1fr; } .mtiles.locked .mtile { display:block; } .mtiles.locked .mtile b { margin-top:6px; } }
+  .mjob { padding:14px 16px; margin:0 0 10px; }
+  .mjob .t { font-weight:700; }
+  .mjob .links { display:flex; flex-wrap:wrap; gap:6px 16px; margin-top:8px; font-size:.9rem; font-weight:600; }
+  .mjob .links a { text-decoration:none; }
+  .mjob .links a.sub { color:var(--muted); }
+  .chip-st { display:inline-block; font-size:.75rem; font-weight:700; padding:2px 9px; border-radius:99px; margin-left:6px; background:color-mix(in srgb, var(--ok) 14%, transparent); color:var(--ok); vertical-align:2px; }
+  .toast { padding:10px 14px; margin:0 0 16px; border-radius:10px; background:color-mix(in srgb, var(--ok) 12%, transparent); color:var(--ok); font-weight:600; }
 `;
 
 // The home page: a blue hero with the form and floating example jobs, four steps, and a
@@ -152,6 +192,8 @@ const LANDING_STYLE = `
   .nav .brand { margin:0; color:#0b1a3a; font-size:1.5rem; }
   .nav .brand b { color:#1f5fe0; }
   .nav .brand img { width:44px; height:44px; border-radius:12px; box-shadow:0 8px 20px -8px #0b3fb380; }
+  .nav .navlinks { display:flex; align-items:center; gap:6px; }
+  .nav a.navplain { color:#fff; font-weight:600; text-decoration:none; padding:9px 12px; opacity:.9; }
   .nav a.navlink { color:#fff; font-weight:700; text-decoration:none; padding:9px 18px; border-radius:99px; background:#ffffff26; border:1px solid #ffffff40; backdrop-filter:blur(6px); }
   .hero-grid { display:grid; grid-template-columns:minmax(0,1.05fr) minmax(0,1fr); gap:56px; align-items:center; padding-top:18px; }
   .eyebrow { display:inline-flex; align-items:center; gap:8px; font-weight:700; font-size:.88rem; padding:7px 14px; border-radius:99px; background:#ffffff22; border:1px solid #ffffff3a; }
@@ -253,7 +295,7 @@ const SAMPLE_JOBS = [
 const HARDER = [
   ["Finding high-paying jobs", "We show the pay, converted to naira, so you can see what's worth it."],
   ["Building a standout CV", "Members get their CV rewritten for every job, plus a cover letter."],
-  ["Discovering local opportunities", "Pick on-site and your city: local jobs come first, remote ones too."],
+  ["Discovering global opportunities", "Remote jobs from companies worldwide that are open to your country."],
   ["Getting matched to relevant roles", "Your job titles first, then the closest roles. Never the same job twice."],
   ["Beating the crowd", "Only jobs from the last 7 days, in your inbox at 7am, before most people apply."],
 ];
@@ -266,7 +308,7 @@ function landing(ctx, formHtml) {
   const step = (icon, title, sub) => `<li><span class="ic">${FLOW_ICONS[icon]}</span><span>${title}<small>${sub}</small></span></li>`;
   return `<section class="hero-band">
 <nav class="wrap nav"><a class="brand" href="/"><img src="/favicon.svg" alt="" width="44" height="44"><span>Job<b>Alert</b></span></a>
-<a class="navlink" href="#plans">Plans</a></nav>
+<div class="navlinks"><a class="navplain" href="#plans">Plans</a><a class="navlink" href="/login">Log in</a></div></nav>
 <div class="wrap hero-grid">
   <div class="hero-copy">
     <span class="eyebrow"><i></i>Fresh jobs every morning at 7am</span>
@@ -311,7 +353,7 @@ function landing(ctx, formHtml) {
 const DESCRIPTION = "Remote jobs from companies abroad that actually hire Nigerians, checked for scams and never repeated, in your inbox every morning. 7 days free.";
 
 export function page(ctx, body, { landing = false } = {}) {
-  const footer = `<footer><a href="/terms">Terms, pricing and refunds</a>${
+  const footer = `<footer><a href="/terms">Terms and pricing</a>${
     ctx.contact ? ` &middot; <a href="mailto:${esc(ctx.contact)}">Contact</a>` : ""}</footer>`;
   return `<!doctype html>
 <html lang="en">
@@ -478,7 +520,6 @@ function plans(ctx) {
   ${li("<b>Your CV tailored</b> to any job, plus an <b>AI cover letter</b>")}
   ${li("Everything in the free trial")}
   ${li("No auto-renewal; we remind you before it ends")}
-  ${li("Full refund within 7 days if it's not for you")}
 </ul></div></section>`;
 }
 
@@ -613,7 +654,7 @@ export function form(ctx, { sub = null, action, button, heading, lead, status = 
   const script = FORM_SCRIPT;
   if (!sub) return page(ctx, landing(ctx, formHtml) + script, { landing: true });
   return page(ctx, `${intro}
-${statusBox}${telegramBox}
+${statusBox}${member ? `<a class="card apps-link" href="/applications/${esc(sub.token)}">📋 My applications <span>&rarr;</span></a>` : ""}${telegramBox}
 ${formHtml}
 <details class="fold info" id="plans"><summary>${sub ? "How it works" : "See what you get"}</summary>
 ${sub ? "" : strengths() + plans(ctx) + compare()}
@@ -714,4 +755,116 @@ a.download=${JSON.stringify(fileName + ".doc").replace(/</g, "\\u003c")};documen
   <p class="free">${left} of 10 left today</p>
 </form>
 <script>document.getElementById("write").addEventListener("submit",function(){var b=document.getElementById("go");b.disabled=true;b.textContent="Writing... (about ${isCv ? 40 : 20} seconds)";});</script>`);
+}
+
+// --- members' application tracker ---
+
+const ANSWER_WORDS = { applied: "Applied", not_yet: "Not yet", skip: "Not for me", interview: "Interview", offer: "Offer", no_reply: "No reply" };
+
+// Opened from the email's one-tap answers. The answer is only saved by the POST this page sends,
+// so link checkers in mail apps that open every link can't answer for people.
+export function answerPage(ctx, { job, answer }) {
+  return page(ctx, `<div class="card empty"><p style="margin:0 0 6px"><b>${esc(job.title)}</b>${job.company ? ` &middot; ${esc(job.company)}` : ""}</p>
+<form method="post" id="answer"><button type="submit" style="width:auto;padding:12px 28px">Save: ${esc(ANSWER_WORDS[answer])}</button></form></div>
+<script>document.getElementById("answer").submit();</script>`);
+}
+
+const shortDate = (d) => (d ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }) : "");
+
+export function applications(ctx, { sub, rows, saved = 0 }) {
+  const count = (...st) => rows.filter((r) => st.includes(r.status)).length;
+  const applied = rows.filter((r) => r.status !== "not_yet");
+  const waiting = rows.filter((r) => r.status === "not_yet");
+  const card = (r, buttons) => `<form class="card app${r.id === saved ? " saved" : ""}" method="post" id="job${r.id}">
+  <div class="app-top"><a href="/go/${esc(sub.token)}/${r.id}">${esc(r.title)}</a><time>${shortDate(r.status_at)}</time></div>
+  ${r.company ? `<div class="co">${esc(r.company)}</div>` : ""}
+  <div class="seg">${buttons.map(([a, cls]) => `<button formaction="/job/${esc(sub.token)}/${r.id}/${a}" class="${cls || ""}${r.status === a ? " on" : ""}">${ANSWER_WORDS[a]}</button>`).join("")}</div>
+</form>`;
+  const body = !rows.length ? `<div class="card empty"><p style="margin:0">Nothing here yet.</p>
+<p class="small" style="margin:8px 0 0">Open a job from your morning email and we'll ask the next day if you applied.</p></div>` : `
+${waiting.length ? `<h2>Still deciding</h2>${waiting.map((r) => card(r, [["applied", "good"], ["not_yet"], ["skip", "skip"]])).join("")}` : ""}
+${applied.length ? `<h2>Applied</h2>${applied.map((r) => card(r, [["applied"], ["interview"], ["offer", "good"], ["no_reply"]])).join("")}` : ""}`;
+  return page(ctx, `<h1>My applications</h1>
+<p class="lead">Every job you applied to, and where it stands.</p>
+<div class="tiles"><div class="tile"><b>${applied.length}</b><span>Applied</span></div>
+<div class="tile int"><b>${count("interview", "offer")}</b><span>Interviews</span></div>
+<div class="tile off"><b>${count("offer")}</b><span>Offers</span></div></div>
+<div class="apps">${body}</div>
+<p class="small" style="text-align:center"><a href="/manage/${esc(sub.token)}">Back to my job alerts</a></p>
+${saved ? `<script>var s=document.getElementById("job${saved}");s&&s.scrollIntoView({block:"center"});</script>` : ""}`);
+}
+
+// --- log in (emailed link, no passwords) and the members' area ---
+
+export function loginPage(ctx, { error = "" } = {}) {
+  return page(ctx, `<h1>Log in</h1>
+<p class="lead">We'll email you a link. No password needed.</p>
+${error ? `<p class="card status">${esc(error)}</p>` : ""}
+<form class="card" method="post" action="/login">
+  <label for="email" style="margin-top:0">Your email</label>
+  <input id="email" name="email" type="email" required maxlength="320" placeholder="you@example.com" autocomplete="email">
+  <button type="submit">Email me a log-in link</button>
+</form>
+<p class="small" style="text-align:center">New here? <a href="/">Get your first jobs free</a></p>`);
+}
+
+export function loginSent(ctx, email) {
+  return page(ctx, `<div class="hero">${ART_MAIL}<h1>Check your inbox</h1>
+<p>If <b>${esc(email)}</b> has a JobAlert account, a log-in link is on its way. It works once, for 30 minutes.</p></div>
+<p class="small" style="text-align:center">Nothing after a few minutes? Check spam, or <a href="/login">try again</a>.</p>`);
+}
+
+export function signinPage(ctx) {
+  return page(ctx, `<div class="card empty"><p style="margin:0 0 6px">Logging you in…</p>
+<form method="post" id="signin"><button type="submit" style="width:auto;padding:12px 28px">Log me in</button></form></div>
+<script>document.getElementById("signin").submit();</script>`);
+}
+
+const SAVED = { cv: "Your CV is saved." };
+
+// What trial users see locked in their members' area; each tile leads to joining.
+const MEMBER_PERKS = [
+  ["📋", "Application tracker", "Every job you apply to"],
+  ["🎯", "Tailored CVs", "Your CV rewritten per job"],
+  ["✍️", "Cover letters", "Written for each job"],
+  ["⚡", "Telegram alerts", "New jobs during the day"],
+  ["📬", "5 to 10 jobs a day", "All 5 job titles searched"],
+  ["🔁", "Jobs come back", "\"Not yet\" jobs return"],
+];
+
+export function memberHome(ctx, { sub, member, jobs, applied = 0, interviews = 0, hasCv, letters = false, locked = false, saved = "" }) {
+  const t = esc(sub.token);
+  const tile = (href, icon, title, detail) => `<a class="mtile" href="${href}"><i>${icon}</i><b>${title}</b><span>${detail}</span></a>`;
+  const jobCard = (j) => `<div class="card mjob"><div class="t">${esc(j.title)}${j.status && j.status !== "skip"
+    ? `<span class="chip-st">${esc({ applied: "Applied", not_yet: "Not yet", interview: "Interview", offer: "Offer", no_reply: "Applied" }[j.status] || "")}</span>` : ""}</div>
+  <div class="small" style="margin:2px 0 0">${esc([j.company, j.source && `via ${j.source}`].filter(Boolean).join(" · "))}</div>
+  <div class="links"><a href="/go/${t}/${j.id}">View and apply →</a>${letters || locked
+    ? `<a class="sub" href="/cv/${t}?${esc(new URLSearchParams({ t: j.title, c: j.company || "", u: j.url || "" }).toString())}">${locked ? "🔒" : "📄"} Tailored CV</a>
+    <a class="sub" href="/letter/${t}?${esc(new URLSearchParams({ t: j.title, c: j.company || "", u: j.url || "" }).toString())}">${locked ? "🔒" : "✍️"} Cover letter</a>` : ""}</div></div>`;
+  return page(ctx, `<div class="me-top"><div><h1>Hi there 👋</h1><p class="lead" style="margin-bottom:18px">${esc(sub.email)}</p></div>
+<form method="post" action="/logout"><button type="submit">Log out</button></form></div>
+${SAVED[saved] ? `<p class="toast">${SAVED[saved]}</p>` : ""}
+${ctx.paidService ? membershipCard(ctx, sub, member) : ""}
+<div class="mtiles">
+${member ? tile(`/applications/${t}`, "📋", "My applications", `${applied} applied · ${interviews} interview${interviews === 1 ? "" : "s"}`) : ""}
+${tile("/me/cv", "📄", "My CV", hasCv ? "Saved" : "Not added yet")}
+${tile(`/manage/${t}`, "⚙️", "Job settings", esc(String(sub.keywords || "").split(",").slice(0, 2).join(", ")))}
+</div>
+${member ? "" : `<div class="apps"><h2>Members only</h2></div>
+<div class="mtiles locked">
+${MEMBER_PERKS.map(([icon, title, detail]) => tile(ctx.paidService ? `/pay/${t}` : "/terms", icon, title, detail)).join("\n")}
+</div>`}
+<div class="apps"><h2>Your latest jobs</h2>
+${jobs.length ? jobs.map(jobCard).join("") : `<div class="card empty"><p style="margin:0">Your next jobs arrive tomorrow morning.</p></div>`}</div>`);
+}
+
+export function cvPage(ctx, { cv, member }) {
+  return page(ctx, `<h1>📄 My CV</h1>
+<p class="lead">${member ? "We use it to tailor your CV and write cover letters for each job." : "Members get it tailored to every job, plus cover letters."}</p>
+<form class="card" method="post" action="/me/cv">
+  <label for="cv" style="margin-top:0">Paste your CV <span class="hint">Plain text is fine</span></label>
+  <textarea id="cv" name="cv" rows="16" maxlength="15000" placeholder="Paste your CV here">${esc(cv)}</textarea>
+  <button type="submit">Save my CV</button>
+</form>
+<p class="small" style="text-align:center"><a href="/me">Back</a></p>`);
 }

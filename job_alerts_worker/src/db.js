@@ -39,6 +39,7 @@ export async function remove(q, token) {
   if (!sub) return false;
   await q("DELETE FROM sent_jobs WHERE subscriber_id = $1", [sub.id]);
   await q("DELETE FROM letters WHERE subscriber_id = $1", [sub.id]);
+  await q("DELETE FROM logins WHERE subscriber_id = $1", [sub.id]);
   await q("UPDATE payments SET subscriber_id = NULL WHERE subscriber_id = $1", [sub.id]);
   await q("DELETE FROM subscribers WHERE id = $1", [sub.id]);
   return true;
@@ -120,3 +121,67 @@ export async function rewardReferrer(q, referrerId) {
       WHERE id = $1 AND ref_rewards = $4 RETURNING id`, [referrerId, earned, add * REF_REWARD_DAYS, ref.ref_rewards || 0]);
   return done ? add : 0;
 }
+
+// --- members' application tracker (sent_jobs rows; job_alerts/db.py has the columns and STATUSES) ---
+
+export const ANSWERS = ["applied", "not_yet", "skip", "interview", "offer", "no_reply"];
+
+export const sentJob = (q, subscriberId, id) =>
+  one(q, "SELECT id, title, company, url, status FROM sent_jobs WHERE id = $1 AND subscriber_id = $2", [id, subscriberId]);
+
+// They opened the job (the first time counts), or made a CV or letter for it: the next email asks "Did you apply?".
+export const markClicked = (q, subscriberId, id) =>
+  q("UPDATE sent_jobs SET clicked_at = COALESCE(clicked_at, now()) WHERE id = $1 AND subscriber_id = $2", [id, subscriberId]);
+export const markClickedByUrl = (q, subscriberId, url) =>
+  q("UPDATE sent_jobs SET clicked_at = COALESCE(clicked_at, now()) WHERE subscriber_id = $1 AND url = $2", [subscriberId, url]);
+
+export const setJobStatus = (q, subscriberId, id, status) =>
+  q("UPDATE sent_jobs SET status = $3, status_at = now() WHERE id = $1 AND subscriber_id = $2", [id, subscriberId, status]);
+
+// Everything on their tracker page: answered jobs except "Not for me", newest answer first.
+export const applications = (q, subscriberId) =>
+  q(`SELECT id, title, company, url, status, status_at, posted_at, sent_at FROM sent_jobs
+     WHERE subscriber_id = $1 AND status IS NOT NULL AND status <> 'skip' ORDER BY status_at DESC LIMIT 200`, [subscriberId]);
+
+// --- members' email sign-in (logins table): a one-time link that becomes a 30-day session ---
+
+export const LOGIN_LINK_MINUTES = 30;
+export const SESSION_DAYS = 30;
+
+export async function sha256(text) {
+  const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
+  return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+// A new sign-in link code, unless one was sent in the last 2 minutes (null then: stops inbox flooding).
+export async function newLoginCode(q, subscriberId) {
+  if (await one(q, "SELECT 1 AS y FROM logins WHERE subscriber_id = $1 AND created_at > now() - interval '2 minutes'", [subscriberId])) return null;
+  const code = randomToken();
+  await q("INSERT INTO logins (subscriber_id, code_hash, created_at) VALUES ($1, $2, now())", [subscriberId, await sha256(code)]);
+  return code;
+}
+
+export const loginCodeValid = async (q, code) =>
+  one(q, `SELECT id FROM logins WHERE code_hash = $1 AND used_at IS NULL
+          AND created_at > now() - make_interval(mins => $2)`, [await sha256(code), LOGIN_LINK_MINUTES]);
+
+// Uses the link (once) and returns the session value for the cookie, or null if the link is used or expired.
+export async function startSession(q, code) {
+  const session = randomToken();
+  const row = await one(q, `UPDATE logins SET used_at = now(), session_hash = $3, expires_at = now() + make_interval(days => $4)
+      WHERE code_hash = $1 AND used_at IS NULL AND created_at > now() - make_interval(mins => $2) RETURNING id`,
+    [await sha256(code), LOGIN_LINK_MINUTES, await sha256(session), SESSION_DAYS]);
+  return row ? session : null;
+}
+
+export const bySession = async (q, session) =>
+  one(q, `SELECT ${COLS.split(", ").map((c) => `s.${c}`).join(", ")} FROM logins l JOIN subscribers s ON s.id = l.subscriber_id
+          WHERE l.session_hash = $1 AND l.expires_at > now()`, [await sha256(session)]);
+
+export const endSession = async (q, session) => q("DELETE FROM logins WHERE session_hash = $1", [await sha256(session)]);
+
+// The jobs in their latest email (for the members' area).
+export const latestJobs = (q, subscriberId) =>
+  q(`SELECT id, title, company, url, source, status, sent_at FROM sent_jobs
+     WHERE subscriber_id = $1 AND title IS NOT NULL AND sent_at > (SELECT max(sent_at) FROM sent_jobs WHERE subscriber_id = $1) - interval '1 hour'
+     ORDER BY id`, [subscriberId]);
