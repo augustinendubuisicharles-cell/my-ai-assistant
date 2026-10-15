@@ -83,8 +83,8 @@ jobs:
           cache-dependency-path: job_alerts/requirements.txt
       - if: steps.check.outputs.ready == 'true'
         run: pip install -r job_alerts/requirements.txt
-      # A new subscriber's first search reuses the jobs list saved by a run in the last 3 hours (search._pool),
-      # so it takes seconds instead of reading every board again.
+      # A new subscriber's first search reuses the jobs list saved by the morning run (or a later Telegram run;
+      # search._pool), so it takes seconds instead of reading every board again.
       - if: steps.check.outputs.ready == 'true' && inputs.first == '1'
         uses: actions/cache/restore@v4
         with:
