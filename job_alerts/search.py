@@ -49,8 +49,9 @@ COUNTRIES = {
     "United States": ("US", "us", ["americas", "north america", "usa"]), "Canada": ("CA", "ca", ["americas", "north america"]),
     "Mexico": ("MX", "mx", ["americas", "latam"]), "Brazil": ("BR", "br", ["americas", "latam"]),
 }
-ALIASES = {"United Kingdom": ["uk", "great britain", "england"], "United States": ["usa", "u.s.", "us only", "united states"],
-           "United Arab Emirates": ["uae", "dubai"]}
+PLACE_ALIASES = {"United Kingdom": ["uk", "great britain", "england"],
+                 "United States": ["usa", "u.s.", "us only", "united states"], "United Arab Emirates": ["uae", "dubai"],
+                 "Nigeria": ["lagos", "abuja", "ikeja", "lekki", "port harcourt", "ibadan", "kano", "enugu"]}
 ANYWHERE = ["worldwide", "anywhere", "global", "remote (any", "all countries"]
 
 TOO_SENIOR = {"entry": ["senior", "sr.", "sr ", "lead ", "head of", "director", "principal", "manager", "chief", "vp ", "vice president"],
@@ -65,6 +66,9 @@ REMOTE_WORDS = ["remote", "work from home", "home based", "home-based", "anywher
 # They're no longer searched (the owner's call, 15 Oct 2026): people only get jobs they can apply to
 # directly. If they're ever switched back on, their jobs only fill gaps and are tagged "sign-up needed".
 SIGNUP_BOARDS = {"We Work Remotely", "Himalayas", "Jobicy", "RemoteOK"}
+# The owner's call (15 Oct 2026): open remote VA and support jobs for Nigeria are rare, so for these titles only,
+# sign-up boards fill the gap after open jobs, tagged "sign-up needed to apply".
+SIGNUP_ROLES = re.compile(r"assistant|support|customer|admin|receptionist|data entry|help ?desk|call cent", re.I)
 SIGNUP_PENALTY = 100
 
 
@@ -347,6 +351,14 @@ CAREER_PAGES = {  # companies with remote jobs; the usual checks still drop ones
 }
 
 
+# Companies hiring on-site in Nigeria (checked 15 Oct 2026). Only searched for people who chose on-site;
+# the usual country and city checks still apply.
+LOCAL_PAGES = {
+    "greenhouse": ["moniepoint", "jumia", "alxafrica"],
+    "workable": ["fairmoney", "kuda", "renmoney"],
+    "smartrecruiters": ["leadwaypensure", "giglogistics", "palmpay"],
+    "breezy": ["busha", "oando", "prospa", "gokada"],
+}
 DESC_MAX = 8000  # the job page shows at most this much (db.DESCRIPTION_MAX)
 CAREER_PAGES_FILE = os.path.join(os.path.dirname(__file__), "career_pages.json")
 
@@ -385,6 +397,20 @@ def _career_page(ats: str, slug: str) -> list[dict]:
                      url=j.get("url") or j.get("shortlink"),
                      posted=datetime.fromisoformat(j["published_on"]).replace(tzinfo=timezone.utc) if j.get("published_on") else None,
                      desc=_clean(j.get("description") or ""), remote=j.get("telecommuting") or None) for j in data.get("jobs", [])]
+    if ats == "breezy":  # the list has no description; the job page links to the full advert
+        data = _get(f"https://{slug}.breezy.hr/json")
+        return [dict(title=j.get("name"), company=(j.get("company") or {}).get("name") or slug,
+                     location=(j.get("location") or {}).get("name", ""), url=j.get("url"),
+                     posted=datetime.fromisoformat(j["published_date"].replace("Z", "+00:00")) if j.get("published_date") else None,
+                     desc="", remote=(j.get("location") or {}).get("is_remote") or None) for j in data]
+    if ats == "smartrecruiters":
+        data = _get(f"https://api.smartrecruiters.com/v1/companies/{slug}/postings", limit=100)
+        return [dict(title=j.get("name"), company=(j.get("company") or {}).get("name") or slug,
+                     location=", ".join(x for x in ((j.get("location") or {}).get("city"),
+                                                    (j.get("location") or {}).get("country", "").upper()) if x),
+                     url=f"https://jobs.smartrecruiters.com/{slug}/{j.get('id')}",
+                     posted=datetime.fromisoformat(j["releasedDate"].replace("Z", "+00:00")) if j.get("releasedDate") else None,
+                     desc="", remote=(j.get("location") or {}).get("remote") or None) for j in data.get("content", [])]
     if ats == "recruitee":
         data = _get(f"https://{slug}.recruitee.com/api/offers/")
         return [dict(title=j.get("title"), company=j.get("company_name") or slug, location=j.get("location", ""),
@@ -426,9 +452,28 @@ def from_career_pages() -> tuple:
     return tuple(out)
 
 
+@lru_cache(maxsize=1)
+def from_local_pages() -> tuple:
+    """On-site jobs from LOCAL_PAGES (for people who chose on-site, not remote)."""
+    out = []
+    for ats, slugs in LOCAL_PAGES.items():
+        for slug in slugs:
+            try:
+                for j in _career_page(ats, slug):
+                    if j["remote"]:
+                        continue  # remote ones come from from_career_pages
+                    company = j["company"] if j["company"] != slug else slug.title()
+                    out.append(_raw(j["title"], company, j["location"], j["url"], "Company careers page",
+                                    j["posted"], (j["desc"] or "")[:DESC_MAX], False, pay=j.get("pay", "")))
+            except Exception as e:
+                print(f"[Local {ats}:{slug}] skipped: {str(e)[:80]}")
+    print(f"[Local] {len(out)} on-site jobs from {sum(map(len, LOCAL_PAGES.values()))} companies")
+    return tuple(out)
+
+
 def remote_feeds() -> tuple:
     # Career pages go first, so when the same job is on a board too, the employer's own link is kept.
-    return (from_career_pages() + from_remotive() + from_workingnomads()
+    return (from_career_pages() + from_remotive() + from_workingnomads() + from_weworkremotely() + from_remoteok()
             + from_arbeitnow() + from_themuse() + from_jobspresso())
 
 
@@ -666,13 +711,16 @@ def location_fits(job_location: str, country: str, remote: bool) -> bool:
     if not country:
         return True
     loc = job_location.lower()
+    # "Anywhere in France" means France, and "South Africa" isn't the "Africa" region.
+    loc = re.sub(r"anywhere in (?!the world)", "in ", loc)
     if not loc or any(w in loc for w in ANYWHERE):
         return True
-    names = [country.lower()] + ALIASES.get(country, [])
+    names = [country.lower()] + PLACE_ALIASES.get(country, [])
     if any(n in loc for n in names):
         return True
     # Remote jobs open to a region the person lives in ("EMEA", "Africa"...)
-    return remote and any(r in loc for r in COUNTRIES.get(country, ("", "", []))[2])
+    region = loc.replace("south africa", "southafrica")
+    return remote and any(re.search(rf"\b{re.escape(r)}\b", region) for r in COUNTRIES.get(country, ("", "", []))[2])
 
 
 # Remote adverts that are really limited to one country or region ("must be based in the US",
@@ -710,7 +758,7 @@ def open_to(job: dict, country: str) -> bool:
 def says_open_to(job: dict, country: str) -> bool:
     """True when the listing explicitly names the country, one of its regions, or worldwide."""
     loc = job["location"].lower()
-    names = [country.lower()] + ALIASES.get(country, []) + COUNTRIES.get(country, ("", "", []))[2]
+    names = [country.lower()] + PLACE_ALIASES.get(country, []) + COUNTRIES.get(country, ("", "", []))[2]
     return any(n in loc for n in names) or any(w in loc for w in ANYWHERE)
 
 
@@ -825,9 +873,13 @@ def sent_keys(stored: set[str]) -> set[str]:
 def _search(keywords: list[str], country: str, remote_only: bool, level: str, city: str,
             seen: set[str], why: Counter, hours: str = "any") -> tuple[list[dict], Counter]:
     """Every listing that passes the checks for these titles, best first, plus how many listings each board gave."""
-    pool = list(remote_feeds())
+    pool = list(remote_feeds()) + ([] if remote_only else list(from_local_pages()))
+    # Sign-up boards' jobs only count for VA and support titles (SIGNUP_ROLES).
+    pool = [j for j in pool if j["source"] not in SIGNUP_BOARDS or any(SIGNUP_ROLES.search(k) for k in keywords)]
     for k in keywords:
         pool += from_jooble(k, "" if remote_only else (city or country))
+        if SIGNUP_ROLES.search(k):
+            pool += from_himalayas(k, country) + from_jobicy(k)
         if not remote_only:
             pool += from_adzuna(k, country, city) + (from_reed(k, city) if country == "United Kingdom" else ())
     pool.sort(key=lambda j: j["source"] in SIGNUP_BOARDS)  # duplicates keep the open board's link
@@ -891,11 +943,12 @@ def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, ex
                 picked.append(j)
                 added += 1
         return added
+    # VA and support titles only (SIGNUP_ROLES): their own title from a sign-up board beats a similar role,
+    # tagged "sign-up needed to apply".
+    gated_ok = lambda j: signup(j) and SIGNUP_ROLES.search(j["hit"]) and any(SIGNUP_ROLES.search(k) for k in keywords)
+    gated = fill([j for j in ranked if gated_ok(j)])
     extra = fill([j for j in more if not signup(j)])
-    # Only if that still leaves them short: sign-up boards' jobs (tagged "sign-up needed to apply").
-    gated = 0
-    if len(picked) < minimum:
-        gated = fill([j for j in ranked if signup(j)]) + fill([j for j in more if signup(j)])
+    gated += fill([j for j in more if gated_ok(j)])
     print(f"  checked {sum(boards.values())} listings ({', '.join(f'{s} {c}' for s, c in boards.most_common())}), "
           f"{matched} matched, picked {len(picked)}{f' ({extra} from similar roles to reach the daily minimum)' if extra else ''}"
           f"{f', {gated} from sign-up boards to fill the gap' if gated else ''}; "
