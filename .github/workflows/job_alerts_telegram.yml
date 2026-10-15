@@ -42,7 +42,14 @@ jobs:
           WHATSAPP_PHONE_ID: ${{ secrets.WHATSAPP_PHONE_ID }}
           WHATSAPP_TEMPLATE: ${{ secrets.WHATSAPP_TEMPLATE }}
           JOOBLE_API_KEY: ${{ secrets.JOOBLE_API_KEY }}
+          JOB_POOL_FILE: job_pool.pkl.gz
           ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
           ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
           REED_API_KEY: ${{ secrets.REED_API_KEY }}
         run: python -m job_alerts.send_telegram
+      - if: steps.check.outputs.ready == 'true' && hashFiles('job_pool.pkl.gz') != ''
+        name: Save the jobs list for first searches
+        uses: actions/cache/save@v4
+        with:
+          path: job_pool.pkl.gz
+          key: job-pool-${{ github.run_id }}
