@@ -235,7 +235,7 @@ def digest(jobs: list[dict], today, base_url: str, token: str, trial: dict | Non
     if trial:
         lines += [f"{trial['days_left']} day(s) left in your free trial. Members get {trial['perks']}."
                   + (f" Become a member: {pay}" if trial.get("can_pay") else " Membership opens soon."), ""]
-    lines += [FOOTER, "", f"Log in: {base_url}/login", ""] + ([f"My applications: {apps}"] if tracker else []) + [f"Change what you get: {manage}", f"Unsubscribe: {unsub}"]
+    lines += [FOOTER, "", f"Log in: {base_url}/login/{token}", ""] + ([f"My applications: {apps}"] if tracker else []) + [f"Change what you get: {manage}", f"Unsubscribe: {unsub}"]
 
     def card(j: dict, extra: str = "") -> str:
         links = (letter_link(base_url, token, j), letter_link(base_url, token, j, "cv")) if letters else ("", "")
@@ -252,7 +252,7 @@ def digest(jobs: list[dict], today, base_url: str, token: str, trial: dict | Non
         body += _heading("New today") if jobs else ""
     body += "".join(card(j) for j in jobs) + (_trial_box(trial, pay) if trial else "")
     body += f'<p style="color:{MUTED};font-size:13px;margin:6px 0 0">💡 Apply early. {escape(FOOTER)}</p>'
-    body += button(f"{base_url}/login", "Log in")
+    body += button(f"{base_url}/login/{token}", "Log in")
     footer = ((f'<a href="{_a(apps)}" style="color:{MUTED}">📋 My applications</a> &middot; ' if tracker else "")
               + f'<a href="{_a(manage)}" style="color:{MUTED}">🎁 Invite 2 friends, get a month free</a><br>'
               f'<a href="{_a(manage)}" style="color:{MUTED}">Change what you get</a> &middot; '
