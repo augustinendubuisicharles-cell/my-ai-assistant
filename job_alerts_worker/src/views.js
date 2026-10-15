@@ -168,6 +168,10 @@ const STYLE = `
   .mtile b { display:block; margin-top:6px; font-size:.95rem; }
   .mtile span { display:block; color:var(--muted); font-size:.8rem; margin-top:2px; }
   @media (max-width:420px) { .mtiles { grid-template-columns:1fr; } .mtile { display:grid; grid-template-columns:32px 1fr; align-items:center; } .mtile i { grid-row:span 2; } .mtile b { margin:0; } }
+  .mtiles.locked .mtile { position:relative; background:color-mix(in srgb, var(--card) 70%, var(--bg)); border-style:dashed; }
+  .mtiles.locked .mtile::after { content:"🔒"; position:absolute; top:10px; right:12px; font-size:.8rem; opacity:.8; }
+  .mtiles.locked .mtile b, .mtiles.locked .mtile i { opacity:.75; }
+  @media (max-width:420px) { .mtiles.locked { grid-template-columns:1fr 1fr; } .mtiles.locked .mtile { display:block; } .mtiles.locked .mtile b { margin-top:6px; } }
   .mjob { padding:14px 16px; margin:0 0 10px; }
   .mjob .t { font-weight:700; }
   .mjob .links { display:flex; flex-wrap:wrap; gap:6px 16px; margin-top:8px; font-size:.9rem; font-weight:600; }
@@ -818,25 +822,38 @@ export function signinPage(ctx) {
 
 const SAVED = { cv: "Your CV is saved." };
 
-export function memberHome(ctx, { sub, member, jobs, applied = 0, interviews = 0, hasCv, letters = false, saved = "" }) {
+// What trial users see locked in their members' area; each tile leads to joining.
+const MEMBER_PERKS = [
+  ["📋", "Application tracker", "Every job you apply to"],
+  ["🎯", "Tailored CVs", "Your CV rewritten per job"],
+  ["✍️", "Cover letters", "Written for each job"],
+  ["⚡", "Telegram alerts", "New jobs during the day"],
+  ["📬", "5 to 10 jobs a day", "All 5 job titles searched"],
+  ["🔁", "Jobs come back", "\"Not yet\" jobs return"],
+];
+
+export function memberHome(ctx, { sub, member, jobs, applied = 0, interviews = 0, hasCv, letters = false, locked = false, saved = "" }) {
   const t = esc(sub.token);
   const tile = (href, icon, title, detail) => `<a class="mtile" href="${href}"><i>${icon}</i><b>${title}</b><span>${detail}</span></a>`;
   const jobCard = (j) => `<div class="card mjob"><div class="t">${esc(j.title)}${j.status && j.status !== "skip"
     ? `<span class="chip-st">${esc({ applied: "Applied", not_yet: "Not yet", interview: "Interview", offer: "Offer", no_reply: "Applied" }[j.status] || "")}</span>` : ""}</div>
   <div class="small" style="margin:2px 0 0">${esc([j.company, j.source && `via ${j.source}`].filter(Boolean).join(" · "))}</div>
-  <div class="links"><a href="/go/${t}/${j.id}">View and apply →</a>${letters
-    ? `<a class="sub" href="/cv/${t}?${esc(new URLSearchParams({ t: j.title, c: j.company || "", u: j.url || "" }).toString())}">📄 Tailored CV</a>
-    <a class="sub" href="/letter/${t}?${esc(new URLSearchParams({ t: j.title, c: j.company || "", u: j.url || "" }).toString())}">✍️ Cover letter</a>` : ""}</div></div>`;
+  <div class="links"><a href="/go/${t}/${j.id}">View and apply →</a>${letters || locked
+    ? `<a class="sub" href="/cv/${t}?${esc(new URLSearchParams({ t: j.title, c: j.company || "", u: j.url || "" }).toString())}">${locked ? "🔒" : "📄"} Tailored CV</a>
+    <a class="sub" href="/letter/${t}?${esc(new URLSearchParams({ t: j.title, c: j.company || "", u: j.url || "" }).toString())}">${locked ? "🔒" : "✍️"} Cover letter</a>` : ""}</div></div>`;
   return page(ctx, `<div class="me-top"><div><h1>Hi there 👋</h1><p class="lead" style="margin-bottom:18px">${esc(sub.email)}</p></div>
 <form method="post" action="/logout"><button type="submit">Log out</button></form></div>
 ${SAVED[saved] ? `<p class="toast">${SAVED[saved]}</p>` : ""}
 ${ctx.paidService ? membershipCard(ctx, sub, member) : ""}
 <div class="mtiles">
-${member ? tile(`/applications/${t}`, "📋", "My applications", `${applied} applied · ${interviews} interview${interviews === 1 ? "" : "s"}`)
-    : tile(`/pay/${t}`, "📋", "My applications", "For members")}
+${member ? tile(`/applications/${t}`, "📋", "My applications", `${applied} applied · ${interviews} interview${interviews === 1 ? "" : "s"}`) : ""}
 ${tile("/me/cv", "📄", "My CV", hasCv ? "Saved" : "Not added yet")}
 ${tile(`/manage/${t}`, "⚙️", "Job settings", esc(String(sub.keywords || "").split(",").slice(0, 2).join(", ")))}
 </div>
+${member ? "" : `<div class="apps"><h2>Members only</h2></div>
+<div class="mtiles locked">
+${MEMBER_PERKS.map(([icon, title, detail]) => tile(ctx.paidService ? `/pay/${t}` : "/terms", icon, title, detail)).join("\n")}
+</div>`}
 <div class="apps"><h2>Your latest jobs</h2>
 ${jobs.length ? jobs.map(jobCard).join("") : `<div class="card empty"><p style="margin:0">Your next jobs arrive tomorrow morning.</p></div>`}</div>`);
 }

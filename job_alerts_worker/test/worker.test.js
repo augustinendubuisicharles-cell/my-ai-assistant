@@ -620,6 +620,8 @@ test("members log in with an emailed link: once, scanner-safe, 30-day cookie, an
   const home = await (await call("/me", { headers })).text();
   assert.match(home, /ada@example.com/);
   assert.match(home, /PR Associate[\s\S]*href="\/go\/[\w-]+\/\d+"/);
+  // Trial users see every member feature as a locked tile that leads to joining.
+  assert.match(home, /Members only[\s\S]*class="mtiles locked"[\s\S]*href="\/pay\/[\w-]+"[\s\S]*Application tracker[\s\S]*Tailored CVs[\s\S]*Cover letters/);
   assert.equal((await call("/login", { headers })).headers.get("location"), "/me");
 
   await call("/me/cv", { method: "POST", form: { cv: "Ada Obi, comms officer." }, headers });

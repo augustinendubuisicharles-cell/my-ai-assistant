@@ -296,7 +296,7 @@ export async function handle(request, env, q) {
     const apps = member ? await db.applications(q, sub.id) : [];
     return html(views.memberHome(ctx, { sub, member, until: db.isPaid(sub) ? fmtDate(sub.paid_until) : "", jobs: await db.latestJobs(q, sub.id),
       applied: apps.filter((r) => r.status !== "not_yet").length, interviews: apps.filter((r) => ["interview", "offer"].includes(r.status)).length,
-      hasCv: Boolean(await db.getCv(q, sub.id)), letters: member && letters.enabled(env), saved: url.searchParams.get("saved") }));
+      hasCv: Boolean(await db.getCv(q, sub.id)), letters: member && letters.enabled(env), locked: !member && letters.enabled(env), saved: url.searchParams.get("saved") }));
   }
 
   // Members' Apply link: notes that they opened the job, then forwards to the advert.
