@@ -869,7 +869,7 @@ ${tile("/me/cv", "cv", "My CV", "#7c3aed", "", hasCv ? "✓" : "")}
 ${tile(`/manage/${t}`, "telegram", "Telegram", "#0ea5e9", "telegram")}
 ${tile(`/manage/${t}`, "settings", "Settings", "#f97316")}
 </nav>
-<div class="apps"><h2>Your latest jobs</h2>
+<div class="apps"><h2>${jobs.length && Date.now() - new Date(jobs[0].sent_at) < 864e5 ? `Today's jobs · ${jobs.length}` : "Your latest jobs"}</h2>
 ${jobs.length ? jobs.map(jobCard).join("") : `<div class="card empty"><p style="margin:0">Your next jobs arrive tomorrow morning.</p></div>`}</div>
 ${member ? "" : `<dialog id="unlock" class="sheet"><form method="dialog">
   <span class="sheet-ic" id="u-ic"></span><h2 id="u-title"></h2><p id="u-text"></p>

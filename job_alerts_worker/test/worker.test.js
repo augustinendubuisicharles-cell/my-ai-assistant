@@ -619,6 +619,7 @@ test("members log in with an emailed link: once, scanner-safe, 30-day cookie, an
   const headers = { cookie: cookie.split(";")[0] };
   const home = await (await call("/me", { headers })).text();
   assert.match(home, /ada@example.com/);
+  assert.match(home, /Today's jobs · 1/);
   assert.match(home, /PR Associate[\s\S]*href="\/go\/[\w-]+\/\d+"/);
   // Trial users see the same tiles; tapping a member feature opens the "join" card.
   assert.match(home, /data-unlock="apps"[\s\S]*data-unlock="telegram"[\s\S]*data-unlock="cv"[\s\S]*data-unlock="letter"/);
