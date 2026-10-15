@@ -939,7 +939,9 @@ ${member ? "" : unlockSheet(ctx, join)}`);
 // --- one job's page: the whole advert, how to apply, then one button to the employer's form ---
 
 const ATS_HOSTS = /(greenhouse\.io|lever\.co|ashbyhq\.com|workable\.com|smartrecruiters\.com|bamboohr\.com|recruitee\.com|teamtailor\.com|breezy\.hr|jobvite\.com|myworkdayjobs\.com|personio\.)/i;
-const SIGNUP_SOURCES = ["We Work Remotely"]; // same list as SIGNUP_BOARDS in job_alerts/search.py
+// Same boards as SIGNUP_BOARDS in job_alerts/search.py, by name and by web address (older jobs have no source saved).
+const SIGNUP_SOURCES = ["We Work Remotely", "Himalayas", "Jobicy", "RemoteOK"];
+const SIGNUP_HOSTS = /(^|\.)(weworkremotely\.com|himalayas\.app|jobicy\.com|remoteok\.com)$/i;
 
 // Plain-text advert (paragraph breaks and "• " bullets kept) -> paragraphs and lists.
 function advertHtml(text) {
@@ -957,7 +959,7 @@ export function jobPage(ctx, { sub, job, member, letters = false }) {
   const t = esc(sub.token);
   const host = (() => { try { return new URL(job.url).hostname.replace(/^www\./, ""); } catch { return ""; } })();
   const direct = ATS_HOSTS.test(host) || job.source === "Company careers page";
-  const signup = SIGNUP_SOURCES.includes(job.source);
+  const signup = SIGNUP_SOURCES.includes(job.source) || SIGNUP_HOSTS.test(host);
   const who = job.company || "the company";
   const via = direct ? "" : job.source || host;
   const initials = (job.company || job.title || "?").replace(/[^\p{L}\p{N} ]/gu, "").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase() || "J";
