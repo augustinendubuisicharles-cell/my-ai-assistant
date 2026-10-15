@@ -262,13 +262,19 @@ export async function handle(request, env, q) {
     return render({ hasCv: true, letter: text, left: Math.max(0, letters.PER_DAY - used - 1) });
   }
 
-  // Log in with an emailed link (no passwords): /login sends it, /signin/<code> turns it into a 30-day session cookie.
+  // Log in with an emailed link (no passwords): /login sends it, /signin/<code> turns it into a session cookie that lasts
+  // 30 years. Browsers keep a cookie at most 400 days, so every visit to /login or /me while logged in renews it.
   const session = (request.headers.get("cookie") || "").match(/(?:^|;\s*)ja_session=([\w-]{20,64})/)?.[1];
   const me = async () => (session ? db.bySession(q, session) : null);
   const redirect = (to, headers = {}) => new Response(null, { status: 303, headers: { location: to, ...headers } });
+  const sessionCookie = (value) => `ja_session=${value}; Path=/; Max-Age=${60 * 60 * 24 * db.COOKIE_DAYS}; HttpOnly; Secure; SameSite=Lax`;
+  const stayLoggedIn = async () => {
+    await db.renewSession(q, session);
+    return { "set-cookie": sessionCookie(session) };
+  };
 
   if (path === "/login") {
-    if (method === "GET") return (await me()) ? redirect("/me") : html(views.loginPage(ctx));
+    if (method === "GET") return (await me()) ? redirect("/me", await stayLoggedIn()) : html(views.loginPage(ctx));
     if (method === "POST") {
       const email = String((await request.formData()).get("email") || "").trim();
       if (!EMAIL_RE.test(email) || email.length > 320) return html(views.loginPage(ctx, { error: "Please enter a valid email." }), 400);
@@ -293,7 +299,7 @@ export async function handle(request, env, q) {
     if (method === "GET") return (await db.loginCodeValid(q, m[1])) ? html(views.signinPage(ctx)) : expired();
     const value = await db.startSession(q, m[1]);
     if (!value) return expired();
-    return redirect("/me", { "set-cookie": `ja_session=${value}; Path=/; Max-Age=${60 * 60 * 24 * db.SESSION_DAYS}; HttpOnly; Secure; SameSite=Lax` });
+    return redirect("/me", { "set-cookie": sessionCookie(value) });
   }
 
   if (path === "/logout" && method === "POST") {

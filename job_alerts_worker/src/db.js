@@ -157,7 +157,8 @@ export const applications = (q, subscriberId) =>
 // --- members' email sign-in (logins table): a one-time link that becomes a 30-day session ---
 
 export const LOGIN_LINK_MINUTES = 30;
-export const SESSION_DAYS = 30;
+export const SESSION_DAYS = 365 * 30; // stay logged in for 30 years
+export const COOKIE_DAYS = 400;       // browsers cap a cookie at 400 days, so each visit renews it
 
 export async function sha256(text) {
   const d = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
@@ -188,6 +189,10 @@ export async function startSession(q, code) {
 export const bySession = async (q, session) =>
   one(q, `SELECT ${COLS.split(", ").map((c) => `s.${c}`).join(", ")} FROM logins l JOIN subscribers s ON s.id = l.subscriber_id
           WHERE l.session_hash = $1 AND l.expires_at > now()`, [await sha256(session)]);
+
+// Each visit pushes the session's end back to a full SESSION_DAYS.
+export const renewSession = async (q, session) =>
+  q("UPDATE logins SET expires_at = now() + make_interval(days => $2) WHERE session_hash = $1", [await sha256(session), SESSION_DAYS]);
 
 export const endSession = async (q, session) => q("DELETE FROM logins WHERE session_hash = $1", [await sha256(session)]);
 
