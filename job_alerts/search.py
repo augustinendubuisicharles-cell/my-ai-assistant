@@ -335,11 +335,14 @@ def from_jobspresso() -> tuple:
 CAREER_PAGES = {  # companies with remote jobs; the usual checks still drop ones not open to the user's country
     "greenhouse": ["canonical", "gitlab", "moniepoint", "okx", "bybit", "consensys", "wikimedia", "remotasks", "turing",
                    "mozilla", "grafanalabs", "coinbase", "webflow", "alxafrica", "bitwarden", "sproutsocial", "later",
-                   "typeform"],
-    "lever": ["jobgether", "binance", "appen", "toptal", "rws", "tala", "kinsta"],
+                   "typeform", "brex", "cloudflare", "customerio", "elastic", "coursera", "invisibletech", "netlify",
+                   "sourcegraph91"],
+    "lever": ["jobgether", "binance", "appen", "toptal", "rws", "tala", "kinsta", "superside"],
     "ashby": ["supabase", "oyster", "posthog", "zapier", "notion", "1password", "hostinger", "clickup", "andela",
-              "substack", "helpscout", "surfshark", "lemonade", "kit", "gorgias", "ledger"],
+              "substack", "helpscout", "surfshark", "lemonade", "kit", "gorgias", "ledger", "airwallex", "close",
+              "buffer", "miro", "contra"],
     "workable": ["remofirst", "kuda", "humanmade"],
+    "recruitee": ["mailerlite"],
 }
 
 
@@ -364,6 +367,13 @@ def _career_page(ats: str, slug: str) -> list[dict]:
                      url=j.get("url") or j.get("shortlink"),
                      posted=datetime.fromisoformat(j["published_on"]).replace(tzinfo=timezone.utc) if j.get("published_on") else None,
                      desc=_clean(j.get("description") or ""), remote=j.get("telecommuting") or None) for j in data.get("jobs", [])]
+    if ats == "recruitee":
+        data = _get(f"https://{slug}.recruitee.com/api/offers/")
+        return [dict(title=j.get("title"), company=j.get("company_name") or slug, location=j.get("location", ""),
+                     url=j.get("careers_url"),
+                     posted=datetime.fromisoformat(j["published_at"].replace(" UTC", "+00:00").replace(" ", "T"))
+                     if j.get("published_at") else None,
+                     desc=_clean(j.get("description") or ""), remote=j.get("remote") or None) for j in data.get("offers", [])]
     data = _get(f"https://api.ashbyhq.com/posting-api/job-board/{slug}", includeCompensation="true")
     return [dict(title=j.get("title"), company=slug, location=j.get("location", ""), url=j.get("jobUrl") or j.get("applyUrl"),
                  posted=datetime.fromisoformat(j["publishedAt"].replace("Z", "+00:00")) if j.get("publishedAt") else None,
