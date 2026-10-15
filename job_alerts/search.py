@@ -60,8 +60,8 @@ SCAM_SIGNS = ["registration fee", "training fee", "pay a fee", "processing fee",
               "unlimited earning"]
 REMOTE_WORDS = ["remote", "work from home", "home based", "home-based", "anywhere"]
 # Boards that make people create an account (or upgrade) before they can apply (checked 15 Oct 2026).
-# When the same job is also on an open source, that link is used. Otherwise the job only fills a gap
-# after every open job (SIGNUP_PENALTY puts it below them all) and is tagged "sign-up needed".
+# They're no longer searched (the owner's call, 15 Oct 2026): people only get jobs they can apply to
+# directly. If they're ever switched back on, their jobs only fill gaps and are tagged "sign-up needed".
 SIGNUP_BOARDS = {"We Work Remotely", "Himalayas", "Jobicy", "RemoteOK"}
 SIGNUP_PENALTY = 100
 
@@ -383,7 +383,7 @@ def from_career_pages() -> tuple:
 
 def remote_feeds() -> tuple:
     # Career pages go first, so when the same job is on a board too, the employer's own link is kept.
-    return (from_career_pages() + from_remotive() + from_weworkremotely() + from_remoteok() + from_workingnomads()
+    return (from_career_pages() + from_remotive() + from_workingnomads()
             + from_arbeitnow() + from_themuse() + from_jobspresso())
 
 
@@ -782,7 +782,7 @@ def _search(keywords: list[str], country: str, remote_only: bool, level: str, ci
     """Every listing that passes the checks for these titles, best first, plus how many listings each board gave."""
     pool = list(remote_feeds())
     for k in keywords:
-        pool += from_himalayas(k, country) + from_jobicy(k) + from_jooble(k, "" if remote_only else (city or country))
+        pool += from_jooble(k, "" if remote_only else (city or country))
         if not remote_only:
             pool += from_adzuna(k, country, city) + (from_reed(k, city) if country == "United Kingdom" else ())
     pool.sort(key=lambda j: j["source"] in SIGNUP_BOARDS)  # duplicates keep the open board's link
