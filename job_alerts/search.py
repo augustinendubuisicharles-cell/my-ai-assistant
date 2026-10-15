@@ -65,7 +65,12 @@ SIGNUP_BOARDS = {"We Work Remotely"}
 
 
 def _clean(html_text: str) -> str:
-    return re.sub(r"\s+", " ", unescape(re.sub(r"<[^>]+>", " ", html_text or ""))).strip()
+    """HTML -> plain text that keeps its paragraph breaks and bullet points (shown on the job page)."""
+    t = re.sub(r"<\s*(?:br|/p|/li|/h\d|/div|/ul|/ol|/tr)\b[^>]*>", "\n", html_text or "", flags=re.I)
+    t = re.sub(r"<\s*li\b[^>]*>", "\n• ", t, flags=re.I)
+    t = unescape(re.sub(r"<[^>]+>", " ", t))
+    t = re.sub(r"[^\S\n]+", " ", t)
+    return re.sub(r"\s*\n\s*", "\n", t).strip()
 
 
 def _get(url: str, **params):

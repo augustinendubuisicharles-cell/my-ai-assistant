@@ -132,7 +132,7 @@ export async function rewardReferrer(q, referrerId) {
 export const ANSWERS = ["applied", "not_yet", "skip", "interview", "offer", "no_reply"];
 
 export const sentJob = (q, subscriberId, id) =>
-  one(q, "SELECT id, title, company, url, status FROM sent_jobs WHERE id = $1 AND subscriber_id = $2", [id, subscriberId]);
+  one(q, "SELECT id, title, company, url, source, status, posted_at, location, pay, matched, description FROM sent_jobs WHERE id = $1 AND subscriber_id = $2", [id, subscriberId]);
 
 // They opened the job (the first time counts), or made a CV or letter for it: the next email asks "Did you apply?".
 export const markClicked = (q, subscriberId, id) =>

@@ -161,6 +161,11 @@ def letter_link(base_url: str, token: str, j: dict, kind: str = "letter") -> str
     return f"{base_url}/{kind}/{token}?" + urlencode({"t": j["title"], "c": j["company"], "u": j["url"]})
 
 
+def job_link(base_url: str, token: str, job_id: int) -> str:
+    """The job's own page on the site: the whole advert, how to apply, then one button to the employer's form."""
+    return f"{base_url}/j/{token}/{job_id}"
+
+
 def go_link(base_url: str, token: str, job_id: int) -> str:
     """Members' Apply link: notes that they opened the job, then forwards to the advert."""
     return f"{base_url}/go/{token}/{job_id}"
@@ -199,12 +204,12 @@ def digest(jobs: list[dict], today, base_url: str, token: str, trial: dict | Non
            waiting: list[dict] | None = None, tracker: bool = False) -> tuple[str, str, str]:
     """`trial`: for free-trial users, {"days_left", "perks", "price", "can_pay"} adds a short countdown box.
     `first`: the email sent right after someone confirms. `letters`: members get a tailored-CV and a cover-letter link per job.
-    `tracker` (members): Apply links go through the site, and the email can open with `ask` ("Did you apply?")
+    Every job with its sent_jobs "id" links to its page on the site. `tracker` (members): the email can open with `ask` ("Did you apply?")
     and `waiting` (jobs they said "Not yet" to). Tracked jobs need their sent_jobs "id"."""
     manage, unsub, pay = f"{base_url}/manage/{token}", f"{base_url}/unsubscribe/{token}", f"{base_url}/pay/{token}"
     apps = f"{base_url}/applications/{token}"
     ask, waiting = (ask or [], waiting or []) if tracker else ([], [])
-    apply = (lambda j: go_link(base_url, token, j["id"]) if j.get("id") else j["url"]) if tracker else (lambda j: j["url"])
+    apply = lambda j: job_link(base_url, token, j["id"]) if j.get("id") else j["url"]
     n = len(jobs)
     lines = [f"Your first job matches" if first else f"Your job matches -- {today:%a %d %b}", ""]
     if ask:

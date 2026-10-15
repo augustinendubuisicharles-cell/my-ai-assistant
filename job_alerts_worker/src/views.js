@@ -186,6 +186,30 @@ const STYLE = `
   .mjob .links a { text-decoration:none; }
   .mjob .links a.sub { color:var(--muted); }
   .chip-st { display:inline-block; font-size:.75rem; font-weight:700; padding:2px 9px; border-radius:99px; margin-left:6px; background:color-mix(in srgb, var(--ok) 14%, transparent); color:var(--ok); vertical-align:2px; }
+  .jhead { display:flex; gap:14px; align-items:flex-start; margin:6px 0 14px; }
+  .jav { flex:none; width:54px; height:54px; border-radius:16px; display:grid; place-items:center; font-weight:800; font-size:1.2rem; color:#fff; background:linear-gradient(135deg, var(--accent), #7c3aed); }
+  .jhead h1 { font-size:1.45rem; line-height:1.25; margin:0; }
+  .jhead .co { color:var(--muted); margin-top:2px; }
+  .jchips { display:flex; flex-wrap:wrap; gap:6px; margin:0 0 18px; }
+  .jchips span { font-size:.82rem; font-weight:600; padding:5px 11px; border-radius:99px; background:var(--card); border:1px solid var(--border); }
+  .jchips span.pay { color:var(--ok); border-color:color-mix(in srgb, var(--ok) 35%, var(--border)); background:color-mix(in srgb, var(--ok) 8%, var(--card)); }
+  .jchips span.warn { color:#b54708; border-color:#f7c99a; background:#fff6ed; }
+  .jsteps { padding:18px 18px 8px; margin:0 0 14px; }
+  .jsteps h2, .jdesc h2 { font-size:.8rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 12px; }
+  .jsteps ol { list-style:none; margin:0; padding:0; counter-reset:s; }
+  .jsteps li { counter-increment:s; position:relative; padding:0 0 14px 40px; }
+  .jsteps li::before { content:counter(s); position:absolute; left:0; top:-1px; width:26px; height:26px; border-radius:50%; display:grid; place-items:center; font-weight:800; font-size:.85rem; color:var(--accent); background:color-mix(in srgb, var(--accent) 13%, transparent); }
+  .jsteps li b { display:block; }
+  .jsteps li span { color:var(--muted); font-size:.9rem; }
+  .jtools { display:flex; flex-wrap:wrap; gap:8px; margin-top:8px; }
+  .jtools a { font-size:.85rem; font-weight:700; text-decoration:none; padding:7px 13px; border-radius:99px; border:1px solid var(--border); background:var(--bg); }
+  .jdesc { padding:18px; margin:0 0 14px; }
+  .jdesc p { margin:0 0 10px; } .jdesc ul { margin:0 0 10px; padding-left:20px; } .jdesc li { margin:0 0 4px; }
+  .jdesc details summary { cursor:pointer; color:var(--accent); font-weight:700; list-style:none; margin-top:4px; }
+  .jdesc details[open] summary { display:none; }
+  .jdid { padding:16px 18px; margin:0 0 14px; } .jdid .seg { margin-top:8px; } .jdid b { font-size:.95rem; }
+  .applybar { position:sticky; bottom:0; margin:0 -16px; padding:12px 16px calc(12px + env(safe-area-inset-bottom)); background:linear-gradient(transparent, var(--bg) 30%); }
+  .applybar .plan-cta { margin:0; } .applybar p { text-align:center; margin:6px 0 0; font-size:.8rem; color:var(--muted); }
   .toast { padding:10px 14px; margin:0 0 16px; border-radius:10px; background:color-mix(in srgb, var(--ok) 12%, transparent); color:var(--ok); font-weight:600; }
 `;
 
@@ -786,7 +810,7 @@ export function applications(ctx, { sub, rows, saved = 0 }) {
   const applied = rows.filter((r) => r.status !== "not_yet");
   const waiting = rows.filter((r) => r.status === "not_yet");
   const card = (r, buttons) => `<form class="card app${r.id === saved ? " saved" : ""}" method="post" id="job${r.id}">
-  <div class="app-top"><a href="/go/${esc(sub.token)}/${r.id}">${esc(r.title)}</a><time>${shortDate(r.status_at)}</time></div>
+  <div class="app-top"><a href="/j/${esc(sub.token)}/${r.id}">${esc(r.title)}</a><time>${shortDate(r.status_at)}</time></div>
   ${r.company ? `<div class="co">${esc(r.company)}</div>` : ""}
   <div class="seg">${buttons.map(([a, cls]) => `<button formaction="/job/${esc(sub.token)}/${r.id}/${a}" class="${cls || ""}${r.status === a ? " on" : ""}">${ANSWER_WORDS[a]}</button>`).join("")}</div>
 </form>`;
@@ -849,6 +873,21 @@ const UNLOCK = {
   telegram: ["Telegram alerts", "New jobs on Telegram during the day, so you apply first."],
 };
 
+// The join card that slides up when a trial user taps a member feature (any link with data-unlock="<UNLOCK key>").
+function unlockSheet(ctx, join) {
+  return `<dialog id="unlock" class="sheet"><form method="dialog">
+  <span class="sheet-ic" id="u-ic"></span><h2 id="u-title"></h2><p id="u-text"></p>
+  <ul class="sheet-perks"><li>5 to 10 jobs every morning</li><li>Tailored CV and cover letter per job</li><li>Application tracker and Telegram alerts</li></ul>
+  <a class="plan-cta" href="${join}">Join for ${esc(ctx.price)} <span aria-hidden="true">→</span></a>
+  <button class="sheet-close" value="close">Not now</button>
+</form></dialog>
+<script>(function(){var d=document.getElementById("unlock"),U=${JSON.stringify(UNLOCK)},I=${JSON.stringify({ apps: ME_ICONS.apps, cv: ME_ICONS.cv, letter: ME_ICONS.cv, telegram: ME_ICONS.telegram })};
+if(!d.showModal)return;document.querySelectorAll("[data-unlock]").forEach(function(a){a.addEventListener("click",function(e){var k=a.getAttribute("data-unlock");e.preventDefault();
+document.getElementById("u-title").textContent=U[k][0];document.getElementById("u-text").textContent=U[k][1];
+document.getElementById("u-ic").innerHTML=I[k];d.showModal();});});
+d.addEventListener("click",function(e){if(e.target===d)d.close();});})();</script>`;
+}
+
 export function memberHome(ctx, { sub, member, jobs, applied = 0, interviews = 0, hasCv, letters = false, saved = "" }) {
   const t = esc(sub.token);
   const gate = (feature) => (member ? "" : ` data-unlock="${feature}"`);
@@ -858,7 +897,7 @@ export function memberHome(ctx, { sub, member, jobs, applied = 0, interviews = 0
   const jobCard = (j) => `<div class="card mjob"><div class="t">${esc(j.title)}${j.status && j.status !== "skip"
     ? `<span class="chip-st">${esc({ applied: "Applied", not_yet: "Not yet", interview: "Interview", offer: "Offer", no_reply: "Applied" }[j.status] || "")}</span>` : ""}</div>
   <div class="small" style="margin:2px 0 0">${esc([j.company, j.source && `via ${j.source}`].filter(Boolean).join(" · "))}</div>
-  <div class="links"><a href="/go/${t}/${j.id}">View and apply →</a>${letters || !member
+  <div class="links"><a href="/j/${t}/${j.id}">View and apply →</a>${letters || !member
     ? `<a class="sub" href="/cv/${t}?${q(j)}"${gate("cv")}>Tailored CV</a><a class="sub" href="/letter/${t}?${q(j)}"${gate("letter")}>Cover letter</a>` : ""}</div></div>`;
   const join = ctx.paidService ? `/pay/${t}` : "/terms";
   return page(ctx, `<div class="me-top"><div><h1>Hi there 👋</h1><p class="lead" style="margin-bottom:18px">${esc(sub.email)}</p></div>
@@ -873,17 +912,67 @@ ${tile(`/manage/${t}`, "settings", "Settings", "#f97316")}
 </nav>
 <div class="apps"><h2>${jobs.length && Date.now() - new Date(jobs[0].sent_at) < 864e5 ? `Today's jobs · ${jobs.length}` : "Your latest jobs"}</h2>
 ${jobs.length ? jobs.map(jobCard).join("") : `<div class="card empty"><p style="margin:0">Your next jobs arrive tomorrow morning.</p></div>`}</div>
-${member ? "" : `<dialog id="unlock" class="sheet"><form method="dialog">
-  <span class="sheet-ic" id="u-ic"></span><h2 id="u-title"></h2><p id="u-text"></p>
-  <ul class="sheet-perks"><li>5 to 10 jobs every morning</li><li>Tailored CV and cover letter per job</li><li>Application tracker and Telegram alerts</li></ul>
-  <a class="plan-cta" href="${join}">Join for ${esc(ctx.price)} <span aria-hidden="true">→</span></a>
-  <button class="sheet-close" value="close">Not now</button>
-</form></dialog>
-<script>(function(){var d=document.getElementById("unlock"),U=${JSON.stringify(UNLOCK)},I=${JSON.stringify({ apps: ME_ICONS.apps, cv: ME_ICONS.cv, letter: ME_ICONS.cv, telegram: ME_ICONS.telegram })};
-if(!d.showModal)return;document.querySelectorAll("[data-unlock]").forEach(function(a){a.addEventListener("click",function(e){var k=a.getAttribute("data-unlock");e.preventDefault();
-document.getElementById("u-title").textContent=U[k][0];document.getElementById("u-text").textContent=U[k][1];
-document.getElementById("u-ic").innerHTML=I[k];d.showModal();});});
-d.addEventListener("click",function(e){if(e.target===d)d.close();});})();</script>`}`);
+${member ? "" : unlockSheet(ctx, join)}`);
+}
+
+// --- one job's page: the whole advert, how to apply, then one button to the employer's form ---
+
+const ATS_HOSTS = /(greenhouse\.io|lever\.co|ashbyhq\.com|workable\.com|smartrecruiters\.com|bamboohr\.com|recruitee\.com|teamtailor\.com|breezy\.hr|jobvite\.com|myworkdayjobs\.com|personio\.)/i;
+const SIGNUP_SOURCES = ["We Work Remotely"]; // same list as SIGNUP_BOARDS in job_alerts/search.py
+
+// Plain-text advert (paragraph breaks and "• " bullets kept) -> paragraphs and lists.
+function advertHtml(text) {
+  let out = "", list = [];
+  const flush = () => { if (list.length) out += `<ul>${list.map((l) => `<li>${esc(l)}</li>`).join("")}</ul>`; list = []; };
+  for (const line of String(text).split("\n").map((l) => l.trim()).filter(Boolean)) {
+    const m = line.match(/^[•\-*·]\s*(.+)$/);
+    if (m) list.push(m[1]); else { flush(); out += `<p>${esc(line)}</p>`; }
+  }
+  flush();
+  return out;
+}
+
+export function jobPage(ctx, { sub, job, member, letters = false }) {
+  const t = esc(sub.token);
+  const host = (() => { try { return new URL(job.url).hostname.replace(/^www\./, ""); } catch { return ""; } })();
+  const direct = ATS_HOSTS.test(host) || job.source === "Company careers page";
+  const signup = SIGNUP_SOURCES.includes(job.source);
+  const who = job.company || "the company";
+  const via = direct ? "" : job.source || host;
+  const initials = (job.company || job.title || "?").replace(/[^\p{L}\p{N} ]/gu, "").split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join("").toUpperCase() || "J";
+  const matched = String(job.matched || "").split(" · ").filter((m) => m && !/^posted |^matches "|^remote, |sign-up needed/.test(m) && m !== job.pay);
+  const chips = [job.location && `<span>📍 ${esc(job.location)}</span>`, job.pay && `<span class="pay">💰 ${esc(job.pay)}</span>`,
+    job.posted_at && `<span>🗓 Posted ${shortDate(job.posted_at)}</span>`, ...matched.map((m) => `<span>${esc(m)}</span>`),
+    signup && `<span class="warn">Sign-up needed to apply</span>`].filter(Boolean).join("");
+  const q = esc(new URLSearchParams({ t: job.title, c: job.company || "", u: job.url || "" }).toString());
+  const gate = (f) => (member ? "" : ` data-unlock="${f}"`);
+  const tools = letters || !member ? `<div class="jtools"><a href="/cv/${t}?${q}"${gate("cv")}>📄 Tailored CV</a><a href="/letter/${t}?${q}"${gate("letter")}>✍️ Cover letter</a></div>` : "";
+  const how = direct ? `A short form on ${esc(who)}'s own site. No account needed.`
+    : signup ? `${esc(via)} asks you to sign up before you can apply. Then use their Apply button.`
+    : `Opens the advert on ${esc(via)}. Tap their Apply button.`;
+  const desc = String(job.description || "").trim();
+  const lines = desc.split("\n").filter((l) => l.trim());
+  const advert = !desc ? `<p class="small" style="margin:0">The full advert is on ${direct ? `${esc(who)}'s site` : esc(via)}.</p>`
+    : lines.length > 8 ? `${advertHtml(lines.slice(0, 6).join("\n"))}<details><summary>Read the full advert</summary>${advertHtml(lines.slice(6).join("\n"))}</details>`
+    : advertHtml(desc);
+  const button = direct ? `Apply on ${esc(who)}'s site` : `Go to the advert on ${esc(via)}`;
+  const tracker = member ? `<form class="card jdid" method="post"><b>Did you apply?</b><div class="seg">${[["applied", "good"], ["not_yet"], ["skip", "skip"]]
+    .map(([a, cls]) => `<button formaction="/job/${t}/${job.id}/${a}" class="${cls || ""}${job.status === a ? " on" : ""}">${ANSWER_WORDS[a]}</button>`).join("")}</div></form>` : "";
+  const join = ctx.paidService ? `/pay/${t}` : "/terms";
+  return page(ctx, `<div class="jhead"><span class="jav" aria-hidden="true">${esc(initials)}</span><div><h1>${esc(job.title)}</h1>
+<div class="co">${esc([job.company, via && `via ${via}`].filter(Boolean).join(" · "))}</div></div></div>
+<div class="jchips">${chips}</div>
+<div class="card jsteps"><h2>How to apply</h2><ol>
+  <li><b>Check it fits you</b><span>Read the advert below: what they need and where they hire.</span></li>
+  <li><b>Get your CV ready</b><span>${letters || !member ? "One tap makes a CV and cover letter for this exact job." : "Have it ready as a PDF."}</span>${tools}</li>
+  <li><b>Apply</b><span>${how}</span></li>
+</ol></div>
+<div class="card jdesc"><h2>About the job</h2>${advert}</div>
+${tracker}
+<div class="applybar"><a class="plan-cta" href="/go/${t}/${job.id}" target="_blank" rel="noopener">${button} <span aria-hidden="true">→</span></a>
+<p>Apply early: new adverts get the most attention.</p></div>
+<p class="small" style="text-align:center"><a href="/me">My dashboard</a></p>
+${member ? "" : unlockSheet(ctx, join)}`);
 }
 
 export function cvPage(ctx, { cv, member }) {

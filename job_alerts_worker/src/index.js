@@ -287,7 +287,16 @@ export async function handle(request, env, q) {
       hasCv: Boolean(await db.getCv(q, sub.id)), letters: member && letters.enabled(env), saved: url.searchParams.get("saved") }));
   }
 
-  // Members' Apply link: notes that they opened the job, then forwards to the advert.
+  // A job's own page, linked from the morning email: the whole advert and how to apply, then one button to the employer.
+  if ((m = path.match(/^\/j\/([\w-]+)\/(\d+)$/)) && method === "GET") {
+    const sub = await db.byToken(q, m[1]);
+    const job = sub && await db.sentJob(q, sub.id, Number(m[2]));
+    if (!job || !/^https?:\/\//.test(job.url || "")) return notFound();
+    const member = await db.isMember(q, sub);
+    return html(views.jobPage(ctx, { sub, job, member, letters: member && letters.enabled(env) }));
+  }
+
+  // The Apply button (job page, tracker): notes that they opened the job, then forwards to the advert.
   if ((m = path.match(/^\/go\/([\w-]+)\/(\d+)$/)) && method === "GET") {
     const sub = await db.byToken(q, m[1]);
     const job = sub && await db.sentJob(q, sub.id, Number(m[2]));
