@@ -1,8 +1,8 @@
 """Finds jobs for one subscriber's preferences and ranks them.
 
-Remote jobs (no keys needed): Himalayas, Jobicy, Remotive, We Work Remotely, RemoteOK,
-Working Nomads, Arbeitnow, The Muse and Jobspresso, plus the careers pages of remote-hiring
-companies on Greenhouse, Lever and Ashby (CAREER_PAGES), where applying needs no board account.
+Remote jobs (no keys needed): the careers pages of about 1,000 companies on Greenhouse, Lever,
+Ashby, Workable and Recruitee (CAREER_PAGES + career_pages.json), plus Remotive, Working Nomads,
+Arbeitnow, The Muse and Jobspresso. Every one lets people apply without a job-board account.
 Jooble (optional free key JOOBLE_API_KEY) searches thousands of sites, like Indeed, remote and on-site.
 On-site/hybrid jobs (optional keys): Adzuna (19 countries, free key at
 developer.adzuna.com: ADZUNA_APP_ID + ADZUNA_APP_KEY) and Reed (UK, free key:
