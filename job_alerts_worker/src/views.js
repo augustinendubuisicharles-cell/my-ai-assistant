@@ -139,6 +139,26 @@ const STYLE = `
   .brand { display:inline-flex; align-items:center; gap:10px; margin:0 0 20px; text-decoration:none; color:var(--text); font-size:1.35rem; font-weight:800; letter-spacing:-.3px; }
   .brand b { color:var(--accent); }
   .brand img { border-radius:9px; }
+  .apps-link { display:flex; justify-content:space-between; align-items:center; margin:0 0 16px; padding:14px 18px; text-decoration:none; color:var(--text); font-weight:700; }
+  .apps-link span { color:var(--accent); }
+  .tiles { display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; margin:0 0 22px; }
+  .tile { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:14px 12px; text-align:center; }
+  .tile b { display:block; font-size:1.8rem; line-height:1.1; letter-spacing:-.02em; }
+  .tile span { font-size:.82rem; color:var(--muted); font-weight:600; }
+  .tile.int b { color:var(--accent); } .tile.off b { color:var(--ok); }
+  .apps h2 { font-size:.8rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:22px 0 10px; }
+  .app { padding:16px 18px; margin:0 0 10px; transition:border-color .3s; }
+  .app.saved { border-color:var(--ok); box-shadow:0 0 0 3px color-mix(in srgb, var(--ok) 18%, transparent); }
+  .app-top { display:flex; justify-content:space-between; gap:10px; align-items:baseline; }
+  .app-top a { color:var(--text); font-weight:700; text-decoration:none; }
+  .app-top time { color:var(--muted); font-size:.8rem; white-space:nowrap; }
+  .app .co { color:var(--muted); font-size:.9rem; }
+  .seg { display:flex; flex-wrap:wrap; gap:6px; margin-top:12px; }
+  .seg button { width:auto; margin:0; padding:7px 13px; border-radius:99px; font-size:.85rem; font-weight:700; background:var(--bg); color:var(--muted); border:1px solid var(--border); }
+  .seg button.on { background:var(--accent); color:var(--on-accent); border-color:var(--accent); }
+  .seg button.on.good { background:var(--ok); border-color:var(--ok); color:#fff; }
+  .seg button.skip { color:var(--muted); background:transparent; border-color:transparent; }
+  .empty { text-align:center; color:var(--muted); padding:28px 20px; }
 `;
 
 // The home page: a blue hero with the form and floating example jobs, four steps, and a
@@ -613,7 +633,7 @@ export function form(ctx, { sub = null, action, button, heading, lead, status = 
   const script = FORM_SCRIPT;
   if (!sub) return page(ctx, landing(ctx, formHtml) + script, { landing: true });
   return page(ctx, `${intro}
-${statusBox}${telegramBox}
+${statusBox}${member ? `<a class="card apps-link" href="/applications/${esc(sub.token)}">📋 My applications <span>&rarr;</span></a>` : ""}${telegramBox}
 ${formHtml}
 <details class="fold info" id="plans"><summary>${sub ? "How it works" : "See what you get"}</summary>
 ${sub ? "" : strengths() + plans(ctx) + compare()}
@@ -714,4 +734,41 @@ a.download=${JSON.stringify(fileName + ".doc").replace(/</g, "\\u003c")};documen
   <p class="free">${left} of 10 left today</p>
 </form>
 <script>document.getElementById("write").addEventListener("submit",function(){var b=document.getElementById("go");b.disabled=true;b.textContent="Writing... (about ${isCv ? 40 : 20} seconds)";});</script>`);
+}
+
+// --- members' application tracker ---
+
+const ANSWER_WORDS = { applied: "Applied", not_yet: "Not yet", skip: "Not for me", interview: "Interview", offer: "Offer", no_reply: "No reply" };
+
+// Opened from the email's one-tap answers. The answer is only saved by the POST this page sends,
+// so link checkers in mail apps that open every link can't answer for people.
+export function answerPage(ctx, { job, answer }) {
+  return page(ctx, `<div class="card empty"><p style="margin:0 0 6px"><b>${esc(job.title)}</b>${job.company ? ` &middot; ${esc(job.company)}` : ""}</p>
+<form method="post" id="answer"><button type="submit" style="width:auto;padding:12px 28px">Save: ${esc(ANSWER_WORDS[answer])}</button></form></div>
+<script>document.getElementById("answer").submit();</script>`);
+}
+
+const shortDate = (d) => (d ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }) : "");
+
+export function applications(ctx, { sub, rows, saved = 0 }) {
+  const count = (...st) => rows.filter((r) => st.includes(r.status)).length;
+  const applied = rows.filter((r) => r.status !== "not_yet");
+  const waiting = rows.filter((r) => r.status === "not_yet");
+  const card = (r, buttons) => `<form class="card app${r.id === saved ? " saved" : ""}" method="post" id="job${r.id}">
+  <div class="app-top"><a href="/go/${esc(sub.token)}/${r.id}">${esc(r.title)}</a><time>${shortDate(r.status_at)}</time></div>
+  ${r.company ? `<div class="co">${esc(r.company)}</div>` : ""}
+  <div class="seg">${buttons.map(([a, cls]) => `<button formaction="/job/${esc(sub.token)}/${r.id}/${a}" class="${cls || ""}${r.status === a ? " on" : ""}">${ANSWER_WORDS[a]}</button>`).join("")}</div>
+</form>`;
+  const body = !rows.length ? `<div class="card empty"><p style="margin:0">Nothing here yet.</p>
+<p class="small" style="margin:8px 0 0">Open a job from your morning email and we'll ask the next day if you applied.</p></div>` : `
+${waiting.length ? `<h2>Still deciding</h2>${waiting.map((r) => card(r, [["applied", "good"], ["not_yet"], ["skip", "skip"]])).join("")}` : ""}
+${applied.length ? `<h2>Applied</h2>${applied.map((r) => card(r, [["applied"], ["interview"], ["offer", "good"], ["no_reply"]])).join("")}` : ""}`;
+  return page(ctx, `<h1>My applications</h1>
+<p class="lead">Every job you applied to, and where it stands.</p>
+<div class="tiles"><div class="tile"><b>${applied.length}</b><span>Applied</span></div>
+<div class="tile int"><b>${count("interview", "offer")}</b><span>Interviews</span></div>
+<div class="tile off"><b>${count("offer")}</b><span>Offers</span></div></div>
+<div class="apps">${body}</div>
+<p class="small" style="text-align:center"><a href="/manage/${esc(sub.token)}">Back to my job alerts</a></p>
+${saved ? `<script>var s=document.getElementById("job${saved}");s&&s.scrollIntoView({block:"center"});</script>` : ""}`);
 }

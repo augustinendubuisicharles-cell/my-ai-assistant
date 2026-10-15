@@ -537,3 +537,54 @@ test("the dashboard flags users whose first search never ran", async () => {
   assert.match(page, /Never searched: their first search didn't start/);
   assert.match(page, /Needs attention/);
 });
+
+test("members track applications: Apply links note the click, one-tap answers save only on POST, and the tracker lists them", async () => {
+  env.ANTHROPIC_API_KEY = "sk-test";
+  await signUp();
+  const sub0 = await subscriber();
+  await call(`/confirm/${sub0.token}`);
+  const add = async (title, url) => (await q(`INSERT INTO sent_jobs (subscriber_id, job_key, sent_at, title, company, url)
+    VALUES ($1, $2, now(), $3, 'Acme', $4) RETURNING id`, [sub0.id, `t:${title}`, title, url]))[0].id;
+  const pr = await add("PR Associate", "https://jobs.example/pr-1");
+  const va = await add("Virtual Assistant", "https://jobs.example/va-2");
+  const { token } = sub0;
+
+  // Trial users don't get the tracker page.
+  assert.match(await (await call(`/applications/${token}`)).text(), /Your applications are for members/);
+  await call(`/pay/${token}`, { method: "POST" });
+  await call("/paid?transRef=vs_1");
+
+  // Apply link: forwards to the advert and notes the click; someone else's token can't use it.
+  const go = await call(`/go/${token}/${pr}`);
+  assert.equal(go.status, 302);
+  assert.equal(go.headers.get("location"), "https://jobs.example/pr-1");
+  assert.ok((await q("SELECT clicked_at FROM sent_jobs WHERE id = $1", [pr]))[0].clicked_at);
+  assert.equal((await call(`/go/not-a-real-token-at-all/${pr}`)).status, 404);
+
+  // Making a CV for a job counts as a sign too.
+  await call(`/cv/${token}?t=Virtual%20Assistant&c=Acme&u=${encodeURIComponent("https://jobs.example/va-2")}`,
+    { method: "POST", form: { cv: "Ada Obi. Assistant, 2 years." } });
+  assert.ok((await q("SELECT clicked_at FROM sent_jobs WHERE id = $1", [va]))[0].clicked_at);
+
+  // Opening the answer link (as a mail app's link checker would) saves nothing; the page's POST does.
+  const page = await (await call(`/job/${token}/${pr}/applied`)).text();
+  assert.match(page, /Save: Applied/);
+  assert.equal((await q("SELECT status FROM sent_jobs WHERE id = $1", [pr]))[0].status, null);
+  const saved = await call(`/job/${token}/${pr}/applied`, { method: "POST" });
+  assert.equal(saved.status, 303);
+  assert.equal(saved.headers.get("location"), `${BASE}/applications/${token}?saved=${pr}`);
+  await call(`/job/${token}/${va}/not_yet`, { method: "POST" });
+  assert.equal((await call(`/job/${token}/${va}/hired`, { method: "POST" })).status, 404);
+
+  let tracker = await (await call(`/applications/${token}?saved=${pr}`)).text();
+  assert.match(tracker, /Still deciding[\s\S]*Virtual Assistant[\s\S]*Applied<\/h2>[\s\S]*PR Associate/);
+  assert.match(tracker, /<b>1<\/b><span>Applied/);
+
+  // Moving it on to an interview, then "Not for me" hides the other one.
+  await call(`/job/${token}/${pr}/interview`, { method: "POST" });
+  await call(`/job/${token}/${va}/skip`, { method: "POST" });
+  tracker = await (await call(`/applications/${token}`)).text();
+  assert.match(tracker, /<b>1<\/b><span>Interviews/);
+  assert.doesNotMatch(tracker, /Virtual Assistant/);
+  assert.match(await (await call(`/manage/${token}`)).text(), /My applications/);
+});

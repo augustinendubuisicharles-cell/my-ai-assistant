@@ -47,7 +47,7 @@ def main() -> None:
                              sub["level"], db.already_sent(sub["id"]), n=PER_RUN, city=sub.get("city") or "")
             for job in jobs:
                 send(token, sub["telegram_chat_id"], message(job))
-                db.record_sent(sub["id"], [job_key(job)])  # one at a time: a failure mid-way doesn't lose track
+                db.record_sent(sub["id"], [{**job, "key": job_key(job)}])  # one at a time: a failure mid-way doesn't lose track
                 time.sleep(0.5)
             sent += len(jobs)
             print(f"- subscriber {sub['id']}: {len(jobs)} job(s) on Telegram")

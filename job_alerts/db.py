@@ -58,6 +58,16 @@ sent_jobs = Table(
     Column("subscriber_id", Integer, ForeignKey("subscribers.id", ondelete="CASCADE"), nullable=False),
     Column("job_key", String(500), nullable=False),
     Column("sent_at", DateTime(timezone=True), nullable=False),
+    # Members' application tracker: the job itself, so it can be shown again or listed on their tracker page.
+    Column("title", String(300)),
+    Column("company", String(200)),
+    Column("url", String(1000)),
+    Column("source", String(60)),
+    Column("posted_at", DateTime(timezone=True)),
+    Column("clicked_at", DateTime(timezone=True)),       # they opened Apply, or made a CV or letter for it
+    Column("asked_count", Integer, nullable=False, server_default="0"),  # mornings we asked "Did you apply?"
+    Column("status", String(20)),                        # STATUSES below; NULL = no answer yet
+    Column("status_at", DateTime(timezone=True)),
     UniqueConstraint("subscriber_id", "job_key"),
 )
 
@@ -72,6 +82,15 @@ def _url() -> str:
 
 
 engine = create_engine(_url(), pool_pre_ping=True)
+
+
+SENT_JOB_COLUMNS = {"title": "VARCHAR(300)", "company": "VARCHAR(200)", "url": "VARCHAR(1000)", "source": "VARCHAR(60)",
+                    "posted_at": "TIMESTAMP WITH TIME ZONE", "clicked_at": "TIMESTAMP WITH TIME ZONE",
+                    "asked_count": "INTEGER NOT NULL DEFAULT 0", "status": "VARCHAR(20)", "status_at": "TIMESTAMP WITH TIME ZONE"}
+# Tracker answers. "not_yet" jobs come back each morning while they're fresh; "skip" ones never do.
+STATUSES = ("applied", "not_yet", "skip", "interview", "offer", "no_reply")
+ASK_MORNINGS = 2      # how many mornings we ask "Did you apply?" about a job they opened
+FRESH = timedelta(days=7)  # same as search.MAX_AGE: older adverts stop coming back
 
 
 def init_db() -> None:
@@ -89,6 +108,12 @@ def init_db() -> None:
                 if engine.dialect.name == "sqlite":
                     sql_type = sql_type.replace("TIMESTAMP WITH TIME ZONE", "DATETIME")
                 conn.execute(text(f"ALTER TABLE subscribers ADD COLUMN {name} {sql_type}"))
+        have_jobs = {c["name"] for c in inspect(engine).get_columns("sent_jobs")}
+        for name, sql_type in SENT_JOB_COLUMNS.items():
+            if name not in have_jobs:
+                if engine.dialect.name == "sqlite":
+                    sql_type = sql_type.replace("TIMESTAMP WITH TIME ZONE", "DATETIME")
+                conn.execute(text(f"ALTER TABLE sent_jobs ADD COLUMN {name} {sql_type}"))
         if "kind" not in {c["name"] for c in inspect(engine).get_columns("letters")}:
             conn.execute(text("ALTER TABLE letters ADD COLUMN kind VARCHAR(10) NOT NULL DEFAULT 'letter'"))
         if "ref_code" not in have:  # create_all only adds the unique index on new databases
@@ -244,8 +269,54 @@ def already_sent(subscriber_id: int) -> set[str]:
         return {r.job_key for r in conn.execute(select(sent_jobs.c.job_key).where(sent_jobs.c.subscriber_id == subscriber_id))}
 
 
-def record_sent(subscriber_id: int, job_keys: list[str]) -> None:
+def record_sent(subscriber_id: int, jobs: list[dict]) -> list[int]:
+    """Stores today's jobs (each needs "key") and returns their row ids, used in the tracker links."""
+    ids = []
     with engine.begin() as conn:
-        for key in job_keys:
-            conn.execute(insert(sent_jobs).values(subscriber_id=subscriber_id, job_key=key[:500], sent_at=now()))
+        for j in jobs:
+            ids.append(conn.execute(insert(sent_jobs).values(
+                subscriber_id=subscriber_id, job_key=j["key"][:500], sent_at=now(), title=(j.get("title") or "")[:300],
+                company=(j.get("company") or "")[:200], url=(j.get("url") or "")[:1000], source=(j.get("source") or "")[:60],
+                posted_at=j.get("posted")).returning(sent_jobs.c.id)).scalar())
         conn.execute(update(subscribers).where(subscribers.c.id == subscriber_id).values(last_sent_at=now()))
+    return ids
+
+
+def unsend(ids: list[int]) -> None:
+    """Undoes record_sent when the email then failed, so the jobs can go out next time."""
+    with engine.begin() as conn:
+        conn.execute(delete(sent_jobs).where(sent_jobs.c.id.in_(ids)))
+
+
+def _fresh(row) -> bool:
+    return (_aware(row["posted_at"]) or _aware(row["sent_at"])) >= now() - FRESH
+
+
+def jobs_to_ask(subscriber_id: int) -> list[dict]:
+    """Jobs they opened (or made a CV or letter for) before today, haven't answered about, and are still fresh."""
+    start = now().replace(hour=0, minute=0, second=0, microsecond=0)
+    with engine.connect() as conn:
+        rows = conn.execute(select(sent_jobs).where(
+            sent_jobs.c.subscriber_id == subscriber_id, sent_jobs.c.clicked_at.is_not(None), sent_jobs.c.clicked_at < start,
+            sent_jobs.c.status.is_(None), sent_jobs.c.asked_count < ASK_MORNINGS).order_by(sent_jobs.c.clicked_at)).mappings()
+        return [dict(r) for r in rows if _fresh(r)][:5]
+
+
+def jobs_waiting(subscriber_id: int) -> list[dict]:
+    """Jobs they said "Not yet" to that are still fresh: shown again every morning until they decide."""
+    with engine.connect() as conn:
+        rows = conn.execute(select(sent_jobs).where(sent_jobs.c.subscriber_id == subscriber_id, sent_jobs.c.status == "not_yet")
+                            .order_by(sent_jobs.c.status_at)).mappings()
+        return [dict(r) for r in rows if _fresh(r)][:5]
+
+
+def mark_asked(ids: list[int]) -> None:
+    if ids:
+        with engine.begin() as conn:
+            conn.execute(update(sent_jobs).where(sent_jobs.c.id.in_(ids)).values(asked_count=sent_jobs.c.asked_count + 1))
+
+
+def set_status(ids: list[int], status: str) -> None:
+    if ids:
+        with engine.begin() as conn:
+            conn.execute(update(sent_jobs).where(sent_jobs.c.id.in_(ids)).values(status=status, status_at=now()))

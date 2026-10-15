@@ -122,20 +122,24 @@ def _chip(label: str) -> str:
             f'color:{color};font-size:12px;font-weight:600">{"✓ " if good else ""}{escape(label)}</span>')
 
 
-def _job_card(j: dict, letter_url: str = "", cv_url: str = "") -> str:
-    company = f'<div style="color:{MUTED};font-size:14px;margin-top:2px">{escape(j["company"])} · via {escape(j["source"])}</div>' \
-        if j["company"] else f'<div style="color:{MUTED};font-size:14px;margin-top:2px">via {escape(j["source"])}</div>'
+def _job_card(j: dict, letter_url: str = "", cv_url: str = "", apply_url: str = "", extra: str = "") -> str:
+    """apply_url: members' Apply link goes through the site first (it tells us they opened it);
+    extra: more links on the same row (the "Applied" / "Not for me" answers on jobs shown again)."""
+    apply_url = apply_url or j["url"]
+    source = f' · via {escape(j["source"])}' if j.get("source") else ""
+    company = f'<div style="color:{MUTED};font-size:14px;margin-top:2px">{escape(j["company"])}{source}</div>' \
+        if j["company"] else (f'<div style="color:{MUTED};font-size:14px;margin-top:2px">{source[3:]}</div>' if source else "")
     return (f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 14px;border:1px solid {LINE};'
             f'border-radius:12px"><tr><td style="padding:16px 18px">'
-            f'<a href="{_a(j["url"])}" style="color:{INK};text-decoration:none;font-size:17px;font-weight:700">{escape(j["title"])}</a>'
-            f'{company}<div>{"".join(_chip(m) for m in j["matched"])}</div>'
-            f'<div style="margin-top:12px"><a href="{_a(j["url"])}" style="color:{BLUE};font-weight:700;text-decoration:none">'
+            f'<a href="{_a(apply_url)}" style="color:{INK};text-decoration:none;font-size:17px;font-weight:700">{escape(j["title"])}</a>'
+            f'{company}<div>{"".join(_chip(m) for m in j.get("matched", []))}</div>'
+            f'<div style="margin-top:12px"><a href="{_a(apply_url)}" style="color:{BLUE};font-weight:700;text-decoration:none">'
             f"View and apply &rarr;</a>"
             + (f'<a href="{_a(cv_url)}" style="color:{MUTED};font-weight:600;text-decoration:none;margin-left:16px">'
                f"📄 Tailored CV</a>" if cv_url else "")
             + (f'<a href="{_a(letter_url)}" style="color:{MUTED};font-weight:600;text-decoration:none;margin-left:16px">'
                f"✍️ Cover letter</a>" if letter_url else "")
-            + "</div></td></tr></table>")
+            + extra + "</div></td></tr></table>")
 
 
 def _trial_box(trial: dict, pay: str) -> str:
@@ -157,28 +161,94 @@ def letter_link(base_url: str, token: str, j: dict, kind: str = "letter") -> str
     return f"{base_url}/{kind}/{token}?" + urlencode({"t": j["title"], "c": j["company"], "u": j["url"]})
 
 
+def go_link(base_url: str, token: str, job_id: int) -> str:
+    """Members' Apply link: notes that they opened the job, then forwards to the advert."""
+    return f"{base_url}/go/{token}/{job_id}"
+
+
+def answer_link(base_url: str, token: str, job_id: int, answer: str) -> str:
+    """One tap on "Applied", "Not yet" or "Not for me" (db.STATUSES)."""
+    return f"{base_url}/job/{token}/{job_id}/{answer}"
+
+
+def _pill(url: str, label: str, color: str, bg: str) -> str:
+    return (f'<a href="{_a(url)}" style="display:inline-block;margin:8px 6px 0 0;padding:7px 14px;border-radius:20px;background:{bg};'
+            f'color:{color};font-size:13px;font-weight:700;text-decoration:none">{label}</a>')
+
+
+def _ask_box(ask: list[dict], base_url: str, token: str) -> str:
+    """"Did you apply?" for jobs they opened yesterday or before, with three one-tap answers."""
+    rows = "".join(
+        f'<div style="padding:12px 0;border-top:1px solid #dbe4fb"><b>{escape(j["title"])}</b>'
+        + (f'<span style="color:{MUTED}"> · {escape(j["company"])}</span>' if j.get("company") else "") + "<br>"
+        + _pill(answer_link(base_url, token, j["id"], "applied"), "✅ Applied", "#fff", GREEN)
+        + _pill(answer_link(base_url, token, j["id"], "not_yet"), "⏳ Not yet", BLUE, "#fff")
+        + _pill(answer_link(base_url, token, j["id"], "skip"), "✕ Not for me", MUTED, "#fff") + "</div>"
+        for j in ask)
+    return (f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 18px"><tr>'
+            f'<td style="background:#eef3ff;border-radius:12px;padding:16px 18px 6px">'
+            f'<div style="font-size:16px;font-weight:800;margin-bottom:10px">Did you apply? 🤔</div>{rows}</td></tr></table>')
+
+
+def _heading(text: str) -> str:
+    return f'<div style="font-size:13px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:{MUTED};margin:6px 0 10px">{text}</div>'
+
+
 def digest(jobs: list[dict], today, base_url: str, token: str, trial: dict | None = None,
-           first: bool = False, letters: bool = False) -> tuple[str, str, str]:
+           first: bool = False, letters: bool = False, ask: list[dict] | None = None,
+           waiting: list[dict] | None = None, tracker: bool = False) -> tuple[str, str, str]:
     """`trial`: for free-trial users, {"days_left", "perks", "price", "can_pay"} adds a short countdown box.
-    `first`: the email sent right after someone confirms. `letters`: members get a tailored-CV and a cover-letter link per job."""
+    `first`: the email sent right after someone confirms. `letters`: members get a tailored-CV and a cover-letter link per job.
+    `tracker` (members): Apply links go through the site, and the email can open with `ask` ("Did you apply?")
+    and `waiting` (jobs they said "Not yet" to). Tracked jobs need their sent_jobs "id"."""
     manage, unsub, pay = f"{base_url}/manage/{token}", f"{base_url}/unsubscribe/{token}", f"{base_url}/pay/{token}"
+    apps = f"{base_url}/applications/{token}"
+    ask, waiting = (ask or [], waiting or []) if tracker else ([], [])
+    apply = (lambda j: go_link(base_url, token, j["id"]) if j.get("id") else j["url"]) if tracker else (lambda j: j["url"])
     n = len(jobs)
     lines = [f"Your first job matches" if first else f"Your job matches -- {today:%a %d %b}", ""]
+    if ask:
+        lines += ["Did you apply?"]
+        for j in ask:
+            lines += [f"- {j['title']}" + (f" at {j['company']}" if j.get("company") else ""),
+                      f"  Applied: {answer_link(base_url, token, j['id'], 'applied')}",
+                      f"  Not yet: {answer_link(base_url, token, j['id'], 'not_yet')}",
+                      f"  Not for me: {answer_link(base_url, token, j['id'], 'skip')}"]
+        lines += [""]
+    if waiting:
+        lines += ["Still waiting for you:"]
+        for j in waiting:
+            lines += [f"- {j['title']}" + (f" at {j['company']}" if j.get("company") else ""), f"  {apply(j)}",
+                      f"  Applied: {answer_link(base_url, token, j['id'], 'applied')}"]
+        lines += ["", "New today:" if jobs else ""]
     for i, j in enumerate(jobs, 1):
         company = f" at {j['company']}" if j["company"] else ""
-        lines += [f"{i}. {j['title']}{company}", f"   {j['url']}"]
+        lines += [f"{i}. {j['title']}{company}", f"   {apply(j)}"]
         if letters:
             lines += [f"   Tailored CV: {letter_link(base_url, token, j, 'cv')}", f"   Cover letter: {letter_link(base_url, token, j)}"]
         lines += [""]
     if trial:
         lines += [f"{trial['days_left']} day(s) left in your free trial. Members get {trial['perks']}."
                   + (f" Become a member: {pay}" if trial.get("can_pay") else " Membership opens soon."), ""]
-    lines += [FOOTER, "", f"Change what you get: {manage}", f"Unsubscribe: {unsub}"]
+    lines += [FOOTER, ""] + ([f"My applications: {apps}"] if tracker else []) + [f"Change what you get: {manage}", f"Unsubscribe: {unsub}"]
 
-    body = "".join(_job_card(j, *((letter_link(base_url, token, j), letter_link(base_url, token, j, "cv")) if letters else ()))
-                   for j in jobs) + (_trial_box(trial, pay) if trial else "")
+    def card(j: dict, extra: str = "") -> str:
+        links = (letter_link(base_url, token, j), letter_link(base_url, token, j, "cv")) if letters else ("", "")
+        return _job_card(j, *links, apply_url=apply(j), extra=extra)
+
+    def answers(j: dict) -> str:
+        return (f'<br><a href="{_a(answer_link(base_url, token, j["id"], "applied"))}" style="display:inline-block;margin-top:10px;color:{GREEN};'
+                f'font-weight:700;text-decoration:none">✅ I applied</a><a href="{_a(answer_link(base_url, token, j["id"], "skip"))}" '
+                f'style="display:inline-block;margin:10px 0 0 16px;color:{MUTED};font-weight:600;text-decoration:none">✕ Not for me</a>')
+
+    body = _ask_box(ask, base_url, token) if ask else ""
+    if waiting:
+        body += _heading("Still waiting for you") + "".join(card(j, answers(j)) for j in waiting)
+        body += _heading("New today") if jobs else ""
+    body += "".join(card(j) for j in jobs) + (_trial_box(trial, pay) if trial else "")
     body += f'<p style="color:{MUTED};font-size:13px;margin:6px 0 0">💡 Apply early. {escape(FOOTER)}</p>'
-    footer = (f'<a href="{_a(manage)}" style="color:{MUTED}">🎁 Invite 2 friends, get a month free</a><br>'
+    footer = ((f'<a href="{_a(apps)}" style="color:{MUTED}">📋 My applications</a> &middot; ' if tracker else "")
+              + f'<a href="{_a(manage)}" style="color:{MUTED}">🎁 Invite 2 friends, get a month free</a><br>'
               f'<a href="{_a(manage)}" style="color:{MUTED}">Change what you get</a> &middot; '
               f'<a href="{_a(unsub)}" style="color:{MUTED}">Unsubscribe</a>')
     jobs_word = f"{n} job{'s' if n != 1 else ''}"

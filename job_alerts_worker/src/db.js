@@ -120,3 +120,24 @@ export async function rewardReferrer(q, referrerId) {
       WHERE id = $1 AND ref_rewards = $4 RETURNING id`, [referrerId, earned, add * REF_REWARD_DAYS, ref.ref_rewards || 0]);
   return done ? add : 0;
 }
+
+// --- members' application tracker (sent_jobs rows; job_alerts/db.py has the columns and STATUSES) ---
+
+export const ANSWERS = ["applied", "not_yet", "skip", "interview", "offer", "no_reply"];
+
+export const sentJob = (q, subscriberId, id) =>
+  one(q, "SELECT id, title, company, url, status FROM sent_jobs WHERE id = $1 AND subscriber_id = $2", [id, subscriberId]);
+
+// They opened the job (the first time counts), or made a CV or letter for it: the next email asks "Did you apply?".
+export const markClicked = (q, subscriberId, id) =>
+  q("UPDATE sent_jobs SET clicked_at = COALESCE(clicked_at, now()) WHERE id = $1 AND subscriber_id = $2", [id, subscriberId]);
+export const markClickedByUrl = (q, subscriberId, url) =>
+  q("UPDATE sent_jobs SET clicked_at = COALESCE(clicked_at, now()) WHERE subscriber_id = $1 AND url = $2", [subscriberId, url]);
+
+export const setJobStatus = (q, subscriberId, id, status) =>
+  q("UPDATE sent_jobs SET status = $3, status_at = now() WHERE id = $1 AND subscriber_id = $2", [id, subscriberId, status]);
+
+// Everything on their tracker page: answered jobs except "Not for me", newest answer first.
+export const applications = (q, subscriberId) =>
+  q(`SELECT id, title, company, url, status, status_at, posted_at, sent_at FROM sent_jobs
+     WHERE subscriber_id = $1 AND status IS NOT NULL AND status <> 'skip' ORDER BY status_at DESC LIMIT 200`, [subscriberId]);

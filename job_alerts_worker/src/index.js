@@ -238,7 +238,38 @@ export async function handle(request, env, q) {
     }
     if (!text) return render({ error: "We couldn't write this one just now. Please try again in a minute." });
     await db.addLetter(q, sub.id, kind);
+    if (job.url) await db.markClickedByUrl(q, sub.id, job.url); // a strong sign they're applying: ask about it tomorrow
     return render({ hasCv: true, letter: text, left: Math.max(0, letters.PER_DAY - used - 1) });
+  }
+
+  // Members' Apply link: notes that they opened the job, then forwards to the advert.
+  if ((m = path.match(/^\/go\/([\w-]+)\/(\d+)$/)) && method === "GET") {
+    const sub = await db.byToken(q, m[1]);
+    const job = sub && await db.sentJob(q, sub.id, Number(m[2]));
+    if (!job || !/^https?:\/\//.test(job.url || "")) return notFound();
+    await db.markClicked(q, sub.id, job.id);
+    return Response.redirect(job.url, 302);
+  }
+
+  // One-tap answers from the email ("Applied", "Not yet", "Not for me") and the tracker page's status buttons.
+  // GET only shows a page that sends the answer, so mail apps that open links to check them don't answer for people.
+  if ((m = path.match(/^\/job\/([\w-]+)\/(\d+)\/(\w+)$/)) && (method === "GET" || method === "POST")) {
+    const sub = await db.byToken(q, m[1]);
+    const job = sub && db.ANSWERS.includes(m[3]) && await db.sentJob(q, sub.id, Number(m[2]));
+    if (!job) return notFound();
+    if (method === "GET") return html(views.answerPage(ctx, { job, answer: m[3] }));
+    await db.setJobStatus(q, sub.id, job.id, m[3]);
+    return Response.redirect(`${ctx.baseUrl}/applications/${sub.token}?saved=${job.id}`, 303);
+  }
+
+  if ((m = path.match(/^\/applications\/([\w-]+)$/)) && method === "GET") {
+    const sub = await db.byToken(q, m[1]);
+    if (!sub) return notFound();
+    if (!(await db.isMember(q, sub))) {
+      return msg("Your applications are for members", "Members can track every job they apply to, plus get a CV tailored to each job and 10 jobs a day.",
+        ctx.paidService ? { link: `/pay/${sub.token}`, linkText: `Become a member for ${ctx.price}` } : {});
+    }
+    return html(views.applications(ctx, { sub, rows: await db.applications(q, sub.id), saved: Number(url.searchParams.get("saved")) || 0 }));
   }
 
   if ((m = path.match(/^\/unsubscribe\/([\w-]+)$/)) && (method === "GET" || method === "POST")) {
