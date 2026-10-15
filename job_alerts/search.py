@@ -711,13 +711,16 @@ def location_fits(job_location: str, country: str, remote: bool) -> bool:
     if not country:
         return True
     loc = job_location.lower()
+    # "Anywhere in France" means France, and "South Africa" isn't the "Africa" region.
+    loc = re.sub(r"anywhere in (?!the world)", "in ", loc)
     if not loc or any(w in loc for w in ANYWHERE):
         return True
     names = [country.lower()] + PLACE_ALIASES.get(country, [])
     if any(n in loc for n in names):
         return True
     # Remote jobs open to a region the person lives in ("EMEA", "Africa"...)
-    return remote and any(r in loc for r in COUNTRIES.get(country, ("", "", []))[2])
+    region = loc.replace("south africa", "southafrica")
+    return remote and any(re.search(rf"\b{re.escape(r)}\b", region) for r in COUNTRIES.get(country, ("", "", []))[2])
 
 
 # Remote adverts that are really limited to one country or region ("must be based in the US",
