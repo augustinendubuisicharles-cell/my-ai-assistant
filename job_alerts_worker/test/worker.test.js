@@ -588,3 +588,44 @@ test("members track applications: Apply links note the click, one-tap answers sa
   assert.doesNotMatch(tracker, /Virtual Assistant/);
   assert.match(await (await call(`/manage/${token}`)).text(), /My applications/);
 });
+
+test("members log in with an emailed link: once, scanner-safe, 30-day cookie, and log out ends it", async () => {
+  await signUp();
+  const sub0 = await subscriber();
+  await call(`/confirm/${sub0.token}`);
+  await q(`INSERT INTO sent_jobs (subscriber_id, job_key, sent_at, title, company, url) VALUES ($1, 'k', now(), 'PR Associate', 'Acme', 'https://jobs.example/1')`, [sub0.id]);
+  assert.match(await (await call("/")).text(), /href="\/login">Log in</);
+  assert.equal((await call("/me")).headers.get("location"), "/login");
+
+  // Unknown emails get the same answer and no email.
+  sent = [];
+  assert.match(await (await call("/login", { method: "POST", form: { email: "nobody@example.com" } })).text(), /Check your inbox/);
+  assert.equal(sent.length, 0);
+  assert.match(await (await call("/login", { method: "POST", form: { email: "ADA@example.com" } })).text(), /Check your inbox/);
+  assert.equal(sent.length, 1);
+  const link = sent[0].textContent.match(/\/signin\/[\w-]+/)[0];
+  await call("/login", { method: "POST", form: { email: "ada@example.com" } }); // a second ask within 2 minutes sends nothing
+  assert.equal(sent.length, 1);
+
+  // Opening the link (as a mail app's checker would) doesn't use it; the page's POST does, once.
+  assert.match(await (await call(link)).text(), /Logging you in/);
+  const ok = await call(link, { method: "POST" });
+  assert.equal(ok.status, 303);
+  const cookie = ok.headers.get("set-cookie");
+  assert.match(cookie, /ja_session=[\w-]+; Path=\/; Max-Age=2592000; HttpOnly; Secure; SameSite=Lax/);
+  assert.equal((await call(link, { method: "POST" })).status, 410);
+  assert.ok(!(await q("SELECT session_hash FROM logins"))[0].session_hash.includes(cookie.split(/[=;]/)[1]));
+
+  const headers = { cookie: cookie.split(";")[0] };
+  const home = await (await call("/me", { headers })).text();
+  assert.match(home, /ada@example.com/);
+  assert.match(home, /PR Associate[\s\S]*href="\/go\/[\w-]+\/\d+"/);
+  assert.equal((await call("/login", { headers })).headers.get("location"), "/me");
+
+  await call("/me/cv", { method: "POST", form: { cv: "Ada Obi, comms officer." }, headers });
+  assert.equal(await (await import("../src/db.js")).getCv(q, sub0.id), "Ada Obi, comms officer.");
+  assert.match(await (await call("/me?saved=cv", { headers })).text(), /Your CV is saved/);
+
+  await call("/logout", { method: "POST", headers });
+  assert.equal((await call("/me", { headers })).headers.get("location"), "/login");
+});

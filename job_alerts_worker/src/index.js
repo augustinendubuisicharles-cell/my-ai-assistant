@@ -242,6 +242,63 @@ export async function handle(request, env, q) {
     return render({ hasCv: true, letter: text, left: Math.max(0, letters.PER_DAY - used - 1) });
   }
 
+  // Log in with an emailed link (no passwords): /login sends it, /signin/<code> turns it into a 30-day session cookie.
+  const session = (request.headers.get("cookie") || "").match(/(?:^|;\s*)ja_session=([\w-]{20,64})/)?.[1];
+  const me = async () => (session ? db.bySession(q, session) : null);
+  const redirect = (to, headers = {}) => new Response(null, { status: 303, headers: { location: to, ...headers } });
+
+  if (path === "/login") {
+    if (method === "GET") return (await me()) ? redirect("/me") : html(views.loginPage(ctx));
+    if (method === "POST") {
+      const email = String((await request.formData()).get("email") || "").trim();
+      if (!EMAIL_RE.test(email) || email.length > 320) return html(views.loginPage(ctx, { error: "Please enter a valid email." }), 400);
+      const sub = await db.byEmail(q, email);
+      const code = sub?.confirmed ? await db.newLoginCode(q, sub.id) : null;
+      if (code) {
+        try {
+          await mail.send(env, sub.email, ...mail.signInLink(ctx.baseUrl, code, db.LOGIN_LINK_MINUTES));
+        } catch (e) {
+          console.log(`[login email] failed for subscriber ${sub.id}: ${e}`);
+          return msg("We couldn't send your email", "Please try again in a few minutes.", { link: "/login", linkText: "Try again", status: 502 });
+        }
+      }
+      // The same answer either way, so the page doesn't reveal who has an account.
+      return html(views.loginSent(ctx, email));
+    }
+  }
+
+  // GET only shows a page that logs in with a POST, so mail apps that open links to check them don't use up the link.
+  if ((m = path.match(/^\/signin\/([\w-]{20,64})$/)) && (method === "GET" || method === "POST")) {
+    const expired = () => msg("This link has expired", "Log-in links work once, for 30 minutes. Ask for a new one.", { link: "/login", linkText: "Send me a new link", status: 410 });
+    if (method === "GET") return (await db.loginCodeValid(q, m[1])) ? html(views.signinPage(ctx)) : expired();
+    const value = await db.startSession(q, m[1]);
+    if (!value) return expired();
+    return redirect("/me", { "set-cookie": `ja_session=${value}; Path=/; Max-Age=${60 * 60 * 24 * db.SESSION_DAYS}; HttpOnly; Secure; SameSite=Lax` });
+  }
+
+  if (path === "/logout" && method === "POST") {
+    if (session) await db.endSession(q, session);
+    return redirect("/", { "set-cookie": "ja_session=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax" });
+  }
+
+  if (path === "/me" || path === "/me/cv") {
+    const sub = await me();
+    if (!sub) return redirect("/login");
+    const member = await db.isMember(q, sub);
+    if (path === "/me/cv") {
+      if (method === "POST") {
+        await db.setCv(q, sub.id, String((await request.formData()).get("cv") || "").trim().slice(0, letters.MAX_CV) || null);
+        return redirect("/me?saved=cv");
+      }
+      return html(views.cvPage(ctx, { cv: await db.getCv(q, sub.id), member }));
+    }
+    if (method !== "GET") return notFound();
+    const apps = member ? await db.applications(q, sub.id) : [];
+    return html(views.memberHome(ctx, { sub, member, until: db.isPaid(sub) ? fmtDate(sub.paid_until) : "", jobs: await db.latestJobs(q, sub.id),
+      applied: apps.filter((r) => r.status !== "not_yet").length, interviews: apps.filter((r) => ["interview", "offer"].includes(r.status)).length,
+      hasCv: Boolean(await db.getCv(q, sub.id)), letters: member && letters.enabled(env), saved: url.searchParams.get("saved") }));
+  }
+
   // Members' Apply link: notes that they opened the job, then forwards to the advert.
   if ((m = path.match(/^\/go\/([\w-]+)\/(\d+)$/)) && method === "GET") {
     const sub = await db.byToken(q, m[1]);

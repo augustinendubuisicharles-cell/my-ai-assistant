@@ -159,6 +159,22 @@ const STYLE = `
   .seg button.on.good { background:var(--ok); border-color:var(--ok); color:#fff; }
   .seg button.skip { color:var(--muted); background:transparent; border-color:transparent; }
   .empty { text-align:center; color:var(--muted); padding:28px 20px; }
+  .me-top { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+  .me-top form button { width:auto; margin:4px 0 0; padding:8px 14px; font-size:.85rem; background:transparent; color:var(--muted); border:1px solid var(--border); }
+  .mtiles { display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; margin:0 0 24px; }
+  .mtile { display:block; background:var(--card); border:1px solid var(--border); border-radius:14px; padding:14px; text-decoration:none; color:var(--text); transition:border-color .15s, transform .15s; }
+  .mtile:hover { border-color:var(--accent); transform:translateY(-1px); }
+  .mtile i { font-style:normal; font-size:1.3rem; }
+  .mtile b { display:block; margin-top:6px; font-size:.95rem; }
+  .mtile span { display:block; color:var(--muted); font-size:.8rem; margin-top:2px; }
+  @media (max-width:420px) { .mtiles { grid-template-columns:1fr; } .mtile { display:grid; grid-template-columns:32px 1fr; align-items:center; } .mtile i { grid-row:span 2; } .mtile b { margin:0; } }
+  .mjob { padding:14px 16px; margin:0 0 10px; }
+  .mjob .t { font-weight:700; }
+  .mjob .links { display:flex; flex-wrap:wrap; gap:6px 16px; margin-top:8px; font-size:.9rem; font-weight:600; }
+  .mjob .links a { text-decoration:none; }
+  .mjob .links a.sub { color:var(--muted); }
+  .chip-st { display:inline-block; font-size:.75rem; font-weight:700; padding:2px 9px; border-radius:99px; margin-left:6px; background:color-mix(in srgb, var(--ok) 14%, transparent); color:var(--ok); vertical-align:2px; }
+  .toast { padding:10px 14px; margin:0 0 16px; border-radius:10px; background:color-mix(in srgb, var(--ok) 12%, transparent); color:var(--ok); font-weight:600; }
 `;
 
 // The home page: a blue hero with the form and floating example jobs, four steps, and a
@@ -172,6 +188,8 @@ const LANDING_STYLE = `
   .nav .brand { margin:0; color:#0b1a3a; font-size:1.5rem; }
   .nav .brand b { color:#1f5fe0; }
   .nav .brand img { width:44px; height:44px; border-radius:12px; box-shadow:0 8px 20px -8px #0b3fb380; }
+  .nav .navlinks { display:flex; align-items:center; gap:6px; }
+  .nav a.navplain { color:#fff; font-weight:600; text-decoration:none; padding:9px 12px; opacity:.9; }
   .nav a.navlink { color:#fff; font-weight:700; text-decoration:none; padding:9px 18px; border-radius:99px; background:#ffffff26; border:1px solid #ffffff40; backdrop-filter:blur(6px); }
   .hero-grid { display:grid; grid-template-columns:minmax(0,1.05fr) minmax(0,1fr); gap:56px; align-items:center; padding-top:18px; }
   .eyebrow { display:inline-flex; align-items:center; gap:8px; font-weight:700; font-size:.88rem; padding:7px 14px; border-radius:99px; background:#ffffff22; border:1px solid #ffffff3a; }
@@ -286,7 +304,7 @@ function landing(ctx, formHtml) {
   const step = (icon, title, sub) => `<li><span class="ic">${FLOW_ICONS[icon]}</span><span>${title}<small>${sub}</small></span></li>`;
   return `<section class="hero-band">
 <nav class="wrap nav"><a class="brand" href="/"><img src="/favicon.svg" alt="" width="44" height="44"><span>Job<b>Alert</b></span></a>
-<a class="navlink" href="#plans">Plans</a></nav>
+<div class="navlinks"><a class="navplain" href="#plans">Plans</a><a class="navlink" href="/login">Log in</a></div></nav>
 <div class="wrap hero-grid">
   <div class="hero-copy">
     <span class="eyebrow"><i></i>Fresh jobs every morning at 7am</span>
@@ -770,4 +788,66 @@ ${applied.length ? `<h2>Applied</h2>${applied.map((r) => card(r, [["applied"], [
 <div class="apps">${body}</div>
 <p class="small" style="text-align:center"><a href="/manage/${esc(sub.token)}">Back to my job alerts</a></p>
 ${saved ? `<script>var s=document.getElementById("job${saved}");s&&s.scrollIntoView({block:"center"});</script>` : ""}`);
+}
+
+// --- log in (emailed link, no passwords) and the members' area ---
+
+export function loginPage(ctx, { error = "" } = {}) {
+  return page(ctx, `<h1>Log in</h1>
+<p class="lead">We'll email you a link. No password needed.</p>
+${error ? `<p class="card status">${esc(error)}</p>` : ""}
+<form class="card" method="post" action="/login">
+  <label for="email" style="margin-top:0">Your email</label>
+  <input id="email" name="email" type="email" required maxlength="320" placeholder="you@example.com" autocomplete="email">
+  <button type="submit">Email me a log-in link</button>
+</form>
+<p class="small" style="text-align:center">New here? <a href="/">Get your first jobs free</a></p>`);
+}
+
+export function loginSent(ctx, email) {
+  return page(ctx, `<div class="hero">${ART_MAIL}<h1>Check your inbox</h1>
+<p>If <b>${esc(email)}</b> has a JobAlert account, a log-in link is on its way. It works once, for 30 minutes.</p></div>
+<p class="small" style="text-align:center">Nothing after a few minutes? Check spam, or <a href="/login">try again</a>.</p>`);
+}
+
+export function signinPage(ctx) {
+  return page(ctx, `<div class="card empty"><p style="margin:0 0 6px">Logging you in…</p>
+<form method="post" id="signin"><button type="submit" style="width:auto;padding:12px 28px">Log me in</button></form></div>
+<script>document.getElementById("signin").submit();</script>`);
+}
+
+const SAVED = { cv: "Your CV is saved." };
+
+export function memberHome(ctx, { sub, member, jobs, applied = 0, interviews = 0, hasCv, letters = false, saved = "" }) {
+  const t = esc(sub.token);
+  const tile = (href, icon, title, detail) => `<a class="mtile" href="${href}"><i>${icon}</i><b>${title}</b><span>${detail}</span></a>`;
+  const jobCard = (j) => `<div class="card mjob"><div class="t">${esc(j.title)}${j.status && j.status !== "skip"
+    ? `<span class="chip-st">${esc({ applied: "Applied", not_yet: "Not yet", interview: "Interview", offer: "Offer", no_reply: "Applied" }[j.status] || "")}</span>` : ""}</div>
+  <div class="small" style="margin:2px 0 0">${esc([j.company, j.source && `via ${j.source}`].filter(Boolean).join(" · "))}</div>
+  <div class="links"><a href="/go/${t}/${j.id}">View and apply →</a>${letters
+    ? `<a class="sub" href="/cv/${t}?${esc(new URLSearchParams({ t: j.title, c: j.company || "", u: j.url || "" }).toString())}">📄 Tailored CV</a>
+    <a class="sub" href="/letter/${t}?${esc(new URLSearchParams({ t: j.title, c: j.company || "", u: j.url || "" }).toString())}">✍️ Cover letter</a>` : ""}</div></div>`;
+  return page(ctx, `<div class="me-top"><div><h1>Hi there 👋</h1><p class="lead" style="margin-bottom:18px">${esc(sub.email)}</p></div>
+<form method="post" action="/logout"><button type="submit">Log out</button></form></div>
+${SAVED[saved] ? `<p class="toast">${SAVED[saved]}</p>` : ""}
+${ctx.paidService ? membershipCard(ctx, sub, member) : ""}
+<div class="mtiles">
+${member ? tile(`/applications/${t}`, "📋", "My applications", `${applied} applied · ${interviews} interview${interviews === 1 ? "" : "s"}`)
+    : tile(`/pay/${t}`, "📋", "My applications", "For members")}
+${tile("/me/cv", "📄", "My CV", hasCv ? "Saved" : "Not added yet")}
+${tile(`/manage/${t}`, "⚙️", "Job settings", esc(String(sub.keywords || "").split(",").slice(0, 2).join(", ")))}
+</div>
+<div class="apps"><h2>Your latest jobs</h2>
+${jobs.length ? jobs.map(jobCard).join("") : `<div class="card empty"><p style="margin:0">Your next jobs arrive tomorrow morning.</p></div>`}</div>`);
+}
+
+export function cvPage(ctx, { cv, member }) {
+  return page(ctx, `<h1>📄 My CV</h1>
+<p class="lead">${member ? "We use it to tailor your CV and write cover letters for each job." : "Members get it tailored to every job, plus cover letters."}</p>
+<form class="card" method="post" action="/me/cv">
+  <label for="cv" style="margin-top:0">Paste your CV <span class="hint">Plain text is fine</span></label>
+  <textarea id="cv" name="cv" rows="16" maxlength="15000" placeholder="Paste your CV here">${esc(cv)}</textarea>
+  <button type="submit">Save my CV</button>
+</form>
+<p class="small" style="text-align:center"><a href="/me">Back</a></p>`);
 }

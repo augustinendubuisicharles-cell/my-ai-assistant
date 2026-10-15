@@ -113,3 +113,14 @@ export function paymentReceipt(baseUrl, token, { amount, reference, paidOn, unti
     `Paid on: ${paidOn}\nReference: ${reference}\n\nOpen your job alerts: ${link}\n\nNothing renews automatically. Full refund within 7 days.`,
     layout(baseUrl, `${naira} received. Your membership runs until ${until}.`, hero("Payment received 🎉", "You're now a JobAlert member"), body)];
 }
+
+// The log-in link: one tap signs them in on that device for 30 days.
+export function signInLink(baseUrl, code, minutes = 30) {
+  const link = `${baseUrl}/signin/${code}`;
+  const body = `<p style="margin:0">Tap the button to log in to JobAlert. The link works once, for ${minutes} minutes.</p>` +
+    button(link, "Log me in") +
+    `<p style="color:${MUTED};font-size:13px;margin:6px 0 0">If you didn't ask to log in, ignore this email. Nobody can get in without this link.</p>`;
+  return ["Your JobAlert log-in link 🔑",
+    `Log in to JobAlert (works once, for ${minutes} minutes):\n${link}\n\nIf you didn't ask to log in, ignore this email.`,
+    layout(baseUrl, "Tap to log in. The link works once.", hero("Log in to JobAlert 🔑"), body)];
+}

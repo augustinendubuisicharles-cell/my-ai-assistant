@@ -72,6 +72,18 @@ sent_jobs = Table(
 )
 
 
+logins = Table(  # members' email sign-in: a one-time link (code) that becomes a 30-day session; both stored hashed
+    "logins", metadata,
+    Column("id", Integer, primary_key=True),
+    Column("subscriber_id", Integer, ForeignKey("subscribers.id", ondelete="CASCADE"), nullable=False),
+    Column("code_hash", String(64), nullable=False, unique=True),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("used_at", DateTime(timezone=True)),
+    Column("session_hash", String(64), unique=True),
+    Column("expires_at", DateTime(timezone=True)),
+)
+
+
 def _url() -> str:
     url = os.environ.get("DATABASE_URL") or "sqlite:///job_alerts.db"
     # Use the psycopg (v3) driver whether the URL says postgres:// or postgresql://
@@ -179,6 +191,7 @@ def remove(token: str) -> bool:
             return False
         conn.execute(delete(sent_jobs).where(sent_jobs.c.subscriber_id == row.id))
         conn.execute(delete(letters).where(letters.c.subscriber_id == row.id))
+        conn.execute(delete(logins).where(logins.c.subscriber_id == row.id))
         conn.execute(update(payments).where(payments.c.subscriber_id == row.id).values(subscriber_id=None))
         conn.execute(delete(subscribers).where(subscribers.c.id == row.id))
         return True
