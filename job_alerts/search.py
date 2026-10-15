@@ -13,6 +13,7 @@ Every job sent has passed: location fits the subscriber, posted in the last
 7 days (older adverts already have a pile of applicants), seniority fits, paid and no common scam signs, not past the board's
 expiry date, and its link doesn't come back "not found".
 """
+import json
 import os
 import re
 import time
@@ -346,6 +347,23 @@ CAREER_PAGES = {  # companies with remote jobs; the usual checks still drop ones
 }
 
 
+DESC_MAX = 8000  # the job page shows at most this much (db.DESCRIPTION_MAX)
+CAREER_PAGES_FILE = os.path.join(os.path.dirname(__file__), "career_pages.json")
+
+
+def career_pages() -> dict[str, list[str]]:
+    """CAREER_PAGES plus the boards in career_pages.json (found from Hacker News hiring threads and checked)."""
+    pages = {ats: list(slugs) for ats, slugs in CAREER_PAGES.items()}
+    try:
+        with open(CAREER_PAGES_FILE) as f:
+            for ats, slugs in json.load(f).items():
+                pages.setdefault(ats, [])
+                pages[ats] += [s for s in slugs if s not in pages[ats]]
+    except FileNotFoundError:
+        pass
+    return pages
+
+
 def _career_page(ats: str, slug: str) -> list[dict]:
     """One company's open jobs as (title, company, location, url, posted, description, remote) dicts."""
     if ats == "greenhouse":
@@ -384,32 +402,27 @@ def _career_page(ats: str, slug: str) -> list[dict]:
 
 @lru_cache(maxsize=1)
 def from_career_pages() -> tuple:
-    out, counts = [], Counter()
-    pages = [(ats, slug) for ats, slugs in CAREER_PAGES.items() for slug in slugs]
+    pages = [(ats, slug) for ats, slugs in career_pages().items() for slug in slugs]
     def fetch(page):
+        ats, slug = page
         try:
-            return _career_page(*page), None
-        except Exception as e:
-            return [], e
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        fetched = list(pool.map(fetch, pages))
-    for (ats, slug), (found, error) in zip(pages, fetched):
-        if error:
-            print(f"[Careers {ats}:{slug}] skipped: {str(error)[:80]}")
-            continue
-        try:
-            for j in found:
+            jobs = []
+            for j in _career_page(ats, slug):
                 loc = j["location"] or ""
                 remote = j["remote"] if j["remote"] is not None else any(w in loc.lower() for w in REMOTE_WORDS)
                 if not remote:
                     continue  # this source is for remote jobs; on-site ones come from Adzuna/Reed
                 company = j["company"] if j["company"] != slug else slug.replace("-", " ").split(".")[0].title()
-                out.append(_raw(j["title"], company, loc or "Remote", j["url"], "Company careers page",
-                                j["posted"], j["desc"], True, pay=j.get("pay", "")))
-                counts[f"{ats}:{slug}"] += 1
+                jobs.append(_raw(j["title"], company, loc or "Remote", j["url"], "Company careers page",
+                                 j["posted"], (j["desc"] or "")[:DESC_MAX], True, pay=j.get("pay", "")))
+            return jobs
         except Exception as e:
             print(f"[Careers {ats}:{slug}] skipped: {str(e)[:80]}")
-    print(f"[Careers] {len(out)} remote jobs from {len(counts)} companies")
+            return []
+    with ThreadPoolExecutor(max_workers=24) as pool:
+        found = list(pool.map(fetch, pages))
+    out = [j for jobs in found for j in jobs]
+    print(f"[Careers] {len(out)} remote jobs from {sum(1 for jobs in found if jobs)} of {len(pages)} companies")
     return tuple(out)
 
 

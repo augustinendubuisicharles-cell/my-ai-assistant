@@ -1,14 +1,20 @@
 """Temporary: find company job boards (Greenhouse, Lever, Ashby, Workable, Recruitee) and keep the ones that work.
 Sources: Hacker News "Who is hiring" threads (links to boards) and tmp_probe/names.txt guesses."""
 import json, re, requests
+from html import unescape
 from concurrent.futures import ThreadPoolExecutor
 H = {"User-Agent": "Mozilla/5.0 JobAlert"}
 PAT = {"greenhouse": r"(?:boards|job-boards)(?:\.eu)?\.greenhouse\.io/(?:embed/job_board\?for=)?([a-z0-9_-]+)",
        "lever": r"jobs\.lever\.co/([a-z0-9._-]+)", "ashby": r"jobs\.ashbyhq\.com/([a-z0-9._%-]+)",
        "workable": r"apply\.workable\.com/([a-z0-9_-]+)", "recruitee": r"([a-z0-9-]+)\.recruitee\.com"}
 found = set()
+try:
+    for ats, slugs in json.load(open("job_alerts/career_pages.json")).items():
+        found |= {(ats, s) for s in slugs}
+except FileNotFoundError:
+    pass
 stories = []
-for page in range(4):
+for page in range(6):
     r = requests.get("https://hn.algolia.com/api/v1/search_by_date", params={"tags": "story,author_whoishiring",
                      "hitsPerPage": 50, "page": page}, headers=H, timeout=30).json()
     stories += [h["objectID"] for h in r["hits"] if "who is hiring" in h["title"].lower()]
@@ -16,8 +22,24 @@ print("HN threads:", len(stories))
 def thread(i):
     try: return requests.get(f"https://hn.algolia.com/api/v1/items/{i}", headers=H, timeout=60).text
     except Exception: return ""
-for text in ThreadPoolExecutor(8).map(thread, stories[:48]):
-    text = text.lower().replace("\\/", "/")
+for text in ThreadPoolExecutor(8).map(thread, stories[:72]):
+    text = unescape(unescape(text.replace("\\/", "/"))).lower()
+    for ats, p in PAT.items():
+        for s in re.findall(p, text):
+            s = s.strip(".-_").split("?")[0]
+            if s and s not in {"embed", "api", "v1", "jobs", "www", "careers", "app", "boards"}:
+                found.add((ats, s))
+def search(args):
+    q, page = args
+    try:
+        r = requests.get("https://hn.algolia.com/api/v1/search", params={"query": q, "tags": "comment",
+                         "hitsPerPage": 1000, "page": page}, headers=H, timeout=60).json()
+        return " ".join(h.get("comment_text") or "" for h in r.get("hits", []))
+    except Exception:
+        return ""
+qs = [(q, p) for q in ["greenhouse.io", "lever.co", "ashbyhq.com", "workable.com", "recruitee.com"] for p in range(10)]
+for text in ThreadPoolExecutor(8).map(search, qs):
+    text = unescape(unescape(text)).lower()
     for ats, p in PAT.items():
         for s in re.findall(p, text):
             s = s.strip(".-_").split("?")[0]
