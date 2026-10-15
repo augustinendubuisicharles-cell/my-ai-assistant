@@ -563,14 +563,14 @@ function plans(ctx) {
   ${li("Remote jobs, or on-site near you")}
   ${li("Checked for scams, dead links and jobs you can't apply for from your country")}
   ${li("Never the same job twice")}
-  ${li("Telegram and WhatsApp alerts during the day", false)}
+  ${li("Telegram alerts during the day", false)}
 </ul></div>
 <div class="card plan best"><span class="tag">BEST VALUE</span><h3>Member</h3><p class="cost">${ctx.paidService
     ? `<b>${esc(ctx.price)}</b> for ${ctx.months} months, paid once`
     : "<b>Coming soon</b>"}</p><ul>
   ${li("<b>5 to 10 jobs</b> every morning")}
   ${li("Searches all <b>5 job titles</b>")}
-  ${li("<b>Telegram and WhatsApp alerts</b> during the day, so you apply first")}
+  ${li("<b>Telegram alerts</b> every two hours, so you apply first")}
   ${li("<b>Your CV tailored</b> to any job, an <b>AI cover letter</b> and <b>interview prep</b>")}
   ${li("Everything in the free trial")}
   ${li("No auto-renewal; we remind you before it ends")}
