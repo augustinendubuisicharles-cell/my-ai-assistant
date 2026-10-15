@@ -64,6 +64,11 @@ sent_jobs = Table(
     Column("url", String(1000)),
     Column("source", String(60)),
     Column("posted_at", DateTime(timezone=True)),
+    # The advert itself, for the job's own page on the site (/j/<token>/<id>).
+    Column("location", String(200)),
+    Column("pay", String(120)),
+    Column("matched", String(500)),                      # why it was picked, " · "-separated
+    Column("description", Text),
     Column("clicked_at", DateTime(timezone=True)),       # they opened Apply, or made a CV or letter for it
     Column("asked_count", Integer, nullable=False, server_default="0"),  # mornings we asked "Did you apply?"
     Column("status", String(20)),                        # STATUSES below; NULL = no answer yet
@@ -97,11 +102,13 @@ engine = create_engine(_url(), pool_pre_ping=True)
 
 
 SENT_JOB_COLUMNS = {"title": "VARCHAR(300)", "company": "VARCHAR(200)", "url": "VARCHAR(1000)", "source": "VARCHAR(60)",
-                    "posted_at": "TIMESTAMP WITH TIME ZONE", "clicked_at": "TIMESTAMP WITH TIME ZONE",
+                    "posted_at": "TIMESTAMP WITH TIME ZONE", "location": "VARCHAR(200)", "pay": "VARCHAR(120)",
+                    "matched": "VARCHAR(500)", "description": "TEXT", "clicked_at": "TIMESTAMP WITH TIME ZONE",
                     "asked_count": "INTEGER NOT NULL DEFAULT 0", "status": "VARCHAR(20)", "status_at": "TIMESTAMP WITH TIME ZONE"}
 # Tracker answers. "not_yet" jobs come back each morning while they're fresh; "skip" ones never do.
 STATUSES = ("applied", "not_yet", "skip", "interview", "offer", "no_reply")
 ASK_MORNINGS = 2      # how many mornings we ask "Did you apply?" about a job they opened
+DESCRIPTION_MAX = 8000     # characters of the advert kept for its page
 FRESH = timedelta(days=7)  # same as search.MAX_AGE: older adverts stop coming back
 
 
@@ -298,9 +305,18 @@ def record_sent(subscriber_id: int, jobs: list[dict]) -> list[int]:
             ids.append(conn.execute(insert(sent_jobs).values(
                 subscriber_id=subscriber_id, job_key=j["key"][:500], sent_at=now(), title=(j.get("title") or "")[:300],
                 company=(j.get("company") or "")[:200], url=(j.get("url") or "")[:1000], source=(j.get("source") or "")[:60],
-                posted_at=j.get("posted")).returning(sent_jobs.c.id)).scalar())
+                posted_at=j.get("posted"), location=(j.get("location") or "")[:200], pay=(j.get("pay") or "")[:120],
+                matched=" · ".join(j.get("matched") or [])[:500],
+                description=(j.get("desc") or "")[:DESCRIPTION_MAX] or None).returning(sent_jobs.c.id)).scalar())
         conn.execute(update(subscribers).where(subscribers.c.id == subscriber_id).values(last_sent_at=now()))
     return ids
+
+
+def trim_descriptions(days: int = 30) -> None:
+    """Old adverts are closed by now; dropping their text keeps the database small."""
+    with engine.begin() as conn:
+        conn.execute(update(sent_jobs).where(sent_jobs.c.sent_at < now() - timedelta(days=days),
+                                             sent_jobs.c.description.is_not(None)).values(description=None))
 
 
 def unsend(ids: list[int]) -> None:

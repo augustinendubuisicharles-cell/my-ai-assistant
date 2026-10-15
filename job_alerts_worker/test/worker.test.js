@@ -547,6 +547,41 @@ test("the dashboard flags users whose first search never ran", async () => {
   assert.match(page, /Needs attention/);
 });
 
+test("each job has its own page: the advert, how to apply, then one button to the employer", async () => {
+  env.ANTHROPIC_API_KEY = "sk-test";
+  await signUp();
+  const sub0 = await subscriber();
+  await call(`/confirm/${sub0.token}`);
+  const { token } = sub0;
+  const [{ id }] = await q(`INSERT INTO sent_jobs (subscriber_id, job_key, sent_at, title, company, url, source, location, pay, matched, description, posted_at)
+    VALUES ($1, 'k1', now(), 'Support Agent', 'Supabase', 'https://jobs.ashbyhq.com/supabase/1', 'Company careers page', 'Remote, Global',
+            '$2,000 a month', 'open to Nigeria · matches "customer support" · posted 15 Oct', 'We help developers.\nWhat you will do:\n• Answer tickets\n• Write <docs>', now())
+    RETURNING id`, [sub0.id]);
+  const [{ id: wwr }] = await q(`INSERT INTO sent_jobs (subscriber_id, job_key, sent_at, title, company, url, source)
+    VALUES ($1, 'k2', now(), 'Assistant', 'Beta', 'https://weworkremotely.com/x', 'We Work Remotely') RETURNING id`, [sub0.id]);
+
+  let page = await (await call(`/j/${token}/${id}`)).text();
+  assert.match(page, /<h1>Support Agent<\/h1>/);
+  assert.match(page, /Remote, Global[\s\S]*\$2,000 a month[\s\S]*open to Nigeria/);
+  assert.match(page, /How to apply[\s\S]*No account needed/);
+  assert.match(page, /<li>Answer tickets<\/li><li>Write &lt;docs&gt;<\/li>/);
+  assert.match(page, new RegExp(`href="/go/${token}/${id}"[^>]*>Apply on Supabase's site`));
+  assert.match(page, /data-unlock="cv"/, "trial users see the CV tools, and tapping them offers membership");
+  assert.doesNotMatch(page, /Did you apply\?/);
+
+  page = await (await call(`/j/${token}/${wwr}`)).text();
+  assert.match(page, /Sign-up needed to apply/);
+  assert.match(page, /Go to the advert on We Work Remotely/);
+  assert.match(page, /The full advert is on We Work Remotely/);
+
+  await call(`/pay/${token}`, { method: "POST" });
+  await call("/paid?transRef=vs_1");
+  page = await (await call(`/j/${token}/${id}`)).text();
+  assert.match(page, /Did you apply\?[\s\S]*formaction="\/job\/[\w-]+\/\d+\/applied"/);
+  assert.doesNotMatch(page, /data-unlock/);
+  assert.equal((await call(`/j/not-a-real-token-at-all/${id}`)).status, 404);
+});
+
 test("members track applications: Apply links note the click, one-tap answers save only on POST, and the tracker lists them", async () => {
   env.ANTHROPIC_API_KEY = "sk-test";
   await signUp();
@@ -629,7 +664,7 @@ test("members log in with an emailed link: once, scanner-safe, 30-day cookie, an
   const home = await (await call("/me", { headers })).text();
   assert.match(home, /ada@example.com/);
   assert.match(home, /Today's jobs · 1/);
-  assert.match(home, /PR Associate[\s\S]*href="\/go\/[\w-]+\/\d+"/);
+  assert.match(home, /PR Associate[\s\S]*href="\/j\/[\w-]+\/\d+"/);
   // Trial users see the same tiles; tapping a member feature opens the "join" card.
   assert.match(home, /data-unlock="apps"[\s\S]*data-unlock="telegram"[\s\S]*data-unlock="cv"[\s\S]*data-unlock="letter"/);
   assert.match(home, /<dialog id="unlock"[\s\S]*href="\/pay\/[\w-]+">Join for/);

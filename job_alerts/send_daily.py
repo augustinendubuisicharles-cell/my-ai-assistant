@@ -20,6 +20,7 @@ def main() -> None:
     if not base_url:
         sys.exit("BASE_URL is required so emails can link to the site.")
     db.init_db()
+    db.trim_descriptions()
     subs = db.confirmed_subscribers()
     only = os.environ.get("ONLY_EMAIL", "").strip().lower()
     if only:  # test run for one subscriber
