@@ -210,6 +210,11 @@ const STYLE = `
   .jdid { padding:16px 18px; margin:0 0 14px; } .jdid .seg { margin-top:8px; } .jdid b { font-size:.95rem; }
   .applybar { position:sticky; bottom:0; margin:0 -16px; padding:12px 16px calc(12px + env(safe-area-inset-bottom)); background:linear-gradient(transparent, var(--bg) 30%); }
   .applybar .plan-cta { margin:0; } .applybar p { text-align:center; margin:6px 0 0; font-size:.8rem; color:var(--muted); }
+  .hours { display:grid; grid-template-columns:repeat(3, 1fr); gap:4px; padding:4px; border-radius:12px; background:var(--bg); border:1px solid var(--border); }
+  .hours input { position:absolute; opacity:0; pointer-events:none; }
+  .hours label { margin:0; padding:9px 4px; text-align:center; border-radius:9px; font-weight:600; font-size:.92rem; color:var(--muted); cursor:pointer; transition:background .15s, color .15s; }
+  .hours input:checked + label { background:var(--card); color:var(--accent); box-shadow:0 1px 3px #0b15301f, 0 0 0 1px var(--border); }
+  .hours input:focus-visible + label { outline:2px solid var(--accent); outline-offset:1px; }
   .toast { padding:10px 14px; margin:0 0 16px; border-radius:10px; background:color-mix(in srgb, var(--ok) 12%, transparent); color:var(--ok); font-weight:600; }
 `;
 
@@ -661,6 +666,11 @@ export function form(ctx, { sub = null, action, button, heading, lead, status = 
     <option value="">Anywhere / don't filter</option>
     ${COUNTRIES.map((c) => `<option value="${esc(c)}"${sel(sub?.country === c)}>${esc(c)}</option>`).join("")}
   </select>
+  <label id="hours_label">Hours</label>
+  <div class="hours" role="radiogroup" aria-labelledby="hours_label">
+    ${[["any", "Any"], ["full", "Full-time"], ["part", "Part-time"]].map(([v, l]) =>
+      `<input id="h_${v}" name="hours" type="radio" value="${v}"${chk((sub?.hours || "any") === v)}><label for="h_${v}">${l}</label>`).join("")}
+  </div>
   <details class="fold more"${onsite || (sub && sub.level !== "entry") ? " open" : ""}><summary>More options</summary>
   <fieldset>
     <legend>How do you want to work?</legend>

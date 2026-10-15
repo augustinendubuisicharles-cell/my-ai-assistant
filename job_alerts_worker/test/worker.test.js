@@ -677,3 +677,16 @@ test("members log in with an emailed link: once, scanner-safe, 30-day cookie, an
   await call("/logout", { method: "POST", headers });
   assert.equal((await call("/me", { headers })).headers.get("location"), "/login");
 });
+
+test("the search form saves Hours (any, full-time or part-time), and junk values fall back to any", async () => {
+  const home = await (await call("/")).text();
+  assert.match(home, /name="hours" type="radio" value="any" checked[\s\S]*value="full"[\s\S]*value="part"/);
+  await signUp({ hours: "part" });
+  let sub = await subscriber();
+  assert.equal(sub.hours, "part");
+  const manage = await (await call(`/manage/${sub.token}`)).text();
+  assert.match(manage, /id="h_part" name="hours" type="radio" value="part" checked/);
+  await call(`/manage/${sub.token}`, { method: "POST", form: { job: "Virtual assistant", country: "Nigeria", work_type: "remote", level: "any", hours: "weekends" } });
+  sub = await subscriber();
+  assert.equal(sub.hours, "any");
+});

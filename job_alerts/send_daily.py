@@ -52,9 +52,10 @@ def main() -> None:
             if os.environ.get("ONLY_EMAIL"):
                 print(f"- subscriber {sub['id']}: searching {first_titles(sub['keywords'], titles)!r}, country "
                       f"{sub['country'] or 'any'}, {'remote' if sub['remote_only'] else 'on-site near ' + (sub.get('city') or '?')}, "
-                      f"level {sub['level']}, {len(sent_before)} job(s) already sent")
+                      f"level {sub['level']}, hours {sub.get('hours') or 'any'}, {len(sent_before)} job(s) already sent")
             jobs = find_jobs(first_titles(sub["keywords"], titles), sub["country"], sub["remote_only"], sub["level"],
-                             sent_before, n=n, city=sub.get("city") or "", minimum=payments.DAILY_MINIMUM[member])
+                             sent_before, n=n, city=sub.get("city") or "", minimum=payments.DAILY_MINIMUM[member],
+                             hours=sub.get("hours") or "any")
             if not jobs:
                 # A new subscriber, or one who has never had a single match: tell them once, with a nudge
                 # towards broader titles, so nobody is left waiting in silence.

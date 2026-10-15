@@ -667,8 +667,16 @@ def says_open_to(job: dict, country: str) -> bool:
     return any(n in loc for n in names) or any(w in loc for w in ANYWHERE)
 
 
+PART_TIME = re.compile(r"\bpart[\s_-]?time\b")
+
+
+def is_part_time(job: dict) -> bool:
+    """The board marks it part-time, or the title or advert says so."""
+    return bool(PART_TIME.search(f"{job['job_type']} {job['title']} {job['desc'][:1500]}".lower()))
+
+
 def score(job: dict, keywords: list[str], country: str, remote_only: bool, level: str,
-          city: str = "", why: Counter | None = None) -> tuple[int, list[str]] | None:
+          city: str = "", why: Counter | None = None, hours: str = "any") -> tuple[int, list[str]] | None:
     """Returns (score, reasons), or None if the job fails a check (counted in `why` by reason)."""
     def no(reason):
         if why is not None:
@@ -693,6 +701,10 @@ def score(job: dict, keywords: list[str], country: str, remote_only: bool, level
                                 or job["level"].lower() in ("senior", "director", "executive")
                                 or (job["level"].lower() == "manager" and "manager" not in hit)):
         return no("too senior")
+    if hours == "part" and not is_part_time(job):
+        return no("not part-time")
+    if hours == "full" and is_part_time(job):
+        return no("part-time")
     if any(w in f"{title} {job['job_type']}".lower() for w in UNPAID) or any(w in text for w in SCAM_SIGNS):
         return no("unpaid or scam signs")
 
@@ -703,6 +715,8 @@ def score(job: dict, keywords: list[str], country: str, remote_only: bool, level
     if level == "entry" and ("entry" in job["level"].lower() or any(w in text for w in ENTRY_SIGNS)):
         pts += 3
         reasons.append("entry-level")
+    if is_part_time(job):
+        reasons.append("part-time")
     if job["pay"]:
         pts += 2
         reasons.append(job["pay"])
@@ -762,7 +776,7 @@ def sent_keys(stored: set[str]) -> set[str]:
 
 
 def _search(keywords: list[str], country: str, remote_only: bool, level: str, city: str,
-            seen: set[str], why: Counter) -> tuple[list[dict], Counter]:
+            seen: set[str], why: Counter, hours: str = "any") -> tuple[list[dict], Counter]:
     """Every listing that passes the checks for these titles, best first, plus how many listings each board gave."""
     pool = list(remote_feeds())
     for k in keywords:
@@ -776,7 +790,7 @@ def _search(keywords: list[str], country: str, remote_only: bool, level: str, ci
         if keys & seen:
             why["already sent or duplicate"] += 1
             continue
-        result = score(job, keywords, country, remote_only, level, city, why)
+        result = score(job, keywords, country, remote_only, level, city, why, hours)
         if result:
             seen |= keys
             matched = list(result[1])
@@ -801,7 +815,7 @@ def _pick(ranked: list[dict], keywords: list[str], n: int) -> list[dict]:
 
 
 def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, exclude: set[str], n: int = 5,
-              city: str = "", minimum: int = 0) -> list[dict]:
+              city: str = "", minimum: int = 0, hours: str = "any") -> list[dict]:
     """remote_only=True searches remote jobs. False means on-site/hybrid near `city` (via Adzuna/Reed),
     with remote jobs as a fallback.
 
@@ -810,12 +824,12 @@ def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, ex
     still passes every check: last 7 days, open to their country, seniority, scam signs, never sent before."""
     keywords = clean_keywords(keywords_csv)[:5]
     seen, why = sent_keys(exclude), Counter()
-    ranked, boards = _search(keywords, country, remote_only, level, city, seen, why)
+    ranked, boards = _search(keywords, country, remote_only, level, city, seen, why, hours)
     matched = len(ranked)
     picked = _pick(ranked, keywords, n)
     extra = 0
     if len(picked) < minimum and (near := neighbours(keywords)):
-        more, _ = _search(near, country, remote_only, level, city, seen, Counter())
+        more, _ = _search(near, country, remote_only, level, city, seen, Counter(), hours)
         for j in more:
             j["matched"] = ["similar role"] + j["matched"]
         more.sort(key=lambda j: (near.index(j["hit"]), -j["score"]))  # closest roles first
