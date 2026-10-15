@@ -59,7 +59,8 @@ PLACE_ALIASES = {"United Kingdom": ["uk", "great britain", "england"],
                  "Nigeria": ["lagos", "abuja", "ikeja", "lekki", "port harcourt", "ibadan", "kano", "enugu"]}
 ANYWHERE = ["worldwide", "anywhere", "global", "remote (any", "all countries"]
 
-TOO_SENIOR = {"entry": ["senior", "sr.", "sr ", "lead ", "head of", "director", "principal", "manager", "chief", "vp ", "vice president"],
+TOO_SENIOR = {"entry": ["senior", "sr.", "sr ", "staff ", "lead ", "head of", "director", "principal", "manager", "chief", "vp ",
+                        "vice president"],
               "mid": ["head of", "director", "chief", "vp ", "vice president", "principal"]}
 ENTRY_SIGNS = ["entry", "junior", "graduate", "trainee", "no experience", "intern"]
 UNPAID = ["volunteer", "unpaid", "commission only", "commission-only", "equity only"]
@@ -1016,19 +1017,29 @@ def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, ex
     gated += fill([j for j in more if gated_ok(j)])
     # Still short: nobody gets fewer than the minimum. First their own and similar titles posted in the last
     # 14 days, then the best other open roles at their level, open to their country.
+    # Members' "More jobs" spares come from the same places when the first ones run short.
     older = other = 0
-    if len(picked) < minimum:
-        pool, _ = _search(keywords + near, country, remote_only, level, city, seen, Counter(), hours, max_age=OLDER_AGE)
-        older = fill([j for j in pool if not signup(j)])
-    if len(picked) < minimum:
-        pool, _ = _search([], country, remote_only, level, city, seen, Counter(), hours, any_title=True)
-        pool = [j for j in pool if not signup(j)]
+    older_pool, other_pool = [], []
+    taken = {id(j) for j in picked}
+    short = lambda: len(picked) < minimum or (spares is not None and
+        sum(id(j) not in taken and not signup(j) for j in open_jobs + more + older_pool) < SPARES)
+    if short():
+        older_pool, _ = _search(keywords + near, country, remote_only, level, city, seen, Counter(), hours, max_age=OLDER_AGE)
+        older_pool = [j for j in older_pool if not signup(j)]
+        for j in older_pool:
+            if j["hit"] not in keywords:
+                j["matched"] = ["similar role"] + j["matched"]
+        older = fill(older_pool)
+        taken = {id(j) for j in picked}
+    if short():
+        other_pool, _ = _search([], country, remote_only, level, city, seen, Counter(), hours, any_title=True)
+        other_pool = [j for j in other_pool if not signup(j)][:ai_match.TOP * 2]
         if cv is not None:
-            pool = ai_match.rerank(pool, keywords, level, country, cv)
-        other = fill(pool)
+            other_pool = ai_match.rerank(other_pool, keywords, level, country, cv)
+        other = fill(other_pool)
     if spares is not None:
         taken = {id(j) for j in picked}
-        rest = [j for j in open_jobs + more if id(j) not in taken and not signup(j)][:SPARES * 2]
+        rest = [j for j in open_jobs + more + older_pool + other_pool if id(j) not in taken and not signup(j)][:SPARES * 2]
         with ThreadPoolExecutor(max_workers=8) as pool:
             ok = list(pool.map(lambda j: _link_ok(j["url"]), rest))
         spares.extend([j for j, good in zip(rest, ok) if good][:SPARES])
