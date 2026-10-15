@@ -79,11 +79,23 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: pip
+          cache-dependency-path: job_alerts/requirements.txt
       - if: steps.check.outputs.ready == 'true'
         run: pip install -r job_alerts/requirements.txt
+      # A new subscriber's first search reuses the jobs list saved by a run in the last 3 hours (search._pool),
+      # so it takes seconds instead of reading every board again.
+      - if: steps.check.outputs.ready == 'true' && inputs.first == '1'
+        uses: actions/cache/restore@v4
+        with:
+          path: job_pool.pkl.gz
+          key: job-pool-${{ github.run_id }}
+          restore-keys: job-pool-
       - if: steps.check.outputs.ready == 'true'
         name: Find matches and email everyone
         env:
+          JOB_POOL_FILE: job_pool.pkl.gz
+          JOB_POOL_REUSE: ${{ inputs.first == '1' && '1' || '0' }}
           DATABASE_URL: ${{ secrets.JOB_ALERTS_DATABASE_URL }}
           BASE_URL: ${{ secrets.JOB_ALERTS_BASE_URL }}
           SMTP_HOST: ${{ secrets.SMTP_HOST }}
@@ -106,3 +118,9 @@ jobs:
           CREDO_SECRET_KEY: ${{ secrets.CREDO_SECRET_KEY }}
           PAYSTACK_SECRET_KEY: ${{ secrets.PAYSTACK_SECRET_KEY }}
         run: python -m job_alerts.send_daily
+      - if: steps.check.outputs.ready == 'true' && inputs.first != '1' && hashFiles('job_pool.pkl.gz') != ''
+        name: Save the jobs list for first searches
+        uses: actions/cache/save@v4
+        with:
+          path: job_pool.pkl.gz
+          key: job-pool-${{ github.run_id }}

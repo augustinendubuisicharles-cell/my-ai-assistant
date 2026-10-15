@@ -13,8 +13,10 @@ Every job sent has passed: location fits the subscriber, posted in the last
 7 days (older adverts already have a pile of applicants), seniority fits, paid and no common scam signs, not past the board's
 expiry date, and its link doesn't come back "not found".
 """
+import gzip
 import json
 import os
+import pickle
 import re
 import time
 import xml.etree.ElementTree as ET
@@ -455,7 +457,7 @@ def from_career_pages() -> tuple:
 
 
 @lru_cache(maxsize=1)
-def from_local_pages() -> tuple:
+def _local_pages_live() -> tuple:
     """On-site jobs from LOCAL_PAGES (for people who chose on-site, not remote)."""
     out = []
     for ats, slugs in LOCAL_PAGES.items():
@@ -473,10 +475,51 @@ def from_local_pages() -> tuple:
     return tuple(out)
 
 
-def remote_feeds() -> tuple:
+def _remote_feeds_live() -> tuple:
     # Career pages go first, so when the same job is on a board too, the employer's own link is kept.
     return (from_career_pages() + from_remotive() + from_workingnomads() + from_weworkremotely() + from_remoteok()
             + from_arbeitnow() + from_themuse() + from_jobspresso())
+
+
+# Reading every board takes about 2 minutes, so each read is saved to JOB_POOL_FILE (the workflows keep it in
+# the GitHub Actions cache). A new subscriber's first search (JOB_POOL_REUSE=1) reuses a read from the last
+# JOB_POOL_MAX_HOURS instead of reading everything again. Each job's age is still checked when it is matched.
+POOL_MAX_AGE = timedelta(hours=float(os.environ.get("JOB_POOL_MAX_HOURS") or 3))
+
+
+@lru_cache(maxsize=1)
+def _pool() -> tuple[tuple, tuple]:
+    """(remote jobs, on-site jobs from LOCAL_PAGES): reused from JOB_POOL_FILE when allowed and fresh, else read now."""
+    path = os.environ.get("JOB_POOL_FILE", "")
+    if path and os.environ.get("JOB_POOL_REUSE") == "1" and os.path.exists(path):
+        try:
+            with gzip.open(path, "rb") as f:
+                saved = pickle.load(f)
+            age = datetime.now(timezone.utc) - saved["at"]
+            if age < POOL_MAX_AGE:
+                print(f"[Pool] reusing {len(saved['remote'])} remote jobs read {int(age.total_seconds() // 60)} min ago")
+                return saved["remote"], saved["local"]
+            print(f"[Pool] saved list is {age} old, reading again")
+        except Exception as e:
+            print(f"[Pool] couldn't reuse the saved list: {e}")
+    remote, local = _remote_feeds_live(), _local_pages_live()
+    if path:
+        try:
+            with gzip.open(path, "wb") as f:
+                pickle.dump({"at": datetime.now(timezone.utc), "remote": remote, "local": local}, f)
+            print(f"[Pool] saved {len(remote)} remote jobs to {path} ({os.path.getsize(path) // 1024} KB)")
+        except Exception as e:
+            print(f"[Pool] couldn't save the list: {e}")
+    return remote, local
+
+
+def remote_feeds() -> tuple:
+    return _pool()[0]
+
+
+def from_local_pages() -> tuple:
+    """On-site jobs from LOCAL_PAGES (for people who chose on-site, not remote)."""
+    return _pool()[1]
 
 
 @lru_cache(maxsize=None)
