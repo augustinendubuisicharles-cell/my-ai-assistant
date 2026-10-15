@@ -177,6 +177,15 @@ export const loginCodeValid = async (q, code) =>
   one(q, `SELECT id FROM logins WHERE code_hash = $1 AND used_at IS NULL
           AND created_at > now() - make_interval(mins => $2)`, [await sha256(code), LOGIN_LINK_MINUTES]);
 
+// A session straight from the "Log in" button in their own job email (their private token is the proof).
+export async function sessionFor(q, subscriberId) {
+  const session = randomToken();
+  await q(`INSERT INTO logins (subscriber_id, code_hash, created_at, used_at, session_hash, expires_at)
+    VALUES ($1, $2, now(), now(), $3, now() + make_interval(days => $4))`,
+    [subscriberId, await sha256(randomToken()), await sha256(session), SESSION_DAYS]);
+  return session;
+}
+
 // Uses the link (once) and returns the session value for the cookie, or null if the link is used or expired.
 export async function startSession(q, code) {
   const session = randomToken();

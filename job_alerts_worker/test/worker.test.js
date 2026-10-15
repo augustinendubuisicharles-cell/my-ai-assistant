@@ -786,6 +786,15 @@ test("members log in with an emailed link: once, scanner-safe, 30-day cookie, an
 
   await call("/logout", { method: "POST", headers });
   assert.equal((await call("/me", { headers })).headers.get("location"), "/login");
+
+  // The "Log in" button in a job email logs them straight in (GET only shows the auto-submit page).
+  assert.match(await (await call(`/login/${sub0.token}`)).text(), /Logging you in/);
+  const direct = await call(`/login/${sub0.token}`, { method: "POST" });
+  assert.equal(direct.headers.get("location"), "/me");
+  const fresh = { cookie: direct.headers.get("set-cookie").split(";")[0] };
+  assert.match(await (await call("/me", { headers: fresh })).text(), /ada@example.com/);
+  assert.equal((await call(`/login/${sub0.token}`, { headers: fresh })).headers.get("location"), "/me"); // already in
+  assert.equal((await call("/login/not-a-real-token", { method: "POST" })).headers.get("location"), "/login");
 });
 
 test("the search form saves Hours (any, full-time or part-time), and junk values fall back to any", async () => {

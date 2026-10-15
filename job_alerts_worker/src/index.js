@@ -293,6 +293,17 @@ export async function handle(request, env, q) {
     }
   }
 
+  // The "Log in" button in every job email: logs them straight in, no email to type. Their token is already private to
+  // them (it's in every manage link). GET only shows a page that POSTs, so mail apps' link checkers don't log in.
+  if ((m = path.match(/^\/login\/([\w-]{8,64})$/)) && (method === "GET" || method === "POST")) {
+    const sub = await db.byToken(q, m[1]);
+    if (!sub?.confirmed) return redirect("/login");
+    const current = await me();
+    if (current?.id === sub.id) return redirect("/me", await stayLoggedIn());
+    if (method === "GET") return html(views.signinPage(ctx));
+    return redirect("/me", { "set-cookie": sessionCookie(await db.sessionFor(q, sub.id)) });
+  }
+
   // GET only shows a page that logs in with a POST, so mail apps that open links to check them don't use up the link.
   if ((m = path.match(/^\/signin\/([\w-]{20,64})$/)) && (method === "GET" || method === "POST")) {
     const expired = () => msg("This link has expired", "Log-in links work once, for 30 minutes. Ask for a new one.", { link: "/login", linkText: "Send me a new link", status: 410 });
