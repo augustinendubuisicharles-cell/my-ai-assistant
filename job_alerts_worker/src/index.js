@@ -179,6 +179,7 @@ export async function handle(request, env, q) {
       return html(views.form(ctx, { sub, action: `/manage/${sub.token}`, button: "Save", heading: "Your job alerts",
         lead: `Alerts for ${sub.email}`, status: status(ctx, sub), member,
         telegramLink: bot ? `https://t.me/${bot}?start=${sub.token}` : null,
+        whatsapp: member && Boolean((env.WHATSAPP_PHONE_ID || "").trim()),
         inviteBox: views.invite(ctx, { refLink: await refLink(sub), joined: await db.confirmedReferrals(q, sub.id), paid: await db.paidReferrals(q, sub.id) }) }));
     }
     if (method === "POST") {
@@ -192,15 +193,34 @@ export async function handle(request, env, q) {
     }
   }
 
-  // AI cover letter or tailored CV for one job, linked from members' emails:
-  // /letter/<token> or /cv/<token>, with ?t=<title>&c=<company>&u=<job link>
-  if ((m = path.match(/^\/(letter|cv)\/([\w-]+)$/)) && (method === "GET" || method === "POST")) {
-    const kind = m[1], what = kind === "cv" ? "Tailored CVs" : "Cover letters";
+  // Members' WhatsApp number for instant alerts (sent by job_alerts/send_telegram.py); an empty number turns them off.
+  if ((m = path.match(/^\/whatsapp\/([\w-]+)$/)) && method === "POST") {
+    const sub = await db.byToken(q, m[1]);
+    if (!sub) return notFound();
+    if (!(await db.isMember(q, sub))) return msg("WhatsApp alerts are for members", "Join to get new matches on WhatsApp during the day.",
+      ctx.paidService ? { link: `/pay/${sub.token}`, linkText: `Become a member for ${ctx.price}` } : {});
+    const raw = String((await request.formData()).get("whatsapp") || "").trim();
+    const number = whatsappNumber(raw, sub.country);
+    if (raw && !number) {
+      return msg("Check the number", "Please enter your WhatsApp number with its country code, like +234 803 123 4567.",
+        { link: `/manage/${sub.token}`, linkText: "Go back", status: 400 });
+    }
+    await db.setWhatsapp(q, sub.token, number || null);
+    return msg(number ? "WhatsApp alerts are on" : "WhatsApp alerts are off",
+      number ? "New matches will come to WhatsApp during the day, before the morning email." : "Your daily email carries on as normal.",
+      { ok: true, link: `/manage/${sub.token}`, linkText: "Back to my alerts" });
+  }
+
+  // AI cover letter, tailored CV or interview prep for one job, linked from members' emails and job pages:
+  // /letter/<token>, /cv/<token> or /prep/<token>, with ?t=<title>&c=<company>&u=<job link>
+  if ((m = path.match(/^\/(letter|cv|prep)\/([\w-]+)$/)) && (method === "GET" || method === "POST")) {
+    const kind = m[1], what = { cv: "Tailored CVs", letter: "Cover letters", prep: "Interview prep sheets" }[kind];
+    const noun = { cv: "new CV", letter: "letter", prep: "prep" }[kind], plural = { cv: "tailored CVs", letter: "letters", prep: "prep sheets" }[kind];
     const sub = await db.byToken(q, m[2]);
     if (!sub) return notFound();
     if (!letters.enabled(env)) return msg(`${what} aren't available yet`, "Please check back soon.");
     if (!(await db.isMember(q, sub))) {
-      return msg(`${what} are for members`, "Members get a CV tailored to any job and an AI cover letter in one click, plus 10 jobs a day and Telegram alerts.",
+      return msg(`${what} are for members`, "Members get a CV tailored to any job, an AI cover letter and interview prep in one click, plus 10 jobs a day and Telegram alerts.",
         ctx.paidService ? { link: `/pay/${sub.token}`, linkText: `Become a member for ${ctx.price}` } : {});
     }
     const p = url.searchParams;
@@ -218,8 +238,8 @@ export async function handle(request, env, q) {
       cv = pasted.slice(0, letters.MAX_CV);
       await db.setCv(q, sub.id, cv);
     }
-    if (!cv) return render({ error: `Paste your CV first, so the ${kind === "cv" ? "new CV" : "letter"} can be about you.` });
-    if (used >= letters.PER_DAY) return render({ error: `That's today's 10 ${kind === "cv" ? "tailored CVs" : "letters"}. You can write more tomorrow.` });
+    if (!cv) return render({ error: `Paste your CV first, so the ${noun} can be about you.` });
+    if (used >= letters.PER_DAY) return render({ error: `That's today's 10 ${plural}. You can write more tomorrow.` });
     let text = null;
     try {
       text = await letters.write(env, { cv, ...job, advert: job.url ? await letters.advertText(job.url) : "" }, kind);
@@ -325,7 +345,7 @@ export async function handle(request, env, q) {
       return msg("Your applications are for members", "Members can track every job they apply to, plus get a CV tailored to each job and 10 jobs a day.",
         ctx.paidService ? { link: `/pay/${sub.token}`, linkText: `Become a member for ${ctx.price}` } : {});
     }
-    return html(views.applications(ctx, { sub, rows: await db.applications(q, sub.id), saved: Number(url.searchParams.get("saved")) || 0 }));
+    return html(views.applications(ctx, { sub, rows: await db.applications(q, sub.id), saved: Number(url.searchParams.get("saved")) || 0, prep: letters.enabled(env) }));
   }
 
   if ((m = path.match(/^\/unsubscribe\/([\w-]+)$/)) && (method === "GET" || method === "POST")) {
@@ -461,3 +481,13 @@ export default {
     ctx.waitUntil(firstSearch.daily(env));
   },
 };
+
+// "+234 803 123 4567" or a Nigerian "0803 123 4567" -> "2348031234567" (WhatsApp wants digits, country code first).
+export function whatsappNumber(raw, country = "") {
+  const plus = String(raw || "").trim().startsWith("+") || String(raw || "").trim().startsWith("00");
+  let d = String(raw || "").replace(/\D/g, "").replace(/^00/, "");
+  if (!d) return "";
+  if (!plus && d.startsWith("0") && (country === "Nigeria" || !country) && d.length === 11) d = `234${d.slice(1)}`;
+  return /^[1-9]\d{7,14}$/.test(d) ? d : "";
+}
+

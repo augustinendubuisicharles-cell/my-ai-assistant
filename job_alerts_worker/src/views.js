@@ -152,6 +152,10 @@ const STYLE = `
   .app-top { display:flex; justify-content:space-between; gap:10px; align-items:baseline; }
   .app-top a { color:var(--text); font-weight:700; text-decoration:none; }
   .app-top time { color:var(--muted); font-size:.8rem; white-space:nowrap; }
+  .wa-row { display:flex; gap:8px; margin-top:8px; }
+  .wa-row input { flex:1; margin:0; }
+  .wa-row button { width:auto; margin:0; padding:0 18px; }
+  .app .prep { display:inline-block; margin-top:8px; font-size:.85rem; font-weight:700; text-decoration:none; }
   .app .co { color:var(--muted); font-size:.9rem; }
   .seg { display:flex; flex-wrap:wrap; gap:6px; margin-top:12px; }
   .seg button { width:auto; margin:0; padding:7px 13px; border-radius:99px; font-size:.85rem; font-weight:700; background:var(--bg); color:var(--muted); border:1px solid var(--border); }
@@ -559,15 +563,15 @@ function plans(ctx) {
   ${li("Remote jobs, or on-site near you")}
   ${li("Checked for scams, dead links and jobs you can't apply for from your country")}
   ${li("Never the same job twice")}
-  ${li("Telegram alerts during the day", false)}
+  ${li("Telegram and WhatsApp alerts during the day", false)}
 </ul></div>
 <div class="card plan best"><span class="tag">BEST VALUE</span><h3>Member</h3><p class="cost">${ctx.paidService
     ? `<b>${esc(ctx.price)}</b> for ${ctx.months} months, paid once`
     : "<b>Coming soon</b>"}</p><ul>
   ${li("<b>5 to 10 jobs</b> every morning")}
   ${li("Searches all <b>5 job titles</b>")}
-  ${li("<b>Telegram alerts</b> 4 times a day, so you apply first")}
-  ${li("<b>Your CV tailored</b> to any job, plus an <b>AI cover letter</b>")}
+  ${li("<b>Telegram and WhatsApp alerts</b> during the day, so you apply first")}
+  ${li("<b>Your CV tailored</b> to any job, an <b>AI cover letter</b> and <b>interview prep</b>")}
   ${li("Everything in the free trial")}
   ${li("No auto-renewal; we remind you before it ends")}
 </ul></div></section>`;
@@ -645,7 +649,7 @@ export function membershipCard(ctx, sub, member, now = new Date()) {
 }
 
 export function form(ctx, { sub = null, action, button, heading, lead, status = "", member = false, telegramLink = null,
-  ref = "", inviteBox = "" }) {
+  whatsapp = false, ref = "", inviteBox = "" }) {
   const onsite = sub && !sub.remote_only;
   const words = String(sub?.keywords || "").split(",").map((w) => w.trim()).filter(Boolean);
   const listed = (w) => JOBS.find((j) => j.toLowerCase() === w.toLowerCase());
@@ -657,6 +661,12 @@ export function form(ctx, { sub = null, action, button, heading, lead, status = 
   const telegramBox = !telegramLink ? "" : `<p class="card status">${sub.telegram_chat_id
     ? "Telegram alerts are on: new matches arrive there during the day. Send /stop to the bot to turn them off."
     : `Get new matches on Telegram during the day, before the morning email. <a href="${esc(telegramLink)}">Connect Telegram</a>`}</p>`;
+  const whatsappBox = !whatsapp ? "" : `<form class="card status wa" method="post" action="/whatsapp/${esc(sub.token)}">
+  <label for="wa" style="margin-top:0">${sub.whatsapp ? "WhatsApp alerts are on" : "Get new matches on WhatsApp during the day"}</label>
+  <div class="wa-row"><input id="wa" name="whatsapp" type="tel" inputmode="tel" maxlength="20" placeholder="0803 123 4567"
+    value="${sub.whatsapp ? `+${esc(sub.whatsapp)}` : ""}"><button type="submit">${sub.whatsapp ? "Save" : "Turn on"}</button></div>
+  ${sub.whatsapp ? `<p class="small" style="margin:6px 0 0">Clear the number and save to turn them off.</p>` : ""}
+</form>`;
   const intro = sub ? `<h1>${esc(heading)}</h1>
 <p class="lead">${esc(lead)}</p>` : `<div class="home"><h1>Remote jobs that <em>actually hire Nigerians</em></h1>
 <p class="lead">${esc(lead)}</p></div>`;
@@ -709,7 +719,7 @@ export function form(ctx, { sub = null, action, button, heading, lead, status = 
   const script = FORM_SCRIPT;
   if (!sub) return page(ctx, landing(ctx, formHtml) + script, { landing: true });
   return page(ctx, `${intro}
-${statusBox}${member ? `<a class="card apps-link" href="/applications/${esc(sub.token)}">📋 My applications <span>&rarr;</span></a>` : ""}${telegramBox}
+${statusBox}${member ? `<a class="card apps-link" href="/applications/${esc(sub.token)}">📋 My applications <span>&rarr;</span></a>` : ""}${telegramBox}${whatsappBox}
 ${formHtml}
 <details class="fold info" id="plans"><summary>${sub ? "How it works" : "See what you get"}</summary>
 ${sub ? "" : strengths() + plans(ctx) + compare()}
@@ -774,24 +784,27 @@ export const JOBS = ["Virtual assistant", "Customer support", "Software develope
 // AI cover letter or tailored CV for one job (members). Shows the result once written, and the form to (re)write it.
 // The tailored CV can also be downloaded as a Word file, built in the browser from the text.
 export function letterPage(ctx, { kind = "letter", sub, job, hasCv, cv = "", letter = "", left, error = "" }) {
-  const isCv = kind === "cv";
-  const noun = isCv ? "CV" : "letter";
+  const isCv = kind === "cv", isPrep = kind === "prep";
+  const noun = isCv ? "CV" : isPrep ? "prep sheet" : "letter";
   const cvField = `<label for="cv">Your CV <span class="hint">Paste the text once; we'll remember it</span></label>
   <textarea id="cv" name="cv" rows="8" maxlength="15000"${hasCv ? "" : " required"} placeholder="Paste your CV here">${esc(cv)}</textarea>`;
   const other = `/${isCv ? "letter" : "cv"}/${sub.token}?${new URLSearchParams({ t: job.title, c: job.company, u: job.url })}`;
+  const otherText = isCv ? "Write a cover letter for it too" : isPrep ? "Get your CV tailored to this job" : "Get your CV tailored to this job too";
   const fileName = `CV - ${job.title}${job.company ? ` - ${job.company}` : ""}`.replace(/[^\w .,&()-]+/g, " ").slice(0, 120);
-  return page(ctx, `<h1>${isCv ? "📄 Your CV for this job" : "✍️ Cover letter"}</h1>
+  return page(ctx, `<h1>${isCv ? "📄 Your CV for this job" : isPrep ? "🎤 Interview prep" : "✍️ Cover letter"}</h1>
 <p class="lead">${esc(job.title)}${job.company ? ` at ${esc(job.company)}` : ""}</p>
 ${isCv && !letter ? `<p>We rewrite your CV for this job: a summary aimed at the role, your most relevant experience first,
 and the advert's own words where they're true of you. Nothing is made up.</p>` : ""}
+${isPrep && !letter ? `<p>The questions this interviewer is likely to ask, with answers built from your CV, plus questions to ask them.</p>` : ""}
 ${error ? `<p class="card status">${esc(error)}</p>` : ""}
-${letter ? `<div class="card"><textarea id="letter" rows="${isCv ? 24 : 16}" readonly>${esc(letter)}</textarea>
+${letter ? `<div class="card"><textarea id="letter" rows="${isCv || isPrep ? 24 : 16}" readonly>${esc(letter)}</textarea>
 <div class="actions"><button type="button" id="copy" style="margin:0">Copy ${noun}</button>
 ${isCv ? `<button type="button" id="word" class="btn ghost" style="margin:0">Download for Word</button>` : ""}
 ${job.url ? `<a class="btn ghost" href="${esc(job.url)}">Open the job and apply</a>` : ""}</div>
 <p class="note">${isCv ? "Check every line is true and your contact details are right before sending."
+    : isPrep ? "Say the answers out loud a few times, in your own words. Good luck!"
     : "Read it through and add one detail only you know before sending."}
-<a href="${esc(other)}">${isCv ? "Write a cover letter for it too" : "Get your CV tailored to this job too"}</a></p></div>
+<a href="${esc(other)}">${otherText}</a></p></div>
 <script>document.getElementById("copy").onclick=function(){var t=document.getElementById("letter");t.select();
 navigator.clipboard?navigator.clipboard.writeText(t.value):document.execCommand("copy");this.textContent="Copied ✓";};
 ${isCv ? `document.getElementById("word").onclick=function(){
@@ -806,10 +819,10 @@ var a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["\\ufeff"
 a.download=${JSON.stringify(fileName + ".doc").replace(/</g, "\\u003c")};document.body.appendChild(a);a.click();a.remove();};` : ""}</script>` : ""}
 <form class="card" method="post" id="write"${letter ? ' style="margin-top:16px"' : ""}>
   ${hasCv ? `<details class="fold more" style="margin-top:0"><summary>Update my CV</summary>${cvField}</details>` : cvField}
-  <button type="submit" id="go">${letter ? "Write it again" : isCv ? "Tailor my CV" : "Write my cover letter"}</button>
+  <button type="submit" id="go">${letter ? "Write it again" : isCv ? "Tailor my CV" : isPrep ? "Prepare me" : "Write my cover letter"}</button>
   <p class="free">${left} of 10 left today</p>
 </form>
-<script>document.getElementById("write").addEventListener("submit",function(){var b=document.getElementById("go");b.disabled=true;b.textContent="Writing... (about ${isCv ? 40 : 20} seconds)";});</script>`);
+<script>document.getElementById("write").addEventListener("submit",function(){var b=document.getElementById("go");b.disabled=true;b.textContent="Writing... (about ${isCv || isPrep ? 40 : 20} seconds)";});</script>`);
 }
 
 // --- members' application tracker ---
@@ -826,13 +839,14 @@ export function answerPage(ctx, { job, answer }) {
 
 const shortDate = (d) => (d ? new Date(d).toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }) : "");
 
-export function applications(ctx, { sub, rows, saved = 0 }) {
+export function applications(ctx, { sub, rows, saved = 0, prep = false }) {
   const count = (...st) => rows.filter((r) => st.includes(r.status)).length;
   const applied = rows.filter((r) => r.status !== "not_yet");
   const waiting = rows.filter((r) => r.status === "not_yet");
   const card = (r, buttons) => `<form class="card app${r.id === saved ? " saved" : ""}" method="post" id="job${r.id}">
   <div class="app-top"><a href="/j/${esc(sub.token)}/${r.id}">${esc(r.title)}</a><time>${shortDate(r.status_at)}</time></div>
   ${r.company ? `<div class="co">${esc(r.company)}</div>` : ""}
+  ${r.status === "interview" && prep ? `<a class="prep" href="/prep/${esc(sub.token)}?${esc(new URLSearchParams({ t: r.title, c: r.company || "", u: r.url || "" }).toString())}">🎤 Prepare for the interview</a>` : ""}
   <div class="seg">${buttons.map(([a, cls]) => `<button formaction="/job/${esc(sub.token)}/${r.id}/${a}" class="${cls || ""}${r.status === a ? " on" : ""}">${ANSWER_WORDS[a]}</button>`).join("")}</div>
 </form>`;
   const body = !rows.length ? `<div class="card empty"><p style="margin:0">Nothing here yet.</p>
@@ -891,6 +905,7 @@ const UNLOCK = {
   apps: ["Application tracker", "See every job you've applied to and where each one stands."],
   cv: ["Tailored CVs", "We rewrite your CV for each job, in the advert's own words."],
   letter: ["Cover letters", "A cover letter written for each job, in one tap."],
+  prep: ["Interview prep", "Likely interview questions for each job, with answers from your CV."],
   telegram: ["Telegram alerts", "New jobs on Telegram during the day, so you apply first."],
 };
 
@@ -902,7 +917,7 @@ function unlockSheet(ctx, join) {
   <a class="plan-cta" href="${join}">Join for ${esc(ctx.price)} <span aria-hidden="true">→</span></a>
   <button class="sheet-close" value="close">Not now</button>
 </form></dialog>
-<script>(function(){var d=document.getElementById("unlock"),U=${JSON.stringify(UNLOCK)},I=${JSON.stringify({ apps: ME_ICONS.apps, cv: ME_ICONS.cv, letter: ME_ICONS.cv, telegram: ME_ICONS.telegram })};
+<script>(function(){var d=document.getElementById("unlock"),U=${JSON.stringify(UNLOCK)},I=${JSON.stringify({ apps: ME_ICONS.apps, cv: ME_ICONS.cv, letter: ME_ICONS.cv, prep: ME_ICONS.cv, telegram: ME_ICONS.telegram })};
 if(!d.showModal)return;document.querySelectorAll("[data-unlock]").forEach(function(a){a.addEventListener("click",function(e){var k=a.getAttribute("data-unlock");e.preventDefault();
 document.getElementById("u-title").textContent=U[k][0];document.getElementById("u-text").textContent=U[k][1];
 document.getElementById("u-ic").innerHTML=I[k];d.showModal();});});
@@ -969,7 +984,7 @@ export function jobPage(ctx, { sub, job, member, letters = false }) {
     signup && `<span class="warn">Sign-up needed to apply</span>`].filter(Boolean).join("");
   const q = esc(new URLSearchParams({ t: job.title, c: job.company || "", u: job.url || "" }).toString());
   const gate = (f) => (member ? "" : ` data-unlock="${f}"`);
-  const tools = letters || !member ? `<div class="jtools"><a href="/cv/${t}?${q}"${gate("cv")}>📄 Tailored CV</a><a href="/letter/${t}?${q}"${gate("letter")}>✍️ Cover letter</a></div>` : "";
+  const tools = letters || !member ? `<div class="jtools"><a href="/cv/${t}?${q}"${gate("cv")}>📄 Tailored CV</a><a href="/letter/${t}?${q}"${gate("letter")}>✍️ Cover letter</a><a href="/prep/${t}?${q}"${gate("prep")}>🎤 Interview prep</a></div>` : "";
   const how = direct ? `A short form on ${esc(who)}'s own site. No account needed.`
     : signup ? `${esc(via)} asks you to sign up before you can apply. Then use their Apply button.`
     : `Opens the advert on ${esc(via)}. Tap their Apply button.`;

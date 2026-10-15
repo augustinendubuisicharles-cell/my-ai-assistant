@@ -55,7 +55,7 @@ def main() -> None:
                       f"level {sub['level']}, hours {sub.get('hours') or 'any'}, {len(sent_before)} job(s) already sent")
             jobs = find_jobs(first_titles(sub["keywords"], titles), sub["country"], sub["remote_only"], sub["level"],
                              sent_before, n=n, city=sub.get("city") or "", minimum=payments.DAILY_MINIMUM[member],
-                             hours=sub.get("hours") or "any")
+                             hours=sub.get("hours") or "any", cv=(sub.get("cv_text") or "") if member else None)
             if not jobs:
                 # A new subscriber, or one who has never had a single match: tell them once, with a nudge
                 # towards broader titles, so nobody is left waiting in silence.

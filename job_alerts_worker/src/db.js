@@ -1,6 +1,6 @@
 // Queries against the same Postgres (Neon) tables the Python side creates and
 // uses (job_alerts/db.py owns the schema). `q(text, params)` returns rows.
-const COLS = "id, email, keywords, country, remote_only, city, level, hours, token, confirmed, paid_until, telegram_chat_id, ref_code, referred_by, ref_rewards";
+const COLS = "id, email, keywords, country, remote_only, city, level, hours, token, confirmed, paid_until, telegram_chat_id, whatsapp, ref_code, referred_by, ref_rewards";
 
 const one = async (q, text, params) => (await q(text, params))[0] || null;
 
@@ -61,6 +61,7 @@ export async function isMember(q, sub) {
 export const setTelegram = (q, token, chatId) =>
   one(q, `UPDATE subscribers SET telegram_chat_id = $2 WHERE token = $1 RETURNING ${COLS}`, [token, chatId]);
 
+export const setWhatsapp = (q, token, number) => q("UPDATE subscribers SET whatsapp = $2 WHERE token = $1", [token, number]);
 export const clearTelegram = (q, chatId) => q("UPDATE subscribers SET telegram_chat_id = NULL WHERE telegram_chat_id = $1", [chatId]);
 
 // Adds `days` of paid time, once per payment reference: the browser return and the

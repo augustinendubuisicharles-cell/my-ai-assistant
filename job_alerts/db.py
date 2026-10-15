@@ -26,6 +26,7 @@ subscribers = Table(
     Column("paid_until", DateTime(timezone=True)),      # alerts are sent while this is in the future
     Column("reminded_for", DateTime(timezone=True)),    # paid_until we last sent a renewal reminder for
     Column("telegram_chat_id", String(32)),              # set when a paid member connects Telegram
+    Column("whatsapp", String(20)),                      # member's WhatsApp number (digits, country code first) for instant alerts
     Column("cv_text", Text),                             # pasted CV, used for AI cover letters (members)
     Column("ref_code", String(16), unique=True),         # their invite link: /?ref=<ref_code>
     Column("referred_by", Integer),                      # subscriber id whose invite link they used
@@ -122,7 +123,7 @@ def init_db() -> None:
              "ref_code": "VARCHAR(16)", "referred_by": "INTEGER", "ref_rewards": "INTEGER NOT NULL DEFAULT 0",
              "last_run_at": "TIMESTAMP WITH TIME ZONE", "last_run_result": "VARCHAR(200)",
              "confirm_reminded_at": "TIMESTAMP WITH TIME ZONE", "titles_tip_at": "TIMESTAMP WITH TIME ZONE",
-             "hours": "VARCHAR(10) NOT NULL DEFAULT 'any'"}
+             "hours": "VARCHAR(10) NOT NULL DEFAULT 'any'", "whatsapp": "VARCHAR(20)"}
     with engine.begin() as conn:
         for name, sql_type in added.items():
             if name not in have:

@@ -347,6 +347,25 @@ test("paying members can connect Telegram; trial users can't, and the webhook ch
   assert.match(tg.at(-1).text, /didn't work/);
 });
 
+test("members can turn WhatsApp alerts on and off from their manage page", async () => {
+  env.WHATSAPP_PHONE_ID = "123";
+  await signUp();
+  const { token } = await subscriber();
+  await call(`/confirm/${token}`);
+  assert.doesNotMatch(await (await call(`/manage/${token}`)).text(), /name="whatsapp"/); // trial: no box
+  assert.match(await (await call(`/whatsapp/${token}`, { method: "POST", form: { whatsapp: "08031234567" } })).text(), /for members/);
+
+  await call(`/pay/${token}`, { method: "POST" });
+  await call("/paid?transRef=vs_1");
+  assert.match(await (await call(`/manage/${token}`)).text(), /Get new matches on WhatsApp/);
+  assert.equal((await call(`/whatsapp/${token}`, { method: "POST", form: { whatsapp: "12" } })).status, 400);
+  await call(`/whatsapp/${token}`, { method: "POST", form: { whatsapp: "0803 123 4567" } });
+  assert.equal((await subscriber()).whatsapp, "2348031234567");
+  assert.match(await (await call(`/manage/${token}`)).text(), /WhatsApp alerts are on[\s\S]*value="\+2348031234567"/);
+  await call(`/whatsapp/${token}`, { method: "POST", form: { whatsapp: "" } });
+  assert.equal((await subscriber()).whatsapp, null);
+});
+
 test("confirming starts the first job search once, and says jobs arrive in minutes", async () => {
   await signUp();
   const { token } = await subscriber();
@@ -455,6 +474,25 @@ test("members get their CV tailored to a job, counted apart from letters, and ca
   assert.match(letter, /9 of 10 left today/);
   assert.match(ai[1].system, /cover letters/);
   assert.deepEqual((await q("SELECT kind FROM letters ORDER BY id")).map((r) => r.kind), ["cv", "letter"]);
+});
+
+test("members get interview prep for a job, built from their CV", async () => {
+  env.ANTHROPIC_API_KEY = "sk-test";
+  await signUp();
+  const { token } = await subscriber();
+  await call(`/confirm/${token}`);
+  const link = `/prep/${token}?t=PR%20Associate&c=Acme&u=${encodeURIComponent("https://jobs.example/pr-1")}`;
+  assert.match(await (await call(link)).text(), /Interview prep sheets are for members/);
+
+  await call(`/pay/${token}`, { method: "POST" });
+  await call("/paid?transRef=vs_1");
+  assert.match(await (await call(link)).text(), /Prepare me/);
+  const done = await (await call(link, { method: "POST", form: { cv: "Ada Obi. Comms officer at Lagos NGO, 2 years." } })).text();
+  assert.match(done, /Interview prep/);
+  assert.match(done, /9 of 10 left today/);
+  assert.match(ai[0].system, /LIKELY QUESTIONS/);
+  assert.match(ai[0].messages[0].content, /Comms officer at Lagos NGO/);
+  assert.deepEqual((await q("SELECT kind FROM letters ORDER BY id")).map((r) => r.kind), ["prep"]);
 });
 
 test("job titles come from the list plus 'Something else', and the manage page ticks them again", async () => {
