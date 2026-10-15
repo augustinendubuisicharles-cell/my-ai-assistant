@@ -58,6 +58,9 @@ SCAM_SIGNS = ["registration fee", "training fee", "pay a fee", "processing fee",
               "whatsapp", "google hangouts", "wire transfer", "send money", "western union", "no interview",
               "unlimited earning"]
 REMOTE_WORDS = ["remote", "work from home", "home based", "home-based", "anywhere"]
+# Boards that make people create an account before they can see how to apply (checked 15 Oct 2026).
+# When the same job is also on an open board, that link is used; otherwise the job is tagged and ranked lower.
+SIGNUP_BOARDS = {"We Work Remotely"}
 
 
 def _clean(html_text: str) -> str:
@@ -652,6 +655,9 @@ def score(job: dict, keywords: list[str], country: str, remote_only: bool, level
             pts += 2
     pts += max(0, 3 - (datetime.now(timezone.utc) - job["posted"]).days // 2)  # newest first: fewer applicants yet
     reasons.append(f"posted {job['posted']:%d %b}")
+    if job["source"] in SIGNUP_BOARDS:
+        pts -= 3
+        reasons.append("sign-up needed to apply")
     return pts, reasons
 
 
@@ -704,6 +710,7 @@ def _search(keywords: list[str], country: str, remote_only: bool, level: str, ci
         pool += from_himalayas(k, country) + from_jobicy(k) + from_jooble(k, "" if remote_only else (city or country))
         if not remote_only:
             pool += from_adzuna(k, country, city) + (from_reed(k, city) if country == "United Kingdom" else ())
+    pool.sort(key=lambda j: j["source"] in SIGNUP_BOARDS)  # duplicates keep the open board's link
     ranked = []
     for job in pool:
         keys = job_keys(job)
