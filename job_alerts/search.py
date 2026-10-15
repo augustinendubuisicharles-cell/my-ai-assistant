@@ -59,9 +59,11 @@ SCAM_SIGNS = ["registration fee", "training fee", "pay a fee", "processing fee",
               "whatsapp", "google hangouts", "wire transfer", "send money", "western union", "no interview",
               "unlimited earning"]
 REMOTE_WORDS = ["remote", "work from home", "home based", "home-based", "anywhere"]
-# Boards that make people create an account before they can see how to apply (checked 15 Oct 2026).
-# When the same job is also on an open board, that link is used; otherwise the job is tagged and ranked lower.
-SIGNUP_BOARDS = {"We Work Remotely"}
+# Boards that make people create an account (or upgrade) before they can apply (checked 15 Oct 2026).
+# They're no longer searched (the owner's call, 15 Oct 2026): people only get jobs they can apply to
+# directly. If they're ever switched back on, their jobs only fill gaps and are tagged "sign-up needed".
+SIGNUP_BOARDS = {"We Work Remotely", "Himalayas", "Jobicy", "RemoteOK"}
+SIGNUP_PENALTY = 100
 
 
 def _clean(html_text: str) -> str:
@@ -381,7 +383,7 @@ def from_career_pages() -> tuple:
 
 def remote_feeds() -> tuple:
     # Career pages go first, so when the same job is on a board too, the employer's own link is kept.
-    return (from_career_pages() + from_remotive() + from_weworkremotely() + from_remoteok() + from_workingnomads()
+    return (from_career_pages() + from_remotive() + from_workingnomads()
             + from_arbeitnow() + from_themuse() + from_jobspresso())
 
 
@@ -729,7 +731,7 @@ def score(job: dict, keywords: list[str], country: str, remote_only: bool, level
     pts += max(0, 3 - (datetime.now(timezone.utc) - job["posted"]).days // 2)  # newest first: fewer applicants yet
     reasons.append(f"posted {job['posted']:%d %b}")
     if job["source"] in SIGNUP_BOARDS:
-        pts -= 3
+        pts -= SIGNUP_PENALTY
         reasons.append("sign-up needed to apply")
     return pts, reasons
 
@@ -780,7 +782,7 @@ def _search(keywords: list[str], country: str, remote_only: bool, level: str, ci
     """Every listing that passes the checks for these titles, best first, plus how many listings each board gave."""
     pool = list(remote_feeds())
     for k in keywords:
-        pool += from_himalayas(k, country) + from_jobicy(k) + from_jooble(k, "" if remote_only else (city or country))
+        pool += from_jooble(k, "" if remote_only else (city or country))
         if not remote_only:
             pool += from_adzuna(k, country, city) + (from_reed(k, city) if country == "United Kingdom" else ())
     pool.sort(key=lambda j: j["source"] in SIGNUP_BOARDS)  # duplicates keep the open board's link
@@ -826,23 +828,32 @@ def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, ex
     seen, why = sent_keys(exclude), Counter()
     ranked, boards = _search(keywords, country, remote_only, level, city, seen, why, hours)
     matched = len(ranked)
-    picked = _pick(ranked, keywords, n)
-    extra = 0
-    if len(picked) < minimum and (near := neighbours(keywords)):
+    signup = lambda j: j["source"] in SIGNUP_BOARDS
+    # Jobs people can apply to without signing up come first: their own titles, then similar roles.
+    picked = _pick([j for j in ranked if not signup(j)], keywords, n)
+    more, near = [], neighbours(keywords)
+    if len(picked) < minimum and near:
         more, _ = _search(near, country, remote_only, level, city, seen, Counter(), hours)
         for j in more:
             j["matched"] = ["similar role"] + j["matched"]
         more.sort(key=lambda j: (near.index(j["hit"]), -j["score"]))  # closest roles first
-        found = []
-        for j in more:
-            if len(picked) + len(found) >= minimum:
+    def fill(pool: list[dict]) -> int:
+        added = 0
+        for j in pool:
+            if len(picked) >= minimum:
                 break
             if _link_ok(j["url"]):
-                found.append(j)
-        extra = len(found)
-        picked += found
+                picked.append(j)
+                added += 1
+        return added
+    extra = fill([j for j in more if not signup(j)])
+    # Only if that still leaves them short: sign-up boards' jobs (tagged "sign-up needed to apply").
+    gated = 0
+    if len(picked) < minimum:
+        gated = fill([j for j in ranked if signup(j)]) + fill([j for j in more if signup(j)])
     print(f"  checked {sum(boards.values())} listings ({', '.join(f'{s} {c}' for s, c in boards.most_common())}), "
-          f"{matched} matched, picked {len(picked)}{f' ({extra} from similar roles to reach the daily minimum)' if extra else ''}; "
+          f"{matched} matched, picked {len(picked)}{f' ({extra} from similar roles to reach the daily minimum)' if extra else ''}"
+          f"{f', {gated} from sign-up boards to fill the gap' if gated else ''}; "
           f"left out: {', '.join(f'{c} {r}' for r, c in why.most_common()) or 'none'}")
     return picked
 
