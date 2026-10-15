@@ -1,0 +1,14 @@
+name: Job alerts -- probe apply links (temporary)
+on:
+  push:
+    branches: [claude/project-thread-uc24a3]
+    paths: [job_alerts/probe_apply.py, .github/workflows/job_alerts_probe_apply.yml]
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -r job_alerts/requirements.txt
+      - run: python -m job_alerts.probe_apply
