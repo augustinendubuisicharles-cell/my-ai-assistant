@@ -29,7 +29,7 @@ LAUNCH_SPOTS = int(os.environ.get("LAUNCH_SPOTS", "100"))
 TRIAL_DAYS = int(os.environ.get("TRIAL_DAYS", "7"))  # free days everyone gets when they confirm their email
 # What each plan gets per daily email: (jobs, job titles searched). Paid members also get Telegram alerts.
 TRIAL_LIMITS = (3, 2)  # jobs a day, job titles searched
-PAID_LIMITS = (10, 5)
+PAID_LIMITS = (5, 5)  # members: the 5 best jobs each morning, more on request from their dashboard
 DAILY_MINIMUM = {True: 5, False: 3}  # members, trial: similar roles fill any gap (search.find_jobs)
 
 

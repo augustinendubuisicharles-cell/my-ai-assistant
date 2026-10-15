@@ -152,7 +152,7 @@ test("home page shows the trial, the price and the form", async () => {
   const page = await r.text();
   assert.equal(r.status, 200);
   assert.match(page, /What you get/);
-  assert.match(page, /<b>3 jobs<\/b>[\s\S]*<b>₦5,000<\/b> for 3 months[\s\S]*<b>5 to 10 jobs<\/b>/);
+  assert.match(page, /<b>3 jobs<\/b>[\s\S]*<b>₦5,000<\/b> for 3 months[\s\S]*<b>5 best jobs<\/b>/);
   assert.match(page, /₦5,000/);
   assert.match(page, /7 days free/);
   assert.match(page, /How do you want to work\?/);
@@ -750,6 +750,39 @@ test("members log in with an emailed link: once, scanner-safe, 30-day cookie, an
   await call("/me/cv", { method: "POST", form: { cv: "Ada Obi, comms officer." }, headers });
   assert.equal(await (await import("../src/db.js")).getCv(q, sub0.id), "Ada Obi, comms officer.");
   assert.match(await (await call("/me?saved=cv", { headers })).text(), /Your CV is saved/);
+
+  // Trial users see "More jobs" as a member feature; it doesn't give them jobs.
+  assert.match(home, /class="more" href="[^"]+" data-unlock="more"/);
+  assert.equal((await call("/me/more", { method: "POST", headers })).headers.get("location"), "/me");
+
+  // Members: the dashboard keeps 5 jobs; "More jobs" swaps in the next 5 of the morning's spares, best first.
+  await q("UPDATE subscribers SET paid_until = now() + interval '30 days' WHERE id = $1", [sub0.id]);
+  await q("INSERT INTO payments (reference, subscriber_id, amount_ngn, paid_at) VALUES ('m1', $1, 3500, now())", [sub0.id]);
+  for (let i = 1; i <= 6; i++) {
+    await q(`INSERT INTO sent_jobs (subscriber_id, job_key, sent_at, title, on_board) VALUES ($1, $2, now(), $3, $4)`, [sub0.id, `a${i}`, `Morning ${i}`, i > 1]);
+  }
+  for (let i = 0; i < 7; i++) {
+    await q(`INSERT INTO spare_jobs (subscriber_id, rank, job_key, title, company, url) VALUES ($1, $2, $3, $4, 'Co', 'https://jobs.example/s')`,
+      [sub0.id, i, i === 0 ? "a2" : `s${i}`, `Spare ${i}`]); // the first was sent since (by Telegram, say): skipped
+  }
+  let mine = await (await call("/me", { headers })).text();
+  assert.equal((mine.match(/class="card mjob"/g) || []).length, 5);
+  assert.match(mine, /Morning 2[\s\S]*Morning 6/);
+  assert.doesNotMatch(mine, /Morning 1</);
+  assert.match(mine, /action="\/me\/more"/);
+  assert.equal((await call("/me/more", { method: "POST", headers })).headers.get("location"), "/me?saved=more#jobs");
+  mine = await (await call("/me?saved=more", { headers })).text();
+  assert.match(mine, /Here are 5 more jobs/);
+  assert.match(mine, /Spare 1[\s\S]*Spare 5/);
+  assert.doesNotMatch(mine, /Morning|Spare 0|Spare 6/);
+  assert.match(mine, /action="\/me\/more"/); // one spare left
+  await call("/me/more", { method: "POST", headers });
+  mine = await (await call("/me", { headers })).text();
+  assert.match(mine, /Spare 6/);
+  assert.equal((mine.match(/class="card mjob"/g) || []).length, 1);
+  assert.doesNotMatch(mine, /action="\/me\/more"/);
+  assert.equal((await call("/me/more", { method: "POST", headers })).headers.get("location"), "/me?saved=nomore#jobs");
+  assert.equal((await q("SELECT count(*)::int AS n FROM sent_jobs WHERE subscriber_id = $1", [sub0.id]))[0].n, 13);
 
   await call("/logout", { method: "POST", headers });
   assert.equal((await call("/me", { headers })).headers.get("location"), "/login");
