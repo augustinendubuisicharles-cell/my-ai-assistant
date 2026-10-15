@@ -28,7 +28,9 @@ def get(u, **p):
     r = requests.get(u, params=p, timeout=20, headers={"User-Agent": "Mozilla/5.0 JobAlert"})
     r.raise_for_status(); return r.json()
 def dt(s):
-    try: return datetime.fromisoformat(str(s).replace("Z", "+00:00")) if s else None
+    try:
+        d = datetime.fromisoformat(str(s).replace("Z", "+00:00")) if s else None
+        return d.replace(tzinfo=timezone.utc) if d and not d.tzinfo else d
     except Exception: return None
 def jobs(ats, s):
     if ats == "greenhouse":
@@ -55,6 +57,9 @@ def probe(a):
     ats, s = a
     try: js = jobs(ats, s)
     except Exception: return None
+    try: return summary(ats, s, js)
+    except Exception as e: return dict(ats=ats, slug=s, total=len(js), remote=0, nontech=0, open=0, recent=0, sample=[str(e)[:80]])
+def summary(ats, s, js):
     if not js: return None
     rem = [j for j in js if j[2] or (j[2] is None and re.search(r"remote|anywhere", j[1] or "", re.I))]
     nt = [j for j in rem if KW.search(j[0])]
