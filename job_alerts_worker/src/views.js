@@ -215,6 +215,13 @@ const STYLE = `
   .hours label { margin:0; padding:9px 4px; text-align:center; border-radius:9px; font-weight:600; font-size:.92rem; color:var(--muted); cursor:pointer; transition:background .15s, color .15s; }
   .hours input:checked + label { background:var(--card); color:var(--accent); box-shadow:0 1px 3px #0b15301f, 0 0 0 1px var(--border); }
   .hours input:focus-visible + label { outline:2px solid var(--accent); outline-offset:1px; }
+  .copylink { display:flex; align-items:center; gap:8px; margin-top:12px; padding:6px 6px 6px 12px; border-radius:14px; background:var(--bg); border:1px solid var(--border); }
+  .copylink .cl-ic { flex:none; width:20px; height:20px; color:var(--muted); display:grid; place-items:center; } .copylink .cl-ic svg { width:18px; height:18px; }
+  .copylink input { flex:1; min-width:0; border:0; background:transparent; padding:6px 0; font-size:.9rem; color:var(--text); text-overflow:ellipsis; outline:none; }
+  .copylink button { width:auto; margin:0; padding:9px 16px; border-radius:10px; font-size:.88rem; font-weight:700; background:var(--card); color:var(--accent); border:1px solid var(--border); box-shadow:0 1px 2px #0b153014; }
+  .copylink button.ok { color:var(--ok); border-color:color-mix(in srgb, var(--ok) 40%, var(--border)); }
+  a.quiet, footer a { color:var(--muted); text-decoration:none; font-weight:500; }
+  a.quiet:hover, footer a:hover { color:var(--accent); }
   .toast { padding:10px 14px; margin:0 0 16px; border-radius:10px; background:color-mix(in srgb, var(--ok) 12%, transparent); color:var(--ok); font-weight:600; }
 `;
 
@@ -468,7 +475,11 @@ export function invite(ctx, { refLink, joined = 0, paid = 0, perReward = 2 }) {
 <div class="bar"><i style="width:${Math.round((n / perReward) * 100)}%"></i></div>
 <p class="small" style="margin:0">${n} of ${perReward} friends became members${joined ? ` &middot; ${joined} joined` : ""}${earned ? ` &middot; ${earned} free month${earned === 1 ? "" : "s"} earned` : ""}</p>
 <div class="actions"><a class="btn wa" href="https://wa.me/?text=${encodeURIComponent(share)}">Invite on WhatsApp</a></div>
-<p class="small" style="margin:10px 0 0;overflow-wrap:anywhere">Or share your link: <a href="${esc(refLink)}">${esc(refLink)}</a></p></div>`;
+<div class="copylink"><span class="cl-ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg></span>
+<input readonly value="${esc(refLink.replace(/^https?:\/\//, ""))}" aria-label="Your invite link" onclick="this.select()">
+<button type="button" data-copy="${esc(refLink)}">Copy</button></div>
+<script>document.querySelectorAll("[data-copy]").forEach(function(b){b.addEventListener("click",function(){var t=b.getAttribute("data-copy"),done=function(){b.textContent="Copied ✓";b.classList.add("ok");setTimeout(function(){b.textContent="Copy";b.classList.remove("ok");},2000);};
+if(navigator.clipboard){navigator.clipboard.writeText(t).then(done,function(){b.previousElementSibling.select();});}else{b.previousElementSibling.select();document.execCommand("copy");done();}});});</script></div>`;
 }
 
 export function welcome(ctx, { title = "You're in! 🎉", until, trial = true, sub, soon = false, refLink, joined = 0, paid = 0 }) {
@@ -706,7 +717,7 @@ ${sub ? "" : strengths() + plans(ctx) + compare()}
   <p class="small">One email every morning with ${member ? "5 to 10" : "3"} new matches${member ? "" : ctx.paidService ? " (members get 5 to 10, plus tailored CVs, cover letters and Telegram alerts)" : ""}. If your own titles are quiet, we add similar roles. Remote jobs that only hire from certain countries are left out if yours isn't one of them. We skip senior roles if you choose a lower level, and we filter out unpaid roles and listings with common scam signs. Every email has a one-click unsubscribe link. We only store your email and these preferences, never share them, and delete them when you unsubscribe.</p>
 </details>
 ${inviteBox}
-${sub ? `<p class="small"><a href="/unsubscribe/${esc(sub.token)}">Unsubscribe and delete my details</a></p>` : ""}
+${sub ? `<p class="small" style="text-align:center"><a class="quiet" href="/unsubscribe/${esc(sub.token)}">Unsubscribe and delete my details</a></p>` : ""}
 ${script}`);
 }
 
