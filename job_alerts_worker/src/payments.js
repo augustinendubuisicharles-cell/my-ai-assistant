@@ -7,6 +7,12 @@ const v = (env, k) => (env[k] || "").trim();
 export const priceNgn = (env) => parseInt(env.PRICE_NGN || "5000", 10);
 export const periodDays = (env) => parseInt(env.PERIOD_DAYS || "90", 10);
 export const trialDays = (env) => parseInt(env.TRIAL_DAYS || "7", 10); // free days on confirming
+// Launch offer: the first LAUNCH_SPOTS paying members pay LAUNCH_PRICE_NGN (0 spots turns it off).
+export const launchPrice = (env) => parseInt(env.LAUNCH_PRICE_NGN || "3500", 10);
+export const launchSpots = (env) => parseInt(env.LAUNCH_SPOTS ?? "100", 10);
+// The lowest price a payment may be for: the launch price while the offer runs (a checkout opened
+// just before the last place went still counts).
+const minPrice = (env) => (launchSpots(env) > 0 ? Math.min(priceNgn(env), launchPrice(env)) : priceNgn(env));
 
 export function provider(env) {
   if (v(env, "CREDO_PUBLIC_KEY") && v(env, "CREDO_SECRET_KEY")) return "Credo";
@@ -26,9 +32,9 @@ async function json(r) {
   try { return await r.json(); } catch { return {}; }
 }
 
-export async function startCheckout(env, email, subscriberId, callbackUrl) {
+export async function startCheckout(env, email, subscriberId, callbackUrl, priceNaira = priceNgn(env)) {
   const reference = `ja${subscriberId}x${randomHex(8)}`;
-  const amount = priceNgn(env) * 100; // kobo
+  const amount = priceNaira * 100; // kobo
   let r, url, data;
   if (provider(env) === "Credo") {
     r = await fetch(`${credoApi(env)}/transaction/initialize`, {
@@ -56,7 +62,7 @@ export async function startCheckout(env, email, subscriberId, callbackUrl) {
 export async function verify(env, ref) {
   if (!ref) return null;
   const q = encodeURIComponent(ref);
-  const price = priceNgn(env);
+  const price = minPrice(env);
   let ok, reference, amount, r;
   if (provider(env) === "Credo") {
     r = await fetch(`${credoApi(env)}/transaction/${q}/verify`, { headers: { Authorization: v(env, "CREDO_SECRET_KEY") } });
@@ -66,7 +72,7 @@ export async function verify(env, ref) {
     const paid = Number(d.transAmount || 0);
     ok = d.status === 0 && d.currencyCode === "NGN" && (paid >= price * 100 || paid === price);
     reference = d.businessRef;
-    amount = price;
+    amount = paid >= price * 100 ? Math.floor(paid / 100) : paid;
   } else {
     r = await fetch(`https://api.paystack.co/transaction/verify/${q}`, { headers: paystackHeaders(env) });
     const d = (await json(r))?.data || {};

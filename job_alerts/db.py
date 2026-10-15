@@ -26,7 +26,8 @@ subscribers = Table(
     Column("paid_until", DateTime(timezone=True)),      # alerts are sent while this is in the future
     Column("reminded_for", DateTime(timezone=True)),    # paid_until we last sent a renewal reminder for
     Column("telegram_chat_id", String(32)),              # set when a paid member connects Telegram
-    Column("whatsapp", String(20)),                      # member's WhatsApp number (digits, country code first) for instant alerts
+    Column("whatsapp", String(20)),
+    Column("heard", String(30)),                         # "How did you hear about us?" answer at sign-up                      # member's WhatsApp number (digits, country code first) for instant alerts
     Column("cv_text", Text),                             # pasted CV, used for AI cover letters (members)
     Column("ref_code", String(16), unique=True),         # their invite link: /?ref=<ref_code>
     Column("referred_by", Integer),                      # subscriber id whose invite link they used
@@ -123,7 +124,7 @@ def init_db() -> None:
              "ref_code": "VARCHAR(16)", "referred_by": "INTEGER", "ref_rewards": "INTEGER NOT NULL DEFAULT 0",
              "last_run_at": "TIMESTAMP WITH TIME ZONE", "last_run_result": "VARCHAR(200)",
              "confirm_reminded_at": "TIMESTAMP WITH TIME ZONE", "titles_tip_at": "TIMESTAMP WITH TIME ZONE",
-             "hours": "VARCHAR(10) NOT NULL DEFAULT 'any'", "whatsapp": "VARCHAR(20)"}
+             "hours": "VARCHAR(10) NOT NULL DEFAULT 'any'", "whatsapp": "VARCHAR(20)", "heard": "VARCHAR(30)"}
     with engine.begin() as conn:
         for name, sql_type in added.items():
             if name not in have:
@@ -298,6 +299,12 @@ def mark_reminded(subscriber_id: int, paid_until: datetime) -> None:
 def already_sent(subscriber_id: int) -> set[str]:
     with engine.begin() as conn:
         return {r.job_key for r in conn.execute(select(sent_jobs.c.job_key).where(sent_jobs.c.subscriber_id == subscriber_id))}
+
+
+def paying_members() -> int:
+    """People who have paid real money (₦0 granted memberships don't count)."""
+    with engine.connect() as conn:
+        return conn.execute(select(func.count(func.distinct(payments.c.subscriber_id))).where(payments.c.amount_ngn > 0)).scalar() or 0
 
 
 def record_sent(subscriber_id: int, jobs: list[dict]) -> list[int]:

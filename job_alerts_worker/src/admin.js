@@ -91,7 +91,7 @@ export async function load(env, q, now = new Date()) {
   const since = runWindow(now);
   const [users, money, runs] = await Promise.all([
     q(`SELECT s.id, s.email, s.keywords, s.country, s.remote_only, s.city, s.confirmed, s.created_at, s.paid_until,
-              s.last_run_at, s.last_run_result, s.telegram_chat_id IS NOT NULL AS telegram,
+              s.last_run_at, s.last_run_result, s.telegram_chat_id IS NOT NULL AS telegram, s.heard,
               (SELECT count(*) FROM sent_jobs j WHERE j.subscriber_id = s.id)::int AS jobs_sent,
               (SELECT max(j.sent_at) FROM sent_jobs j WHERE j.subscriber_id = s.id) AS last_job_at,
               EXISTS (SELECT 1 FROM payments p WHERE p.subscriber_id = s.id) AS member
@@ -264,6 +264,19 @@ const SCRIPT = `
 })();
 `;
 
+// Sign-ups and paying members per "How did you hear about us?" answer, most sign-ups first.
+function heardTable(users) {
+  const rows = {};
+  for (const u of users) {
+    const r = (rows[u.heard || "Not asked or skipped"] ||= { n: 0, members: 0 });
+    r.n++;
+    if (u.member) r.members++;
+  }
+  const list = Object.entries(rows).sort((a, b) => b[1].n - a[1].n);
+  return `<table class="services"><thead><tr><th>Source</th><th class="num">Signed up</th><th class="num">Members</th></tr></thead><tbody>${list
+    .map(([k, r]) => `<tr><td>${esc(k)}</td><td class="num">${r.n}</td><td class="num">${r.members}</td></tr>`).join("")}</tbody></table>`;
+}
+
 export function render(siteName, { users, stats: s }, now = new Date()) {
   const h = s.health;
   const kpi = (n, label, cls = "") => `<div class="card kpi ${cls}"><b>${n}</b><span>${label}</span></div>`;
@@ -302,6 +315,8 @@ ${h.notes.length ? `<ul>${h.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul
 <div><b>${users.reduce((n, u) => n + (u.jobs_sent || 0), 0)}</b><span>jobs sent in total</span></div></div></div>
 
 <div class="card"><h2>Morning runs</h2>${runs}</div>
+
+<div class="card"><h2>How people heard about us</h2>${heardTable(users)}</div>
 
 <div class="card"><h2>Services</h2><table class="services"><tbody>${s.services.map(([name, on]) => `<tr><td>${esc(name)}</td><td class="num"><span class="pill" style="--c:var(${on ? "--green" : "--gray"})">${on ? "On" : "Off"}</span></td></tr>`).join("")}</tbody></table>
 </div>
