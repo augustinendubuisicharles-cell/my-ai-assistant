@@ -1037,6 +1037,15 @@ def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, ex
         if cv is not None:
             other_pool = ai_match.rerank(other_pool, keywords, level, country, cv)
         other = fill(other_pool)
+    # Part-time only and still short (rare: few part-time adverts are open to every country): their own and
+    # similar titles, then other roles, at any hours, marked "full-time".
+    if hours == "part" and len(picked) < minimum:
+        for words, any_title in ((keywords + near, False), ([], True)):
+            pool, _ = _search(words, country, remote_only, level, city, seen, Counter(), "any", any_title=any_title)
+            pool = [j for j in pool if not signup(j)]
+            for j in pool:
+                j["matched"] = ["full-time"] + j["matched"]
+            other += fill(pool)
     if spares is not None:
         taken = {id(j) for j in picked}
         rest = [j for j in open_jobs + more + older_pool + other_pool if id(j) not in taken and not signup(j)][:SPARES * 2]
