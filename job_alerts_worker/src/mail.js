@@ -85,11 +85,11 @@ export function manageLink(baseUrl, token) {
 export function referralReward(baseUrl, token, months, until) {
   const link = `${baseUrl}/manage/${token}`;
   const what = months === 1 ? "a free month" : `${months} free months`;
-  const body = `<p style="margin:0">Two friends you invited joined JobAlert, so you get <b>${what}</b> of job alerts. ` +
+  const body = `<p style="margin:0">Friends you invited became members, so you get <b>${what}</b> of job alerts. ` +
     `Your alerts now run until <b>${esc(until)}</b>.</p>` + button(link, "Invite more friends") +
-    `<p style="color:${MUTED};font-size:13px;margin:6px 0 0">Every 2 friends who join = another free month.</p>`;
+    `<p style="color:${MUTED};font-size:13px;margin:6px 0 0">Every 2 friends who become members = another free month.</p>`;
   return [`🎁 You earned ${what} of JobAlert`,
-    `Two friends you invited joined JobAlert, so you get ${what}. Your alerts now run until ${until}.\n\nInvite more: ${link}`,
+    `Friends you invited became members, so you get ${what}. Your alerts now run until ${until}.\n\nInvite more: ${link}`,
     layout(baseUrl, `Your alerts now run until ${until}.`, hero(`You earned ${what} 🎁`, "Thanks for spreading the word"), body)];
 }
 

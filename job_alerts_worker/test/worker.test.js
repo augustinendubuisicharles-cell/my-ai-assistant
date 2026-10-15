@@ -362,7 +362,7 @@ test("confirming starts the first job search once, and says jobs arrive in minut
   assert.equal(gh.length, 1);
 });
 
-test("every 2 invited friends who confirm give the inviter a free month", async () => {
+test("every 2 invited friends who become paying members give the inviter a free month; signing up alone doesn't", async () => {
   await signUp();
   const ada = await subscriber();
   await call(`/confirm/${ada.token}`);
@@ -370,21 +370,30 @@ test("every 2 invited friends who confirm give the inviter a free month", async 
   const code = page.match(/\?ref=(\w+)/)[1];
   assert.match(page, /Invite 2 friends, get a month free/);
   const before = new Date((await subscriber()).paid_until);
+  const adaUntil = async () => new Date((await q("SELECT paid_until FROM subscribers WHERE id = $1", [ada.id]))[0].paid_until);
 
   const friend = async (email) => {
     assert.match(await (await call(`/?ref=${code}`)).text(), new RegExp(`name="ref" value="${code}"`));
     await call("/subscribe", { method: "POST", form: { email, keywords: "pr", work_type: "remote", ref: code } });
     const { token } = (await q("SELECT token FROM subscribers WHERE email = $1", [email]))[0];
     await call(`/confirm/${token}`);
-    await call(`/confirm/${token}`); // a second click counts once
+    return token;
   };
-  await friend("one@example.com");
-  assert.equal(new Date((await subscriber()).paid_until).getTime(), before.getTime());
+  const one = await friend("one@example.com");
+  const two = await friend("two@example.com");
+  assert.equal((await adaUntil()).getTime(), before.getTime()); // confirming earns nothing
+  assert.match(await (await call(`/manage/${ada.token}`)).text(), /0 of 2 friends became members &middot; 2 joined/);
+
+  await call(`/pay/${one}`, { method: "POST" });
+  await call("/paid?transRef=vs_1");
+  await call("/paid?transRef=vs_1"); // the same payment reported twice counts once
+  assert.equal((await adaUntil()).getTime(), before.getTime()); // one paying friend isn't enough yet
   sent.length = 0;
-  await friend("two@example.com");
-  const after = new Date((await q("SELECT paid_until FROM subscribers WHERE id = $1", [ada.id]))[0].paid_until);
-  assert.equal(Math.round((after - before) / 86400000), 30);
-  assert.ok(sent.some((m) => m.to[0].email === "ada@example.com" && /free month/.test(m.subject)));
+  await call(`/pay/${two}`, { method: "POST" });
+  await call("/paid?transRef=vs_2");
+  assert.equal(Math.round(((await adaUntil()) - before) / 86400000), 30);
+  assert.ok(sent.some((m) => m.to[0].email === "ada@example.com" && /free month/.test(m.subject) && /became members/.test(m.textContent)));
+  assert.match(await (await call(`/manage/${ada.token}`)).text(), /0 of 2 friends became members &middot; 2 joined &middot; 1 free month earned/);
 
   // Re-subscribing an existing address through someone's link doesn't count.
   await call("/subscribe", { method: "POST", form: { email: "Ada@Example.com", keywords: "pr", work_type: "remote", ref: code } });

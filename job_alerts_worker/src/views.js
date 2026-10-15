@@ -429,18 +429,20 @@ const steps = (list) => `<ol class="steps">${list.map(([state, title, detail], i
   `<li class="${state}"><span class="dot">${state === "done" ? "&#10003;" : i + 1}</span><b>${esc(title)}</b><span>${esc(detail)}</span></li>`).join("")}</ol>`;
 
 // "You're in": shown after confirming an email or paying.
-// "Invite 2 friends, get a month free": the WhatsApp share carries their invite link.
-export function invite(ctx, { refLink, joined = 0, perReward = 2 }) {
+// "Invite 2 friends, get a month free": earned when 2 invited friends become paying members.
+// The WhatsApp share carries their invite link.
+export function invite(ctx, { refLink, joined = 0, paid = 0, perReward = 2 }) {
   const share = `I get remote jobs that hire Nigerians in my inbox every morning, checked for scams. Free for ${ctx.trialDays} days: ${refLink}`;
-  const n = joined % perReward;
-  return `<div class="card invite"><b>🎁 Invite ${perReward} friends, get a month free</b>
+  const n = paid % perReward, earned = Math.floor(paid / perReward);
+  return `<div class="card invite"><b>🎁 Invite 2 friends, get a month free</b>
+<p class="small" style="margin:6px 0 0">You get a free month for every 2 friends you invite who become members.</p>
 <div class="bar"><i style="width:${Math.round((n / perReward) * 100)}%"></i></div>
-<p class="small" style="margin:0">${n} of ${perReward} friends joined${joined >= perReward ? ` &middot; ${Math.floor(joined / perReward)} free month${joined >= 2 * perReward ? "s" : ""} earned` : ""}</p>
+<p class="small" style="margin:0">${n} of ${perReward} friends became members${joined ? ` &middot; ${joined} joined` : ""}${earned ? ` &middot; ${earned} free month${earned === 1 ? "" : "s"} earned` : ""}</p>
 <div class="actions"><a class="btn wa" href="https://wa.me/?text=${encodeURIComponent(share)}">Invite on WhatsApp</a></div>
 <p class="small" style="margin:10px 0 0;overflow-wrap:anywhere">Or share your link: <a href="${esc(refLink)}">${esc(refLink)}</a></p></div>`;
 }
 
-export function welcome(ctx, { title = "You're in! 🎉", until, trial = true, sub, soon = false, refLink, joined = 0 }) {
+export function welcome(ctx, { title = "You're in! 🎉", until, trial = true, sub, soon = false, refLink, joined = 0, paid = 0 }) {
   return page(ctx, `<div class="hero">${ART_ROCKET}<h1>${esc(title)}</h1><p>Your jobs are on their way.</p>
 <span class="pill">${trial ? "Free trial" : "Active"} until ${esc(until)}</span></div>
 <div class="card">${steps([
@@ -449,7 +451,7 @@ export function welcome(ctx, { title = "You're in! 🎉", until, trial = true, s
     ["", "First matches in your inbox", soon ? "In a few minutes, then every morning" : "Tomorrow morning, and every morning after"],
   ])}
 <div class="actions"><a class="btn ghost" href="/manage/${esc(sub.token)}">Change my preferences</a></div></div>
-${invite(ctx, { refLink, joined })}
+${refLink ? invite(ctx, { refLink, joined, paid }) : ""}
 ${ctx.fromEmail ? `<p class="note">📌 Add <b>${esc(ctx.fromEmail)}</b> to your contacts so your jobs don't land in spam.</p>` : ""}`);
 }
 
