@@ -1,7 +1,8 @@
 """Finds jobs for one subscriber's preferences and ranks them.
 
 Remote jobs (no keys needed): Himalayas, Jobicy, Remotive, We Work Remotely, RemoteOK,
-Working Nomads, Arbeitnow, The Muse and Jobspresso.
+Working Nomads, Arbeitnow, The Muse and Jobspresso, plus the careers pages of remote-hiring
+companies on Greenhouse, Lever and Ashby (CAREER_PAGES), where applying needs no board account.
 Jooble (optional free key JOOBLE_API_KEY) searches thousands of sites, like Indeed, remote and on-site.
 On-site/hybrid jobs (optional keys): Adzuna (19 countries, free key at
 developer.adzuna.com: ADZUNA_APP_ID + ADZUNA_APP_KEY) and Reed (UK, free key:
@@ -58,6 +59,9 @@ SCAM_SIGNS = ["registration fee", "training fee", "pay a fee", "processing fee",
               "whatsapp", "google hangouts", "wire transfer", "send money", "western union", "no interview",
               "unlimited earning"]
 REMOTE_WORDS = ["remote", "work from home", "home based", "home-based", "anywhere"]
+# Boards that make people create an account before they can see how to apply (checked 15 Oct 2026).
+# When the same job is also on an open board, that link is used; otherwise the job is tagged and ranked lower.
+SIGNUP_BOARDS = {"We Work Remotely"}
 
 
 def _clean(html_text: str) -> str:
@@ -318,9 +322,62 @@ def from_jobspresso() -> tuple:
     return _rss("https://jobspresso.co/feed/?post_type=job_listing", "Jobspresso")
 
 
+# Companies that hire remotely and post every opening on a public careers page (Greenhouse, Lever or
+# Ashby). Applying there needs no job-board account, and the advert comes straight from the employer.
+CAREER_PAGES = {  # kept to the ones with remote jobs open outside the US (checked 15 Oct 2026)
+    "greenhouse": ["canonical", "gitlab"],
+    "lever": ["jobgether", "binance"],
+    "ashby": ["supabase", "oyster", "posthog", "zapier"],
+}
+
+
+def _career_page(ats: str, slug: str) -> list[dict]:
+    """One company's open jobs as (title, company, location, url, posted, description, remote) dicts."""
+    if ats == "greenhouse":
+        data = _get(f"https://boards-api.greenhouse.io/v1/boards/{slug}/jobs", content="true")
+        name = slug
+        return [dict(title=j.get("title"), company=(j.get("company_name") or name), location=(j.get("location") or {}).get("name", ""),
+                     url=j.get("absolute_url"), posted=datetime.fromisoformat(j["first_published"]) if j.get("first_published") else None,
+                     desc=_clean(unescape(j.get("content") or "")), remote=None) for j in data.get("jobs", [])]
+    if ats == "lever":
+        data = _get(f"https://api.lever.co/v0/postings/{slug}", mode="json")
+        return [dict(title=j.get("text"), company=slug, location=(j.get("categories") or {}).get("location", ""),
+                     url=j.get("hostedUrl"), posted=datetime.fromtimestamp(j["createdAt"] / 1000, timezone.utc) if j.get("createdAt") else None,
+                     desc=_clean(j.get("descriptionPlain") or j.get("description") or ""),
+                     remote=(j.get("workplaceType") == "remote") or None) for j in data if isinstance(j, dict)]
+    data = _get(f"https://api.ashbyhq.com/posting-api/job-board/{slug}", includeCompensation="true")
+    return [dict(title=j.get("title"), company=slug, location=j.get("location", ""), url=j.get("jobUrl") or j.get("applyUrl"),
+                 posted=datetime.fromisoformat(j["publishedAt"].replace("Z", "+00:00")) if j.get("publishedAt") else None,
+                 desc=_clean(j.get("descriptionPlain") or j.get("descriptionHtml") or ""),
+                 remote=j.get("isRemote") or None, pay=(j.get("compensation") or {}).get("compensationTierSummary") or "")
+            for j in data.get("jobs", []) if j.get("isListed", True)]
+
+
+@lru_cache(maxsize=1)
+def from_career_pages() -> tuple:
+    out, counts = [], Counter()
+    for ats, slugs in CAREER_PAGES.items():
+        for slug in slugs:
+            try:
+                for j in _career_page(ats, slug):
+                    loc = j["location"] or ""
+                    remote = j["remote"] if j["remote"] is not None else any(w in loc.lower() for w in REMOTE_WORDS)
+                    if not remote:
+                        continue  # this source is for remote jobs; on-site ones come from Adzuna/Reed
+                    company = j["company"] if j["company"] != slug else slug.replace("-", " ").split(".")[0].title()
+                    out.append(_raw(j["title"], company, loc or "Remote", j["url"], "Company careers page",
+                                    j["posted"], j["desc"], True, pay=j.get("pay", "")))
+                    counts[f"{ats}:{slug}"] += 1
+            except Exception as e:
+                print(f"[Careers {ats}:{slug}] skipped: {str(e)[:80]}")
+    print(f"[Careers] {len(out)} remote jobs from {len(counts)} companies")
+    return tuple(out)
+
+
 def remote_feeds() -> tuple:
-    return (from_remotive() + from_weworkremotely() + from_remoteok() + from_workingnomads() + from_arbeitnow()
-            + from_themuse() + from_jobspresso())
+    # Career pages go first, so when the same job is on a board too, the employer's own link is kept.
+    return (from_career_pages() + from_remotive() + from_weworkremotely() + from_remoteok() + from_workingnomads()
+            + from_arbeitnow() + from_themuse() + from_jobspresso())
 
 
 @lru_cache(maxsize=None)
@@ -652,6 +709,9 @@ def score(job: dict, keywords: list[str], country: str, remote_only: bool, level
             pts += 2
     pts += max(0, 3 - (datetime.now(timezone.utc) - job["posted"]).days // 2)  # newest first: fewer applicants yet
     reasons.append(f"posted {job['posted']:%d %b}")
+    if job["source"] in SIGNUP_BOARDS:
+        pts -= 3
+        reasons.append("sign-up needed to apply")
     return pts, reasons
 
 
@@ -704,6 +764,7 @@ def _search(keywords: list[str], country: str, remote_only: bool, level: str, ci
         pool += from_himalayas(k, country) + from_jobicy(k) + from_jooble(k, "" if remote_only else (city or country))
         if not remote_only:
             pool += from_adzuna(k, country, city) + (from_reed(k, city) if country == "United Kingdom" else ())
+    pool.sort(key=lambda j: j["source"] in SIGNUP_BOARDS)  # duplicates keep the open board's link
     ranked = []
     for job in pool:
         keys = job_keys(job)
