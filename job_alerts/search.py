@@ -482,9 +482,10 @@ def _remote_feeds_live() -> tuple:
 
 
 # Reading every board takes about 2 minutes, so each read is saved to JOB_POOL_FILE (the workflows keep it in
-# the GitHub Actions cache). A new subscriber's first search (JOB_POOL_REUSE=1) reuses a read from the last
-# JOB_POOL_MAX_HOURS instead of reading everything again. Each job's age is still checked when it is matched.
-POOL_MAX_AGE = timedelta(hours=float(os.environ.get("JOB_POOL_MAX_HOURS") or 3))
+# the GitHub Actions cache). A new subscriber's first search (JOB_POOL_REUSE=1) reuses the latest saved read
+# (the morning run's, or a later Telegram run's) instead of reading everything again; only a list older than
+# JOB_POOL_MAX_HOURS (a missed morning run) is read again. Each job's age is still checked when it is matched.
+POOL_MAX_AGE = timedelta(hours=float(os.environ.get("JOB_POOL_MAX_HOURS") or 26))
 
 
 @lru_cache(maxsize=1)
