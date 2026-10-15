@@ -271,3 +271,46 @@ def no_matches_yet(base_url: str, token: str, keywords: str) -> tuple[str, str, 
             + button(manage, "Change my job titles"))
     return "We're searching for your jobs 🔎", text, layout(base_url, "Nothing yet, we'll keep looking every morning.",
                                                            _hero("We're on it 🔎", "No matches yet"), body)
+
+
+def update_news(base_url: str, token: str, member: bool, price: str = "") -> tuple[str, str, str]:
+    """One-off news email (15 Oct 2026): log in to your dashboard, and the application tracker.
+    Members get the tracker straight away; trial users see it as a member feature."""
+    login, apps, pay = f"{base_url}/login", f"{base_url}/applications/{token}", f"{base_url}/pay/{token}"
+
+    def feature(icon: str, title: str, text: str, tag: str = "") -> str:
+        badge = (f' <span style="display:inline-block;margin-left:6px;padding:2px 8px;border-radius:20px;background:#eef3ff;'
+                 f'color:{BLUE};font-size:11px;font-weight:700;vertical-align:2px">{tag}</span>') if tag else ""
+        return (f'<tr><td valign="top" style="padding:0 14px 18px 0"><div style="width:40px;height:40px;border-radius:12px;'
+                f'background:#eef3ff;text-align:center;line-height:40px;font-size:20px">{icon}</div></td>'
+                f'<td valign="top" style="padding-bottom:18px"><b style="font-size:16px">{title}</b>{badge}<br>'
+                f'<span style="color:{MUTED};font-size:14px">{text}</span></td></tr>')
+
+    tag = "" if member else "Members"
+    rows = (feature("🔑", "Log in any time", "Tap <b>Log in</b> on jobalert.me.uk and we email you a link. No password. "
+                    "See today's jobs, your CV and your settings in one place.")
+            + feature("📋", "Track your applications", "Open a job and the next morning we ask: <i>Did you apply?</i> "
+                      "Mark it Applied, then Interview or Offer as things move.", tag)
+            + feature("⏳", "Not ready? It comes back", "Tap <b>Not yet</b> and the job returns each morning "
+                      "for a week, so good jobs don't slip away.", tag))
+    body = (f'<p style="margin:0 0 18px">New ways to go from <b>job found</b> to <b>job offer</b>.</p>'
+            f'<table role="presentation" cellpadding="0" cellspacing="0">{rows}</table>'
+            + button(login, "Open my dashboard"))
+    if member:
+        body += f'<p style="margin:8px 0 0;font-size:14px"><a href="{_a(apps)}" style="color:{BLUE};font-weight:700">See my applications &rarr;</a></p>'
+        text_extra = f"\nYour applications: {apps}"
+    else:
+        body += (f'<p style="margin:8px 0 0;font-size:14px;color:{MUTED}">The tracker comes with membership, along with tailored CVs, '
+                 f'cover letters and 5 to 10 jobs a day. <a href="{_a(pay)}" style="color:{BLUE};font-weight:700">'
+                 f'Join for {escape(price)} &rarr;</a></p>')
+        text_extra = f"\nThe tracker, tailored CVs and cover letters come with membership: {pay}"
+    text = ("New on JobAlert:\n\n"
+            "1. Log in any time: tap Log in on jobalert.me.uk and we email you a link (no password). "
+            "See today's jobs, your CV and settings in one place.\n"
+            f"2. Track your applications{'' if member else ' (members)'}: open a job and the next morning we ask if you applied. "
+            "Mark it Applied, Interview or Offer.\n"
+            f"3. Not ready yet?{'' if member else ' (members)'} Tap Not yet and the job comes back each morning for a week.\n\n"
+            f"Open your dashboard: {login}{text_extra}")
+    html = layout(base_url, "Log in to your dashboard and track every application.",
+                  _hero("Your job search, in one place ✨", "New on JobAlert"), body)
+    return "New on JobAlert: your dashboard and application tracker ✨", text, html

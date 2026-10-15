@@ -1,0 +1,30 @@
+name: Job alerts -- news email to members and trial users
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_email:
+        description: "Send only to this address (a test). Leave empty to send to everyone."
+        required: false
+      send_to_everyone:
+        description: "Type yes to send to every member and trial user"
+        required: false
+
+jobs:
+  announce:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r job_alerts/requirements.txt
+      - env:
+          DATABASE_URL: ${{ secrets.JOB_ALERTS_DATABASE_URL }}
+          BASE_URL: ${{ secrets.JOB_ALERTS_BASE_URL }}
+          FROM_EMAIL: ${{ secrets.FROM_EMAIL }}
+          FROM_NAME: JobAlert
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+          ONLY_EMAIL: ${{ inputs.test_email }}
+          SEND_ALL: ${{ inputs.test_email == '' && inputs.send_to_everyone || '' }}
+        run: python -m job_alerts.announce
