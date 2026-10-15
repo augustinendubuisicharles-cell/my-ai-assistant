@@ -273,7 +273,7 @@ const SAMPLE_JOBS = [
 const HARDER = [
   ["Finding high-paying jobs", "We show the pay, converted to naira, so you can see what's worth it."],
   ["Building a standout CV", "Members get their CV rewritten for every job, plus a cover letter."],
-  ["Discovering local opportunities", "Pick on-site and your city: local jobs come first, remote ones too."],
+  ["Discovering global opportunities", "Remote jobs from companies worldwide that are open to your country."],
   ["Getting matched to relevant roles", "Your job titles first, then the closest roles. Never the same job twice."],
   ["Beating the crowd", "Only jobs from the last 7 days, in your inbox at 7am, before most people apply."],
 ];
@@ -331,7 +331,7 @@ function landing(ctx, formHtml) {
 const DESCRIPTION = "Remote jobs from companies abroad that actually hire Nigerians, checked for scams and never repeated, in your inbox every morning. 7 days free.";
 
 export function page(ctx, body, { landing = false } = {}) {
-  const footer = `<footer><a href="/terms">Terms, pricing and refunds</a>${
+  const footer = `<footer><a href="/terms">Terms and pricing</a>${
     ctx.contact ? ` &middot; <a href="mailto:${esc(ctx.contact)}">Contact</a>` : ""}</footer>`;
   return `<!doctype html>
 <html lang="en">
@@ -498,7 +498,6 @@ function plans(ctx) {
   ${li("<b>Your CV tailored</b> to any job, plus an <b>AI cover letter</b>")}
   ${li("Everything in the free trial")}
   ${li("No auto-renewal; we remind you before it ends")}
-  ${li("Full refund within 7 days if it's not for you")}
 </ul></div></section>`;
 }
 
