@@ -95,10 +95,12 @@ jobs:
           GH_TOKEN: ${{ secrets.JOB_ALERTS_GITHUB_TOKEN }}
           ANTHROPIC_API_KEY: ${{ secrets.JOB_ALERTS_ANTHROPIC_KEY }}
           ADMIN_KEY: ${{ secrets.JOB_ALERTS_ADMIN_KEY }}
+          WHATSAPP_PHONE_ID: ${{ secrets.WHATSAPP_PHONE_ID }}
         run: |
           node -e '
             const names = ["DATABASE_URL", "BREVO_API_KEY", "FROM_EMAIL", "CONTACT_EMAIL", "CREDO_PUBLIC_KEY",
-                           "CREDO_SECRET_KEY", "CREDO_LIVE", "CREDO_BUSINESS_CODE", "PAYSTACK_SECRET_KEY", "TELEGRAM_TOKEN", "GH_TOKEN", "ANTHROPIC_API_KEY", "ADMIN_KEY"];
+                           "CREDO_SECRET_KEY", "CREDO_LIVE", "CREDO_BUSINESS_CODE", "PAYSTACK_SECRET_KEY", "TELEGRAM_TOKEN", "GH_TOKEN", "ANTHROPIC_API_KEY", "ADMIN_KEY",
+                           "WHATSAPP_PHONE_ID"];
             const out = Object.fromEntries(names.filter((n) => (process.env[n] || "").trim()).map((n) => [n, process.env[n].trim()]));
             console.error("Setting: " + Object.keys(out).join(", "));
             if (out.ADMIN_KEY && out.ADMIN_KEY.length < 12) console.log("::warning::JOB_ALERTS_ADMIN_KEY is under 12 characters, so the dashboard stays off");

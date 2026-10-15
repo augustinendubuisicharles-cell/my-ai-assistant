@@ -1,9 +1,9 @@
-// AI cover letters and tailored CVs for paying members: their pasted CV + the job advert ->
-// a letter, or their CV rewritten for that job, to copy or download. Needs ANTHROPIC_API_KEY (GitHub secret JOB_ALERTS_ANTHROPIC_KEY).
+// AI cover letters, tailored CVs and interview prep for paying members: their pasted CV + the job advert ->
+// a letter, their CV rewritten for that job, or likely interview questions with answers, to copy or download. Needs ANTHROPIC_API_KEY (GitHub secret JOB_ALERTS_ANTHROPIC_KEY).
 import Anthropic from "@anthropic-ai/sdk";
 
 export const MODEL = "claude-opus-5-5";
-export const PER_DAY = 10;      // of each kind (letters, CVs) per member per day: keeps costs predictable
+export const PER_DAY = 10;      // of each kind (letters, CVs, preps) per member per day: keeps costs predictable
 export const MAX_CV = 15000;    // characters of pasted CV we keep
 
 export const enabled = (env) => Boolean((env.ANTHROPIC_API_KEY || "").trim());
@@ -24,6 +24,20 @@ Plain text, no markdown: the applicant's name and contact details on the first l
 in CAPITALS (PROFESSIONAL SUMMARY, KEY SKILLS, EXPERIENCE, EDUCATION, and any others the CV has),
 bullet points starting with "- ". At most about 700 words. Reply with the CV only.`;
 
+const PREP_SYSTEM = `You help job seekers prepare for interviews, most of them in Nigeria interviewing for remote jobs abroad.
+From the job advert and the applicant's CV, write an interview prep sheet for this job. Plain text, no markdown:
+WHAT THEY'LL LOOK FOR: 3 short lines on what this employer most wants, read from the advert.
+LIKELY QUESTIONS: 8 questions this interviewer is likely to ask (a mix of role-specific, behavioural and
+"why us / why remote"). After each question, "Your answer: " and a suggested answer of 2 to 4 sentences
+in the applicant's own voice, built only on facts from their CV (use the STAR shape for behavioural ones).
+Never invent experience, employers, numbers or qualifications: where the CV has nothing to draw on, say
+what to stress instead and mark it "(prepare this one)".
+QUESTIONS TO ASK THEM: 3 good questions for the end of the interview.
+ON THE DAY: 4 short practical tips for a video interview from Nigeria (internet backup, time zones, quiet room, follow-up email).
+Number the questions. At most about 1,000 words. Reply with the sheet only.`;
+
+const SYSTEMS = { letter: SYSTEM, cv: CV_SYSTEM, prep: PREP_SYSTEM };
+
 // The advert's text (its first 12,000 characters: enough for any job description), when its
 // page can be read without a browser. Many job pages can't,
 // and then the letter is written from the title and company alone.
@@ -40,7 +54,7 @@ export async function advertText(url) {
   }
 }
 
-// Returns the letter (kind "letter") or tailored CV (kind "cv"), or null if it couldn't be written.
+// Returns the letter (kind "letter"), tailored CV (kind "cv") or interview prep (kind "prep"), or null if it couldn't be written.
 export async function write(env, { cv, title, company, advert }, kind = "letter") {
   const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY.trim() });
   const job = `Job title: ${title}\nCompany: ${company || "not stated"}\n\nAdvert:\n${advert || "(the advert's page couldn't be read; use the title and company)"}`;
@@ -50,7 +64,7 @@ export async function write(env, { cv, title, company, advert }, kind = "letter"
     output_config: { effort: "low" },
     betas: ["server-side-fallback-2026-07-01"],
     fallbacks: "default",
-    system: kind === "cv" ? CV_SYSTEM : SYSTEM,
+    system: SYSTEMS[kind] || SYSTEM,
     messages: [{ role: "user", content: `<cv>\n${cv}\n</cv>\n\n<job>\n${job}\n</job>` }],
   });
   if (response.stop_reason === "refusal") return null;

@@ -29,6 +29,8 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import requests
 
+from . import ai_match
+
 TIMEOUT = 20
 HEADERS = {"User-Agent": "Mozilla/5.0 (compatible; JobAlertsBot/1.0)"}
 MAX_AGE = timedelta(days=7)
@@ -914,20 +916,26 @@ def _pick(ranked: list[dict], keywords: list[str], n: int) -> list[dict]:
 
 
 def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, exclude: set[str], n: int = 5,
-              city: str = "", minimum: int = 0, hours: str = "any") -> list[dict]:
+              city: str = "", minimum: int = 0, hours: str = "any", cv: str | None = None) -> list[dict]:
     """remote_only=True searches remote jobs. False means on-site/hybrid near `city` (via Adzuna/Reed),
     with remote jobs as a fallback.
 
     Up to `n` jobs for their own titles. If that's fewer than `minimum`, the gap is filled from the
     next-closest roles (NEIGHBOURS, then the broad entry-level titles), marked "similar role". Every job
-    still passes every check: last 7 days, open to their country, seniority, scam signs, never sent before."""
+    still passes every check: last 7 days, open to their country, seniority, scam signs, never sent before.
+
+    cv: members only (None for everyone else). Claude then reorders the open jobs by how well they fit
+    the CV (or titles and level when it's empty) and adds the reason (ai_match)."""
     keywords = clean_keywords(keywords_csv)[:5]
     seen, why = sent_keys(exclude), Counter()
     ranked, boards = _search(keywords, country, remote_only, level, city, seen, why, hours)
     matched = len(ranked)
     signup = lambda j: j["source"] in SIGNUP_BOARDS
     # Jobs people can apply to without signing up come first: their own titles, then similar roles.
-    picked = _pick([j for j in ranked if not signup(j)], keywords, n)
+    open_jobs = [j for j in ranked if not signup(j)]
+    if cv is not None:
+        open_jobs = ai_match.rerank(open_jobs, keywords, level, country, cv)
+    picked = _pick(open_jobs, keywords, n)
     more, near = [], neighbours(keywords)
     if len(picked) < minimum and near:
         more, _ = _search(near, country, remote_only, level, city, seen, Counter(), hours)

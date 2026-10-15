@@ -1,22 +1,23 @@
-name: Job alerts -- Telegram alerts for paying members
+name: Job alerts -- instant alerts for paying members (Telegram and WhatsApp)
 
 on:
   schedule:
-    - cron: "0 9,12,15,18 * * *"   # 10am, 1pm, 4pm and 7pm Lagos
+    - cron: "0 6-20/2 * * *"   # every two hours, 7am to 9pm Lagos
   workflow_dispatch:
 
 jobs:
   send:
     runs-on: ubuntu-latest
     steps:
-      - name: Check Telegram alerts are set up
+      - name: Check Telegram or WhatsApp alerts are set up
         id: check
         env:
           DATABASE_URL: ${{ secrets.JOB_ALERTS_DATABASE_URL }}
           TELEGRAM_TOKEN: ${{ secrets.JOB_ALERTS_TELEGRAM_TOKEN }}
+          WHATSAPP_TOKEN: ${{ secrets.WHATSAPP_TOKEN }}
         run: |
-          if [ -z "$DATABASE_URL" ] || [ -z "$TELEGRAM_TOKEN" ]; then
-            echo "JOB_ALERTS_TELEGRAM_TOKEN not set yet -- skipping."
+          if [ -z "$DATABASE_URL" ] || { [ -z "$TELEGRAM_TOKEN" ] && [ -z "$WHATSAPP_TOKEN" ]; }; then
+            echo "Neither JOB_ALERTS_TELEGRAM_TOKEN nor WHATSAPP_TOKEN is set yet -- skipping."
             echo "ready=false" >> "$GITHUB_OUTPUT"
           else
             echo "ready=true" >> "$GITHUB_OUTPUT"
@@ -32,10 +33,15 @@ jobs:
       - if: steps.check.outputs.ready == 'true'
         run: pip install -r job_alerts/requirements.txt
       - if: steps.check.outputs.ready == 'true'
-        name: Send new matches on Telegram
+        name: Send new matches on Telegram and WhatsApp
         env:
           DATABASE_URL: ${{ secrets.JOB_ALERTS_DATABASE_URL }}
+          BASE_URL: ${{ secrets.JOB_ALERTS_BASE_URL }}
           JOB_ALERTS_TELEGRAM_TOKEN: ${{ secrets.JOB_ALERTS_TELEGRAM_TOKEN }}
+          WHATSAPP_TOKEN: ${{ secrets.WHATSAPP_TOKEN }}
+          WHATSAPP_PHONE_ID: ${{ secrets.WHATSAPP_PHONE_ID }}
+          WHATSAPP_TEMPLATE: ${{ secrets.WHATSAPP_TEMPLATE }}
+          JOOBLE_API_KEY: ${{ secrets.JOOBLE_API_KEY }}
           ADZUNA_APP_ID: ${{ secrets.ADZUNA_APP_ID }}
           ADZUNA_APP_KEY: ${{ secrets.ADZUNA_APP_KEY }}
           REED_API_KEY: ${{ secrets.REED_API_KEY }}
