@@ -307,7 +307,7 @@ def update_news(base_url: str, token: str, member: bool, price: str = "") -> tup
         text_extra = f"\nYour applications: {apps}"
     else:
         body += (f'<p style="margin:8px 0 0;font-size:14px;color:{MUTED}">The tracker comes with membership, along with tailored CVs, '
-                 f'cover letters and 5 to 10 jobs a day. <a href="{_a(pay)}" style="color:{BLUE};font-weight:700">'
+                 f'cover letters and more jobs whenever you ask. <a href="{_a(pay)}" style="color:{BLUE};font-weight:700">'
                  f'Join for {escape(price)} &rarr;</a></p>')
         text_extra = f"\nThe tracker, tailored CVs and cover letters come with membership: {pay}"
     text = ("New on JobAlert:\n\n"

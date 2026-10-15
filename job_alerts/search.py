@@ -959,8 +959,12 @@ def _pick(ranked: list[dict], keywords: list[str], n: int) -> list[dict]:
     return picked
 
 
+SPARES = 15  # next-best jobs kept for members' "More jobs" button (3 taps of 5)
+
+
 def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, exclude: set[str], n: int = 5,
-              city: str = "", minimum: int = 0, hours: str = "any", cv: str | None = None) -> list[dict]:
+              city: str = "", minimum: int = 0, hours: str = "any", cv: str | None = None,
+              spares: list | None = None) -> list[dict]:
     """remote_only=True searches remote jobs. False means on-site/hybrid near `city` (via Adzuna/Reed),
     with remote jobs as a fallback.
 
@@ -969,7 +973,10 @@ def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, ex
     still passes every check: last 7 days, open to their country, seniority, scam signs, never sent before.
 
     cv: members only (None for everyone else). Claude then reorders the open jobs by how well they fit
-    the CV (or titles and level when it's empty) and adds the reason (ai_match)."""
+    the CV (or titles and level when it's empty) and adds the reason (ai_match).
+
+    spares: a list to fill with up to SPARES next-best working jobs (own titles first, then any similar roles
+    found), for "More jobs" on the members' dashboard."""
     keywords = clean_keywords(keywords_csv)[:5]
     seen, why = sent_keys(exclude), Counter()
     ranked, boards = _search(keywords, country, remote_only, level, city, seen, why, hours)
@@ -1001,9 +1008,16 @@ def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, ex
     gated = fill([j for j in ranked if gated_ok(j)])
     extra = fill([j for j in more if not signup(j)])
     gated += fill([j for j in more if gated_ok(j)])
+    if spares is not None:
+        taken = {id(j) for j in picked}
+        rest = [j for j in open_jobs + more if id(j) not in taken and not signup(j)][:SPARES * 2]
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            ok = list(pool.map(lambda j: _link_ok(j["url"]), rest))
+        spares.extend([j for j, good in zip(rest, ok) if good][:SPARES])
     print(f"  checked {sum(boards.values())} listings ({', '.join(f'{s} {c}' for s, c in boards.most_common())}), "
           f"{matched} matched, picked {len(picked)}{f' ({extra} from similar roles to reach the daily minimum)' if extra else ''}"
-          f"{f', {gated} from sign-up boards to fill the gap' if gated else ''}; "
+          f"{f', {gated} from sign-up boards to fill the gap' if gated else ''}"
+          f"{f', {len(spares)} spare for More jobs' if spares is not None else ''}; "
           f"left out: {', '.join(f'{c} {r}' for r, c in why.most_common()) or 'none'}")
     return picked
 

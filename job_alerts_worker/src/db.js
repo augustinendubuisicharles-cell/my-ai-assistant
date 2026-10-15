@@ -196,10 +196,36 @@ export const renewSession = async (q, session) =>
 
 export const endSession = async (q, session) => q("DELETE FROM logins WHERE session_hash = $1", [await sha256(session)]);
 
-// The jobs sent to them in the last 24 hours (this morning's email and any Telegram alerts since),
-// or their last email's jobs if nothing came today. Newest first.
-export const latestJobs = (q, subscriberId) =>
-  q(`SELECT id, title, company, url, source, status, sent_at FROM sent_jobs
+export const BOARD_SIZE = 5;
+
+// The jobs on their dashboard: this morning's email, or the last 5 they asked for with "More jobs".
+// Jobs sent before the dashboard kept its own 5: their latest email's, best first.
+export async function latestJobs(q, subscriberId) {
+  const board = await q(`SELECT id, title, company, url, source, status, sent_at FROM sent_jobs
+     WHERE subscriber_id = $1 AND on_board ORDER BY id LIMIT ${BOARD_SIZE}`, [subscriberId]);
+  if (board.length) return board;
+  return q(`SELECT id, title, company, url, source, status, sent_at FROM sent_jobs
      WHERE subscriber_id = $1 AND title IS NOT NULL
-       AND sent_at > LEAST(now() - interval '24 hours', (SELECT max(sent_at) FROM sent_jobs WHERE subscriber_id = $1) - interval '1 hour')
-     ORDER BY sent_at DESC, id LIMIT 30`, [subscriberId]);
+       AND sent_at > (SELECT max(sent_at) FROM sent_jobs WHERE subscriber_id = $1) - interval '1 hour'
+     ORDER BY id LIMIT ${BOARD_SIZE}`, [subscriberId]);
+}
+
+// How many of this morning's next-best jobs are still waiting for "More jobs" (ones sent since don't count).
+export const sparesLeft = async (q, subscriberId) => Number((await one(q, `SELECT count(*) AS n FROM spare_jobs p
+  WHERE p.subscriber_id = $1 AND NOT EXISTS (SELECT 1 FROM sent_jobs s WHERE s.subscriber_id = $1 AND s.job_key = p.job_key)`,
+  [subscriberId])).n);
+
+// "More jobs": the next 5 waiting jobs replace the ones on their dashboard. Returns how many came.
+export async function moreJobs(q, subscriberId) {
+  const next = await q(`SELECT id FROM spare_jobs p WHERE p.subscriber_id = $1
+      AND NOT EXISTS (SELECT 1 FROM sent_jobs s WHERE s.subscriber_id = $1 AND s.job_key = p.job_key)
+    ORDER BY rank LIMIT ${BOARD_SIZE}`, [subscriberId]);
+  if (!next.length) return 0;
+  const ids = next.map((r) => r.id);
+  await q("UPDATE sent_jobs SET on_board = false WHERE subscriber_id = $1 AND on_board", [subscriberId]);
+  await q(`INSERT INTO sent_jobs (subscriber_id, job_key, sent_at, title, company, url, source, posted_at, location, pay, matched, description, on_board)
+    SELECT subscriber_id, job_key, now(), title, company, url, source, posted_at, location, pay, matched, description, true
+    FROM spare_jobs WHERE id = ANY($1) ORDER BY rank ON CONFLICT (subscriber_id, job_key) DO NOTHING`, [ids]);
+  await q("DELETE FROM spare_jobs WHERE id = ANY($1)", [ids]);
+  return ids.length;
+}

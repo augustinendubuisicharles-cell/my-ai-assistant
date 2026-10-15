@@ -76,7 +76,27 @@ sent_jobs = Table(
     Column("asked_count", Integer, nullable=False, server_default="0"),  # mornings we asked "Did you apply?"
     Column("status", String(20)),                        # STATUSES below; NULL = no answer yet
     Column("status_at", DateTime(timezone=True)),
+    Column("on_board", Boolean, nullable=False, server_default=text("false")),  # one of the 5 on their dashboard now
     UniqueConstraint("subscriber_id", "job_key"),
+)
+
+# Members' next-best jobs from the morning search, waiting for "More jobs" on their dashboard (best first).
+# Replaced every morning; a job moves to sent_jobs when it is shown.
+spare_jobs = Table(
+    "spare_jobs", metadata,
+    Column("id", Integer, primary_key=True),
+    Column("subscriber_id", Integer, ForeignKey("subscribers.id", ondelete="CASCADE"), nullable=False, index=True),
+    Column("rank", Integer, nullable=False),
+    Column("job_key", String(500), nullable=False),
+    Column("title", String(300)),
+    Column("company", String(200)),
+    Column("url", String(1000)),
+    Column("source", String(60)),
+    Column("posted_at", DateTime(timezone=True)),
+    Column("location", String(200)),
+    Column("pay", String(120)),
+    Column("matched", String(500)),
+    Column("description", Text),
 )
 
 
@@ -107,7 +127,8 @@ engine = create_engine(_url(), pool_pre_ping=True)
 SENT_JOB_COLUMNS = {"title": "VARCHAR(300)", "company": "VARCHAR(200)", "url": "VARCHAR(1000)", "source": "VARCHAR(60)",
                     "posted_at": "TIMESTAMP WITH TIME ZONE", "location": "VARCHAR(200)", "pay": "VARCHAR(120)",
                     "matched": "VARCHAR(500)", "description": "TEXT", "clicked_at": "TIMESTAMP WITH TIME ZONE",
-                    "asked_count": "INTEGER NOT NULL DEFAULT 0", "status": "VARCHAR(20)", "status_at": "TIMESTAMP WITH TIME ZONE"}
+                    "asked_count": "INTEGER NOT NULL DEFAULT 0", "status": "VARCHAR(20)", "status_at": "TIMESTAMP WITH TIME ZONE",
+                    "on_board": "BOOLEAN NOT NULL DEFAULT FALSE"}
 # Tracker answers. "not_yet" jobs come back each morning while they're fresh; "skip" ones never do.
 STATUSES = ("applied", "not_yet", "skip", "interview", "offer", "no_reply")
 ASK_MORNINGS = 2      # how many mornings we ask "Did you apply?" about a job they opened
@@ -307,19 +328,34 @@ def paying_members() -> int:
         return conn.execute(select(func.count(func.distinct(payments.c.subscriber_id))).where(payments.c.amount_ngn > 0)).scalar() or 0
 
 
-def record_sent(subscriber_id: int, jobs: list[dict]) -> list[int]:
-    """Stores today's jobs (each needs "key") and returns their row ids, used in the tracker links."""
+def _job_row(j: dict) -> dict:
+    return dict(job_key=j["key"][:500], title=(j.get("title") or "")[:300], company=(j.get("company") or "")[:200],
+                url=(j.get("url") or "")[:1000], source=(j.get("source") or "")[:60], posted_at=j.get("posted"),
+                location=(j.get("location") or "")[:200], pay=(j.get("pay") or "")[:120],
+                matched=" · ".join(j.get("matched") or [])[:500], description=(j.get("desc") or "")[:DESCRIPTION_MAX] or None)
+
+
+def record_sent(subscriber_id: int, jobs: list[dict], board: bool = False) -> list[int]:
+    """Stores today's jobs (each needs "key") and returns their row ids, used in the tracker links.
+    board: the morning email's jobs, which replace the ones on their dashboard."""
     ids = []
     with engine.begin() as conn:
+        if board:
+            conn.execute(update(sent_jobs).where(sent_jobs.c.subscriber_id == subscriber_id, sent_jobs.c.on_board)
+                         .values(on_board=False))
         for j in jobs:
-            ids.append(conn.execute(insert(sent_jobs).values(
-                subscriber_id=subscriber_id, job_key=j["key"][:500], sent_at=now(), title=(j.get("title") or "")[:300],
-                company=(j.get("company") or "")[:200], url=(j.get("url") or "")[:1000], source=(j.get("source") or "")[:60],
-                posted_at=j.get("posted"), location=(j.get("location") or "")[:200], pay=(j.get("pay") or "")[:120],
-                matched=" · ".join(j.get("matched") or [])[:500],
-                description=(j.get("desc") or "")[:DESCRIPTION_MAX] or None).returning(sent_jobs.c.id)).scalar())
+            ids.append(conn.execute(insert(sent_jobs).values(subscriber_id=subscriber_id, sent_at=now(), on_board=board,
+                                                             **_job_row(j)).returning(sent_jobs.c.id)).scalar())
         conn.execute(update(subscribers).where(subscribers.c.id == subscriber_id).values(last_sent_at=now()))
     return ids
+
+
+def save_spares(subscriber_id: int, jobs: list[dict]) -> None:
+    """Replaces their waiting "More jobs" (each needs "key"), best first."""
+    with engine.begin() as conn:
+        conn.execute(delete(spare_jobs).where(spare_jobs.c.subscriber_id == subscriber_id))
+        for rank, j in enumerate(jobs):
+            conn.execute(insert(spare_jobs).values(subscriber_id=subscriber_id, rank=rank, **_job_row(j)))
 
 
 def trim_descriptions(days: int = 30) -> None:

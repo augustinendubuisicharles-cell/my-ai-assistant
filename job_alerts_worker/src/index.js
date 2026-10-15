@@ -230,7 +230,7 @@ export async function handle(request, env, q) {
     if (!sub) return notFound();
     if (!letters.enabled(env)) return msg(`${what} aren't available yet`, "Please check back soon.");
     if (!(await db.isMember(q, sub))) {
-      return msg(`${what} are for members`, "Members get a CV tailored to any job, an AI cover letter and interview prep in one click, plus 10 jobs a day and Telegram alerts.",
+      return msg(`${what} are for members`, "Members get a CV tailored to any job, an AI cover letter and interview prep in one click, plus more jobs whenever they ask and Telegram alerts.",
         ctx.paidService ? { link: `/pay/${sub.token}`, linkText: `Become a member for ${ctx.price}` } : {});
     }
     const p = url.searchParams;
@@ -320,9 +320,18 @@ export async function handle(request, env, q) {
     }
     if (method !== "GET") return notFound();
     const apps = member ? await db.applications(q, sub.id) : [];
+    const spares = member ? await db.sparesLeft(q, sub.id) : 0;
     return html(views.memberHome(ctx, { sub, member, until: db.isPaid(sub) ? fmtDate(sub.paid_until) : "", jobs: await db.latestJobs(q, sub.id),
       applied: apps.filter((r) => r.status !== "not_yet").length, interviews: apps.filter((r) => ["interview", "offer"].includes(r.status)).length,
-      hasCv: Boolean(await db.getCv(q, sub.id)), letters: member && letters.enabled(env), saved: url.searchParams.get("saved") }));
+      hasCv: Boolean(await db.getCv(q, sub.id)), letters: member && letters.enabled(env), saved: url.searchParams.get("saved"), spares }));
+  }
+
+  // Members' "More jobs": the next 5 of this morning's best replace the 5 on their dashboard.
+  if (path === "/me/more" && method === "POST") {
+    const sub = await me();
+    if (!sub) return redirect("/login");
+    if (!(await db.isMember(q, sub))) return redirect("/me");
+    return redirect((await db.moreJobs(q, sub.id)) ? "/me?saved=more#jobs" : "/me?saved=nomore#jobs");
   }
 
   // A job's own page, linked from the morning email: the whole advert and how to apply, then one button to the employer.
@@ -358,7 +367,7 @@ export async function handle(request, env, q) {
     const sub = await db.byToken(q, m[1]);
     if (!sub) return notFound();
     if (!(await db.isMember(q, sub))) {
-      return msg("Your applications are for members", "Members can track every job they apply to, plus get a CV tailored to each job and 10 jobs a day.",
+      return msg("Your applications are for members", "Members can track every job they apply to, plus get a CV tailored to each job and more jobs whenever they ask.",
         ctx.paidService ? { link: `/pay/${sub.token}`, linkText: `Become a member for ${ctx.price}` } : {});
     }
     return html(views.applications(ctx, { sub, rows: await db.applications(q, sub.id), saved: Number(url.searchParams.get("saved")) || 0, prep: letters.enabled(env) }));

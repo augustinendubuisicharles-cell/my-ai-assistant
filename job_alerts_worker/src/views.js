@@ -187,6 +187,9 @@ const STYLE = `
   .sheet .sheet-close { margin:10px 0 0; background:transparent; color:var(--muted); font-weight:600; }
   @media (max-width:560px) { .sheet { margin:auto auto 0; width:100%; max-width:100%; border-radius:22px 22px 0 0; } }
   .mjob { padding:14px 16px; margin:0 0 10px; }
+  .more { display:flex; align-items:center; justify-content:center; gap:8px; width:100%; margin:4px 0 0; padding:13px; border-radius:12px;
+    border:1.5px solid var(--accent); background:transparent; color:var(--accent); font:inherit; font-weight:700; text-decoration:none; cursor:pointer; }
+  .more svg { width:18px; height:18px; }
   .mjob .t { font-weight:700; }
   .mjob .links { display:flex; flex-wrap:wrap; gap:6px 16px; margin-top:8px; font-size:.9rem; font-weight:600; }
   .mjob .links a { text-decoration:none; }
@@ -570,7 +573,7 @@ function plans(ctx) {
 <div class="card plan best"><span class="tag">BEST VALUE</span><h3>Member</h3><p class="cost">${ctx.paidService
     ? `<b>${esc(ctx.price)}</b>${was(ctx)} for ${ctx.months} months, paid once${ctx.launchLeft ? `<br>${launchNote(ctx)}` : ""}`
     : "<b>Coming soon</b>"}</p><ul>
-  ${li("<b>5 to 10 jobs</b> every morning")}
+  ${li("The <b>5 best jobs</b> every morning, <b>more whenever you ask</b>")}
   ${li("Searches all <b>5 job titles</b>")}
   ${li("<b>Telegram alerts</b> every two hours, so you apply first")}
   ${li("<b>Your CV tailored</b> to any job, an <b>AI cover letter</b> and <b>interview prep</b>")}
@@ -728,7 +731,7 @@ ${formHtml}
 <details class="fold info" id="plans"><summary>${sub ? "How it works" : "See what you get"}</summary>
 ${sub ? "" : strengths() + plans(ctx) + compare()}
   ${ctx.paidService && !sub ? `<p class="small"><b>Free for ${ctx.trialDays} days, then ${esc(ctx.price)} for ${ctx.months} months</b>, paid once through ${esc(ctx.provider)} if you want to continue. Nothing renews automatically. <a href="/terms">Terms and refunds</a>.</p>` : ""}
-  <p class="small">One email every morning with ${member ? "5 to 10" : "3"} new matches${member ? "" : ctx.paidService ? " (members get 5 to 10, plus tailored CVs, cover letters and Telegram alerts)" : ""}. If your own titles are quiet, we add similar roles. Remote jobs that only hire from certain countries are left out if yours isn't one of them. We skip senior roles if you choose a lower level, and we filter out unpaid roles and listings with common scam signs. Every email has a one-click unsubscribe link. We only store your email and these preferences, never share them, and delete them when you unsubscribe.</p>
+  <p class="small">One email every morning with ${member ? "the 5 best" : "3"} new matches${member ? ", and 5 more on your dashboard whenever you ask" : ctx.paidService ? " (members get the 5 best and more whenever they ask, plus tailored CVs, cover letters and Telegram alerts)" : ""}. If your own titles are quiet, we add similar roles. Remote jobs that only hire from certain countries are left out if yours isn't one of them. We skip senior roles if you choose a lower level, and we filter out unpaid roles and listings with common scam signs. Every email has a one-click unsubscribe link. We only store your email and these preferences, never share them, and delete them when you unsubscribe.</p>
 </details>
 ${inviteBox}
 ${sub ? `<p class="small" style="text-align:center"><a class="quiet" href="/unsubscribe/${esc(sub.token)}">Unsubscribe and delete my details</a></p>` : ""}
@@ -741,7 +744,7 @@ export function pay(ctx, { sub, heading, status }) {
 <form class="card" method="post" action="/pay/${esc(sub.token)}" id="payform">
   <p class="price"><b>${esc(ctx.price)}</b>${was(ctx)} for ${ctx.months} months</p>${ctx.launchLeft ? `<p class="small">${launchNote(ctx)}</p>` : ""}
   <ul class="perks">
-    <li>At least 5 and up to 10 new matches a day across all 5 of your job titles (the trial gets 3 jobs a day from 2 titles)</li>
+    <li>The 5 best new matches every morning across all 5 of your job titles, and 5 more whenever you ask (the trial gets 3 jobs a day from 2 titles)</li>
     <li>New matches on Telegram during the day, so you can apply first</li>
     <li>${sub.remote_only ? "Remote jobs" : `Jobs near ${esc(sub.city)}, plus remote ones`}, checked for scams and dead links</li>
     <li>One payment. Nothing renews automatically; we'll email you before it ends</li>
@@ -762,7 +765,7 @@ export function pay(ctx, { sub, heading, status }) {
 export function terms(ctx) {
   return page(ctx, `<h1>Terms, pricing and refunds</h1>
 <div class="card">
-  <p><b>What you get.</b> ${esc(ctx.siteName)} emails you new job listings every morning (3 a day on the free trial, 5 to 10 for members) that match the job titles, location and
+  <p><b>What you get.</b> ${esc(ctx.siteName)} emails you new job listings every morning (3 a day on the free trial, the 5 best a day for members, with more on request) that match the job titles, location and
     experience level you choose. We search public job boards and filter out listings that look unpaid, expired or like scams,
     but we don't employ anyone, can't guarantee a job, and you should always read a listing yourself before applying.</p>
   <p><b>Free trial.</b> Everyone gets ${ctx.trialDays} days of alerts free when they confirm their email. No card needed.</p>
@@ -899,7 +902,7 @@ export function signinPage(ctx) {
 <script>document.getElementById("signin").submit();</script>`);
 }
 
-const SAVED = { cv: "Your CV is saved." };
+const SAVED = { cv: "Your CV is saved.", more: "Here are 5 more jobs.", nomore: "That's all for today. New jobs arrive tomorrow morning." };
 
 
 const MI = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
@@ -907,6 +910,7 @@ const ME_ICONS = {
   apps: MI('<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4h6v3H9zM9 12l2 2 4-4"/>'),
   cv: MI('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>'),
   telegram: MI('<path d="M21 4 3 11l6 2 2 6 3-4 5 4z"/><path d="m9 13 8-6"/>'),
+  more: MI('<path d="M12 5v14M5 12h14"/>'),
   settings: MI('<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>'),
 };
 
@@ -917,24 +921,25 @@ const UNLOCK = {
   letter: ["Cover letters", "A cover letter written for each job, in one tap."],
   prep: ["Interview prep", "Likely interview questions for each job, with answers from your CV."],
   telegram: ["Telegram alerts", "New jobs on Telegram during the day, so you apply first."],
+  more: ["More jobs", "Want more than today's picks? Members get 5 more good matches whenever they ask."],
 };
 
 // The join card that slides up when a trial user taps a member feature (any link with data-unlock="<UNLOCK key>").
 function unlockSheet(ctx, join) {
   return `<dialog id="unlock" class="sheet"><form method="dialog">
   <span class="sheet-ic" id="u-ic"></span><h2 id="u-title"></h2><p id="u-text"></p>
-  <ul class="sheet-perks"><li>5 to 10 jobs every morning</li><li>Tailored CV and cover letter per job</li><li>Application tracker and Telegram alerts</li></ul>
+  <ul class="sheet-perks"><li>5 best jobs every morning, more on request</li><li>Tailored CV and cover letter per job</li><li>Application tracker and Telegram alerts</li></ul>
   <a class="plan-cta" href="${join}">Join for ${esc(ctx.price)} <span aria-hidden="true">→</span></a>
   <button class="sheet-close" value="close">Not now</button>
 </form></dialog>
-<script>(function(){var d=document.getElementById("unlock"),U=${JSON.stringify(UNLOCK)},I=${JSON.stringify({ apps: ME_ICONS.apps, cv: ME_ICONS.cv, letter: ME_ICONS.cv, prep: ME_ICONS.cv, telegram: ME_ICONS.telegram })};
+<script>(function(){var d=document.getElementById("unlock"),U=${JSON.stringify(UNLOCK)},I=${JSON.stringify({ apps: ME_ICONS.apps, cv: ME_ICONS.cv, letter: ME_ICONS.cv, prep: ME_ICONS.cv, telegram: ME_ICONS.telegram, more: ME_ICONS.more })};
 if(!d.showModal)return;document.querySelectorAll("[data-unlock]").forEach(function(a){a.addEventListener("click",function(e){var k=a.getAttribute("data-unlock");e.preventDefault();
 document.getElementById("u-title").textContent=U[k][0];document.getElementById("u-text").textContent=U[k][1];
 document.getElementById("u-ic").innerHTML=I[k];d.showModal();});});
 d.addEventListener("click",function(e){if(e.target===d)d.close();});})();</script>`;
 }
 
-export function memberHome(ctx, { sub, member, jobs, applied = 0, interviews = 0, hasCv, letters = false, saved = "" }) {
+export function memberHome(ctx, { sub, member, jobs, applied = 0, interviews = 0, hasCv, letters = false, saved = "", spares = 0 }) {
   const t = esc(sub.token);
   const gate = (feature) => (member ? "" : ` data-unlock="${feature}"`);
   const tile = (href, icon, label, tone, feature = "", badge = "") =>
@@ -956,8 +961,10 @@ ${tile("/me/cv", "cv", "My CV", "#7c3aed", "", hasCv ? "✓" : "")}
 ${tile(`/manage/${t}`, "telegram", "Telegram", "#0ea5e9", "telegram")}
 ${tile(`/manage/${t}`, "settings", "Settings", "#f97316")}
 </nav>
-<div class="apps"><h2>${jobs.length && Date.now() - new Date(jobs[0].sent_at) < 864e5 ? `Today's jobs · ${jobs.length}` : "Your latest jobs"}</h2>
-${jobs.length ? jobs.map(jobCard).join("") : `<div class="card empty"><p style="margin:0">Your next jobs arrive tomorrow morning.</p></div>`}</div>
+<div class="apps" id="jobs"><h2>${jobs.length && Date.now() - new Date(jobs[0].sent_at) < 864e5 ? `Today's jobs · ${jobs.length}` : "Your latest jobs"}</h2>
+${jobs.length ? jobs.map(jobCard).join("") : `<div class="card empty"><p style="margin:0">Your next jobs arrive tomorrow morning.</p></div>`}
+${member ? (spares ? `<form method="post" action="/me/more"><button type="submit" class="more">${ME_ICONS.more}More jobs</button></form>` : "")
+  : jobs.length ? `<a class="more" href="${join}" data-unlock="more">${ME_ICONS.more}More jobs</a>` : ""}</div>
 ${member ? "" : unlockSheet(ctx, join)}`);
 }
 
