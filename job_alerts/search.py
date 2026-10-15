@@ -18,6 +18,7 @@ import re
 import time
 import xml.etree.ElementTree as ET
 from collections import Counter
+from concurrent.futures import ThreadPoolExecutor
 from difflib import get_close_matches
 from datetime import datetime, timedelta, timezone
 from email.utils import parsedate_to_datetime
@@ -331,10 +332,14 @@ def from_jobspresso() -> tuple:
 
 # Companies that hire remotely and post every opening on a public careers page (Greenhouse, Lever or
 # Ashby). Applying there needs no job-board account, and the advert comes straight from the employer.
-CAREER_PAGES = {  # kept to the ones with remote jobs open outside the US (checked 15 Oct 2026)
-    "greenhouse": ["canonical", "gitlab"],
-    "lever": ["jobgether", "binance"],
-    "ashby": ["supabase", "oyster", "posthog", "zapier"],
+CAREER_PAGES = {  # companies with remote jobs; the usual checks still drop ones not open to the user's country
+    "greenhouse": ["canonical", "gitlab", "moniepoint", "okx", "bybit", "consensys", "wikimedia", "remotasks", "turing",
+                   "mozilla", "grafanalabs", "coinbase", "webflow", "alxafrica", "bitwarden", "sproutsocial", "later",
+                   "typeform"],
+    "lever": ["jobgether", "binance", "appen", "toptal", "rws", "tala", "kinsta"],
+    "ashby": ["supabase", "oyster", "posthog", "zapier", "notion", "1password", "hostinger", "clickup", "andela",
+              "substack", "helpscout", "surfshark", "lemonade", "kit", "gorgias", "ledger"],
+    "workable": ["remofirst", "kuda", "humanmade"],
 }
 
 
@@ -352,6 +357,13 @@ def _career_page(ats: str, slug: str) -> list[dict]:
                      url=j.get("hostedUrl"), posted=datetime.fromtimestamp(j["createdAt"] / 1000, timezone.utc) if j.get("createdAt") else None,
                      desc=_clean(j.get("descriptionPlain") or j.get("description") or ""),
                      remote=(j.get("workplaceType") == "remote") or None) for j in data if isinstance(j, dict)]
+    if ats == "workable":
+        data = _get(f"https://apply.workable.com/api/v1/widget/accounts/{slug}", details="true")
+        return [dict(title=j.get("title"), company=data.get("name") or slug,
+                     location=", ".join(x for x in (j.get("city"), j.get("country")) if x),
+                     url=j.get("url") or j.get("shortlink"),
+                     posted=datetime.fromisoformat(j["published_on"]).replace(tzinfo=timezone.utc) if j.get("published_on") else None,
+                     desc=_clean(j.get("description") or ""), remote=j.get("telecommuting") or None) for j in data.get("jobs", [])]
     data = _get(f"https://api.ashbyhq.com/posting-api/job-board/{slug}", includeCompensation="true")
     return [dict(title=j.get("title"), company=slug, location=j.get("location", ""), url=j.get("jobUrl") or j.get("applyUrl"),
                  posted=datetime.fromisoformat(j["publishedAt"].replace("Z", "+00:00")) if j.get("publishedAt") else None,
@@ -363,20 +375,30 @@ def _career_page(ats: str, slug: str) -> list[dict]:
 @lru_cache(maxsize=1)
 def from_career_pages() -> tuple:
     out, counts = [], Counter()
-    for ats, slugs in CAREER_PAGES.items():
-        for slug in slugs:
-            try:
-                for j in _career_page(ats, slug):
-                    loc = j["location"] or ""
-                    remote = j["remote"] if j["remote"] is not None else any(w in loc.lower() for w in REMOTE_WORDS)
-                    if not remote:
-                        continue  # this source is for remote jobs; on-site ones come from Adzuna/Reed
-                    company = j["company"] if j["company"] != slug else slug.replace("-", " ").split(".")[0].title()
-                    out.append(_raw(j["title"], company, loc or "Remote", j["url"], "Company careers page",
-                                    j["posted"], j["desc"], True, pay=j.get("pay", "")))
-                    counts[f"{ats}:{slug}"] += 1
-            except Exception as e:
-                print(f"[Careers {ats}:{slug}] skipped: {str(e)[:80]}")
+    pages = [(ats, slug) for ats, slugs in CAREER_PAGES.items() for slug in slugs]
+    def fetch(page):
+        try:
+            return _career_page(*page), None
+        except Exception as e:
+            return [], e
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        fetched = list(pool.map(fetch, pages))
+    for (ats, slug), (found, error) in zip(pages, fetched):
+        if error:
+            print(f"[Careers {ats}:{slug}] skipped: {str(error)[:80]}")
+            continue
+        try:
+            for j in found:
+                loc = j["location"] or ""
+                remote = j["remote"] if j["remote"] is not None else any(w in loc.lower() for w in REMOTE_WORDS)
+                if not remote:
+                    continue  # this source is for remote jobs; on-site ones come from Adzuna/Reed
+                company = j["company"] if j["company"] != slug else slug.replace("-", " ").split(".")[0].title()
+                out.append(_raw(j["title"], company, loc or "Remote", j["url"], "Company careers page",
+                                j["posted"], j["desc"], True, pay=j.get("pay", "")))
+                counts[f"{ats}:{slug}"] += 1
+        except Exception as e:
+            print(f"[Careers {ats}:{slug}] skipped: {str(e)[:80]}")
     print(f"[Careers] {len(out)} remote jobs from {len(counts)} companies")
     return tuple(out)
 
