@@ -86,6 +86,8 @@ const STYLE = `
   .plan h3 { margin:0; font-size:1.1rem; }
   .plan .cost { margin:4px 0 12px; color:var(--muted); }
   .plan .cost b { color:var(--text); font-size:1.5rem; }
+  .launch { display:inline-block; margin-top:6px; padding:3px 10px; border-radius:99px; background:#fff1e6; color:#c2410c; font-size:.8rem; font-weight:700; }
+  s { color:var(--muted); font-weight:400; }
   .plan ul { list-style:none; padding:0; margin:0; }
   .plan li { padding:5px 0 5px 26px; position:relative; }
   .plan li::before { content:"✓"; position:absolute; left:0; color:var(--ok); font-weight:800; }
@@ -566,7 +568,7 @@ function plans(ctx) {
   ${li("Telegram alerts during the day", false)}
 </ul></div>
 <div class="card plan best"><span class="tag">BEST VALUE</span><h3>Member</h3><p class="cost">${ctx.paidService
-    ? `<b>${esc(ctx.price)}</b> for ${ctx.months} months, paid once`
+    ? `<b>${esc(ctx.price)}</b>${was(ctx)} for ${ctx.months} months, paid once${ctx.launchLeft ? `<br>${launchNote(ctx)}` : ""}`
     : "<b>Coming soon</b>"}</p><ul>
   ${li("<b>5 to 10 jobs</b> every morning")}
   ${li("Searches all <b>5 job titles</b>")}
@@ -711,6 +713,8 @@ export function form(ctx, { sub = null, action, button, heading, lead, status = 
     <option value="mid"${sel(sub?.level === "mid")}>Mid level (no director/head roles)</option>
   </select>
   </details>
+  ${sub ? "" : `<label for="heard">How did you hear about us? <span class="hint">Optional</span></label>
+  <select id="heard" name="heard"><option value="">Choose one</option>${HEARD.map((h) => `<option>${esc(h)}</option>`).join("")}</select>`}
   <input class="hp" name="website" tabindex="-1" autocomplete="off">${ref ? `
   <input type="hidden" name="ref" value="${esc(ref)}">` : ""}
   <button type="submit" id="submit">${esc(button)}</button>
@@ -735,7 +739,7 @@ export function pay(ctx, { sub, heading, status }) {
   return page(ctx, `<h1>${esc(heading)}</h1>
 <p class="lead">Alerts for ${esc(sub.email)}${status ? `. ${esc(status)}` : ""}</p>
 <form class="card" method="post" action="/pay/${esc(sub.token)}" id="payform">
-  <p class="price"><b>${esc(ctx.price)}</b> for ${ctx.months} months</p>
+  <p class="price"><b>${esc(ctx.price)}</b>${was(ctx)} for ${ctx.months} months</p>${ctx.launchLeft ? `<p class="small">${launchNote(ctx)}</p>` : ""}
   <ul class="perks">
     <li>At least 5 and up to 10 new matches a day across all 5 of your job titles (the trial gets 3 jobs a day from 2 titles)</li>
     <li>New matches on Telegram during the day, so you can apply first</li>
@@ -778,6 +782,12 @@ export function terms(ctx) {
 export { COUNTRIES };
 
 // Remote roles foreign companies most often hire for from abroad; anything else goes in "Something else".
+export const HEARD = ["TikTok", "WhatsApp", "X (Twitter)", "Instagram", "LinkedIn", "Facebook", "A friend", "Campus or NYSC", "Google", "Other"];
+
+// "₦3,500 ~~₦5,000~~" while the launch offer runs, with how many places are left.
+const launchNote = (ctx) => (ctx.launchLeft ? `<span class="launch">Launch price for the first ${ctx.launchSpots} members: ${ctx.launchLeft} ${ctx.launchLeft === 1 ? "place" : "places"} left</span>` : "");
+const was = (ctx) => (ctx.fullPrice ? ` <s>${esc(ctx.fullPrice)}</s>` : "");
+
 export const JOBS = ["Virtual assistant", "Customer support", "Software developer", "Data analyst", "Content writer",
   "Social media manager", "Graphic designer", "Digital marketing", "Project manager", "Bookkeeper"];
 

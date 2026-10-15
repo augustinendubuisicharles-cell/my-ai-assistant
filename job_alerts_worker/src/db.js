@@ -19,12 +19,17 @@ export const byId = (q, id) => one(q, `SELECT ${COLS} FROM subscribers WHERE id 
 
 // Creates an unconfirmed subscriber, or updates an existing one's preferences.
 export const upsertSubscriber = (q, email, p) =>
-  one(q, `INSERT INTO subscribers (email, keywords, country, remote_only, city, level, token, confirmed, created_at, hours)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, false, now(), $8)
+  one(q, `INSERT INTO subscribers (email, keywords, country, remote_only, city, level, token, confirmed, created_at, hours, heard)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, false, now(), $8, $9)
           ON CONFLICT (email) DO UPDATE SET keywords = EXCLUDED.keywords, country = EXCLUDED.country,
-            remote_only = EXCLUDED.remote_only, city = EXCLUDED.city, level = EXCLUDED.level, hours = EXCLUDED.hours
+            remote_only = EXCLUDED.remote_only, city = EXCLUDED.city, level = EXCLUDED.level, hours = EXCLUDED.hours,
+            heard = coalesce(subscribers.heard, EXCLUDED.heard)
           RETURNING ${COLS}`,
-  [email.trim().toLowerCase(), p.keywords, p.country, p.remote_only, p.city, p.level, randomToken(), p.hours || "any"]);
+  [email.trim().toLowerCase(), p.keywords, p.country, p.remote_only, p.city, p.level, randomToken(), p.hours || "any", p.heard || null]);
+
+// People who have paid real money (₦0 granted memberships don't count): sets how many launch places are left.
+export const payingMembers = async (q) =>
+  (await one(q, "SELECT count(DISTINCT subscriber_id)::int AS n FROM payments WHERE amount_ngn > 0", []))?.n || 0;
 
 export const confirm = (q, token) =>
   one(q, `UPDATE subscribers SET confirmed = true WHERE token = $1 RETURNING ${COLS}`, [token]);

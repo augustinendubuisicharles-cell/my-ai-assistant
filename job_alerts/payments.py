@@ -23,6 +23,9 @@ import requests
 
 PRICE_NGN = int(os.environ.get("PRICE_NGN", "5000"))
 PERIOD_DAYS = int(os.environ.get("PERIOD_DAYS", "90"))
+# Launch offer (matches the website's payments.js): the first LAUNCH_SPOTS paying members pay LAUNCH_PRICE_NGN.
+LAUNCH_PRICE_NGN = int(os.environ.get("LAUNCH_PRICE_NGN", "3500"))
+LAUNCH_SPOTS = int(os.environ.get("LAUNCH_SPOTS", "100"))
 TRIAL_DAYS = int(os.environ.get("TRIAL_DAYS", "7"))  # free days everyone gets when they confirm their email
 # What each plan gets per daily email: (jobs, job titles searched). Paid members also get Telegram alerts.
 TRIAL_LIMITS = (3, 2)  # jobs a day, job titles searched

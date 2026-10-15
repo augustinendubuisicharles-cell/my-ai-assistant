@@ -31,6 +31,7 @@ function context(env, request) {
     paidService: Boolean(prov),
     provider: prov,
     price: `₦${payments.priceNgn(env).toLocaleString("en")}`,
+    priceNgn: payments.priceNgn(env),
     months: Math.round(payments.periodDays(env) / 30),
     trialDays: payments.trialDays(env),
     contact: (env.CONTACT_EMAIL || env.FROM_EMAIL || "").trim(),
@@ -58,6 +59,7 @@ export function cleanPrefs(f) {
     keywords: words.join(", "), country: views.COUNTRIES.includes(country) ? country : "",
     level: ["any", "entry", "mid"].includes(level) ? level : "any", remote_only: remote, city,
     hours: ["any", "full", "part"].includes(hours) ? hours : "any",
+    heard: views.HEARD.includes(String(f.get("heard") || "")) ? String(f.get("heard")) : "",
   };
 }
 
@@ -89,6 +91,14 @@ export async function handle(request, env, q) {
   }
   const method = request.method;
   const ctx = context(env, request);
+  // Launch offer: while fewer than LAUNCH_SPOTS people have paid, the price is the launch price everywhere.
+  if (ctx.paidService && payments.launchSpots(env) > 0 && path !== "/healthz") {
+    const left = payments.launchSpots(env) - (await db.payingMembers(q).catch(() => Infinity));
+    if (left > 0) {
+      Object.assign(ctx, { fullPrice: ctx.price, priceNgn: payments.launchPrice(env), launchLeft: left, launchSpots: payments.launchSpots(env),
+        price: `₦${payments.launchPrice(env).toLocaleString("en")}` });
+    }
+  }
   const msg = (heading, text, opts = {}) => html(views.message(ctx, { heading, text, ...opts }), opts.status || 200);
   const notFound = () => msg("Link not recognised", "This link is invalid or you've already unsubscribed.", { status: 404 });
   const refLink = async (sub) => `${ctx.baseUrl}/?ref=${await db.refCode(q, sub)}`;
@@ -361,7 +371,7 @@ export async function handle(request, env, q) {
     }
     if (method === "POST") {
       try {
-        const checkout = await payments.startCheckout(env, sub.email, sub.id, `${ctx.baseUrl}/paid`);
+        const checkout = await payments.startCheckout(env, sub.email, sub.id, `${ctx.baseUrl}/paid`, ctx.priceNgn);
         return Response.redirect(checkout, 303);
       } catch (e) {
         console.log(`[checkout] subscriber ${sub.id}: ${e}`);

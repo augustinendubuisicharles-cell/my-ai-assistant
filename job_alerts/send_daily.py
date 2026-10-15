@@ -110,11 +110,26 @@ def emailed_this_morning(sub: dict) -> bool:
     return bool(last) and db.now() >= start and last >= start
 
 
+_price = None
+
+
+def price_now() -> int:
+    """The launch price while fewer than LAUNCH_SPOTS people have paid, else the normal price (same rule as the website)."""
+    global _price
+    if _price is None:
+        try:
+            launch = payments.LAUNCH_SPOTS > 0 and db.paying_members() < payments.LAUNCH_SPOTS
+        except Exception:
+            launch = False
+        _price = payments.LAUNCH_PRICE_NGN if launch else payments.PRICE_NGN
+    return _price
+
+
 def trial_info(sub: dict) -> dict:
     """What the free-trial countdown box in each email needs."""
     left = (db._aware(sub["paid_until"]) - db.now()).total_seconds() / 86400 if sub.get("paid_until") else 0
     jobs, titles = payments.PAID_LIMITS
-    return {"days_left": max(1, math.ceil(left)), "price": f"₦{payments.PRICE_NGN:,}",
+    return {"days_left": max(1, math.ceil(left)), "price": f"₦{price_now():,}",
             "perks": f"{jobs} jobs a day, all {titles} job titles, a CV tailored to each job, AI cover letters and Telegram alerts, "
                      f"for {payments.PERIOD_DAYS // 30} months", "can_pay": payments.enabled()}
 
@@ -154,7 +169,7 @@ def remind(sub: dict, base_url: str) -> None:
     if not until or not (-timedelta(days=1) < until - db.now() <= timedelta(days=2)) or db._aware(sub.get("reminded_for")) == until:
         return
     try:
-        subject, text, html = emails.renewal_reminder(base_url, sub["token"], until, f"NGN {payments.PRICE_NGN:,}",
+        subject, text, html = emails.renewal_reminder(base_url, sub["token"], until, f"NGN {price_now():,}",
                                                       can_pay=payments.enabled())
         mailer.send(sub["email"], subject, text, html, unsubscribe_url=f"{base_url}/unsubscribe/{sub['token']}")
         db.mark_reminded(sub["id"], until)

@@ -32,7 +32,7 @@ beforeEach(async () => {
   tg = [];
   gh = [];
   ai = [];
-  env = { BREVO_API_KEY: "brevo", FROM_EMAIL: "hi@jobs.test", CREDO_PUBLIC_KEY: "0PUBkey", CREDO_SECRET_KEY: "secret" };
+  env = { BREVO_API_KEY: "brevo", FROM_EMAIL: "hi@jobs.test", CREDO_PUBLIC_KEY: "0PUBkey", CREDO_SECRET_KEY: "secret", LAUNCH_SPOTS: "0" };
   globalThis.fetch = fakeFetch;
 });
 
@@ -104,6 +104,42 @@ const call = (path, { method = "GET", form, body, headers } = {}) =>
 const signUp = (extra = {}) => call("/subscribe", { method: "POST",
   form: { email: "Ada@Example.com", keywords: "virtual assistant, pr", country: "Nigeria", level: "entry", ...extra } });
 const subscriber = async () => (await q("SELECT * FROM subscribers"))[0];
+
+test("the first members pay the launch price, and the page counts the places left", async () => {
+  env.LAUNCH_SPOTS = "2";
+  const home = await (await call("/")).text();
+  assert.match(home, /<b>₦3,500<\/b> <s>₦5,000<\/s>/);
+  assert.match(home, /2 places left/);
+
+  await signUp();
+  const { token } = await subscriber();
+  await call(`/confirm/${token}`);
+  await call(`/pay/${token}`, { method: "POST" });
+  assert.equal(Object.values(txs).at(-1).amount, 350000); // kobo
+  await call("/paid?transRef=vs_1");
+  assert.equal((await q("SELECT amount_ngn FROM payments"))[0].amount_ngn, 3500);
+  assert.match(await (await call("/")).text(), /1 place left/);
+
+  // A ₦0 grant doesn't use a place; the second real payment ends the offer.
+  await q("INSERT INTO payments (reference, subscriber_id, amount_ngn, paid_at) VALUES ('grant1', NULL, 0, now())");
+  assert.match(await (await call("/")).text(), /1 place left/);
+  await call("/subscribe", { method: "POST", form: { email: "b@example.com", keywords: "pr" } });
+  const second = (await q("SELECT id FROM subscribers WHERE email = 'b@example.com'"))[0].id;
+  await q(`INSERT INTO payments (reference, subscriber_id, amount_ngn, paid_at) VALUES ('p2', ${second}, 3500, now())`);
+  const after = await (await call("/")).text();
+  assert.match(after, /<b>₦5,000<\/b> for/);
+  assert.doesNotMatch(after, /places? left/);
+});
+
+test("new sign-ups can say how they heard about us, and the dashboard counts it", async () => {
+  assert.match(await (await call("/")).text(), /How did you hear about us\?[\s\S]*<option>TikTok<\/option>/);
+  await signUp({ heard: "TikTok" });
+  assert.equal((await subscriber()).heard, "TikTok");
+  await signUp({ heard: "Instagram" }); // signing up again doesn't change the first answer
+  assert.equal((await subscriber()).heard, "TikTok");
+  await call("/subscribe", { method: "POST", form: { email: "b@example.com", keywords: "pr", heard: "<script>" } });
+  assert.equal((await q("SELECT heard FROM subscribers WHERE email = 'b@example.com'"))[0].heard, null);
+});
 
 test("countries match the Python list", () => {
   const py = JSON.parse(execSync(`python3 -c "import json; from job_alerts.search import COUNTRIES; print(json.dumps(list(COUNTRIES)))"`,
