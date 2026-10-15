@@ -324,13 +324,10 @@ def from_jobspresso() -> tuple:
 
 # Companies that hire remotely and post every opening on a public careers page (Greenhouse, Lever or
 # Ashby). Applying there needs no job-board account, and the advert comes straight from the employer.
-CAREER_PAGES = {
-    "greenhouse": ["gitlab", "canonical", "remotecom", "andela", "hotjar", "doist", "wikimedia", "mozilla",
-                   "elastic", "grafanalabs", "cloudflare", "vercel", "coinbase", "airtable", "dropbox", "toptal",
-                   "automatticcareers", "khanacademy", "duolingo", "reddit", "discord", "figma", "webflow"],
-    "lever": ["binance", "welocalize", "outliers", "crossover", "jobgether", "palantir", "plaid", "kraken"],
-    "ashby": ["zapier", "deel", "duck-duck-go", "posthog", "linear", "supabase", "oyster", "buffer", "kraken.com",
-              "ramp", "notion", "replit", "close", "sanity", "1password", "invisible"],
+CAREER_PAGES = {  # kept to the ones with remote jobs open outside the US (checked 15 Oct 2026)
+    "greenhouse": ["canonical", "gitlab"],
+    "lever": ["jobgether", "binance"],
+    "ashby": ["supabase", "oyster", "posthog", "zapier"],
 }
 
 
