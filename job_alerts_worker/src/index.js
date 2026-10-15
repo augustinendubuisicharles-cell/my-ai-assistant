@@ -90,17 +90,6 @@ export async function handle(request, env, q) {
   const msg = (heading, text, opts = {}) => html(views.message(ctx, { heading, text, ...opts }), opts.status || 200);
   const notFound = () => msg("Link not recognised", "This link is invalid or you've already unsubscribed.", { status: 404 });
   const refLink = async (sub) => `${ctx.baseUrl}/?ref=${await db.refCode(q, sub)}`;
-  // Every 2 invited friends who confirm earn the inviter a free month; tell them by email.
-  const rewardReferrer = async (referrerId) => {
-    const months = await db.rewardReferrer(q, referrerId);
-    if (!months) return;
-    const ref = await db.byId(q, referrerId);
-    try {
-      await mail.send(env, ref.email, ...mail.referralReward(ctx.baseUrl, ref.token, months, fmtDate(ref.paid_until)));
-    } catch (e) {
-      console.log(`[referral email] failed for subscriber ${referrerId}: ${e}`);
-    }
-  };
   let m;
 
   if (path === "/healthz") return Response.json({ ok: true });
@@ -175,9 +164,8 @@ export async function handle(request, env, q) {
     }
     // First confirmation only: start their first search now instead of waiting for the morning run.
     const soon = !before?.confirmed ? await firstSearch.start(env, sub.email) : false;
-    if (!before?.confirmed && sub.referred_by) await rewardReferrer(sub.referred_by);
     return html(views.welcome(ctx, { sub, until: fmtDate(sub.paid_until), trial: !(await db.isMember(q, sub)), soon,
-      refLink: await refLink(sub), joined: await db.confirmedReferrals(q, sub.id) }));
+      refLink: await refLink(sub), joined: await db.confirmedReferrals(q, sub.id), paid: await db.paidReferrals(q, sub.id) }));
   }
 
   if ((m = path.match(/^\/manage\/([\w-]+)$/))) {
@@ -189,7 +177,7 @@ export async function handle(request, env, q) {
       return html(views.form(ctx, { sub, action: `/manage/${sub.token}`, button: "Save", heading: "Your job alerts",
         lead: `Alerts for ${sub.email}`, status: status(ctx, sub), member,
         telegramLink: bot ? `https://t.me/${bot}?start=${sub.token}` : null,
-        inviteBox: views.invite(ctx, { refLink: await refLink(sub), joined: await db.confirmedReferrals(q, sub.id) }) }));
+        inviteBox: views.invite(ctx, { refLink: await refLink(sub), joined: await db.confirmedReferrals(q, sub.id), paid: await db.paidReferrals(q, sub.id) }) }));
     }
     if (method === "POST") {
       const prefs = cleanPrefs(await request.formData());
@@ -418,10 +406,24 @@ export async function handle(request, env, q) {
   return msg("Page not found", "There's nothing at this address.", { link: "/", linkText: "Go to sign-up", status: 404 });
 }
 
+// Gives the inviter any free months they've newly earned, and tells them by email.
+async function rewardReferrer(env, q, ctx, referrerId) {
+  const months = await db.rewardReferrer(q, referrerId);
+  if (!months) return;
+  const ref = await db.byId(q, referrerId);
+  try {
+    await mail.send(env, ref.email, ...mail.referralReward(ctx.baseUrl, ref.token, months, fmtDate(ref.paid_until)));
+  } catch (e) {
+    console.log(`[referral email] failed for subscriber ${referrerId}: ${e}`);
+  }
+}
+
 async function applyPayment(env, q, ref, ctx) {
   const paid = await payments.verify(env, ref);
   if (!paid) return null;
   const sub = await db.recordPayment(q, paid.reference, paid.subscriberId, paid.amount, payments.periodDays(env));
+  // A friend they invited just became a member: the inviter earns a free month.
+  if (sub?.justPaid && sub.referred_by && paid.amount > 0) await rewardReferrer(env, q, ctx, sub.referred_by);
   if (sub?.justPaid) {
     // Our own receipt, once per payment, so the member hears from JobAlert rather than only the payment provider.
     try {

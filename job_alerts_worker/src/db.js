@@ -86,7 +86,7 @@ export const lettersToday = async (q, id, kind = "letter") =>
   (await one(q, "SELECT count(*)::int AS n FROM letters WHERE subscriber_id = $1 AND kind = $2 AND created_at > now() - interval '1 day'", [id, kind]))?.n || 0;
 export const addLetter = (q, id, kind = "letter") => q("INSERT INTO letters (subscriber_id, created_at, kind) VALUES ($1, now(), $2)", [id, kind]);
 
-// --- referrals: every 2 friends who confirm = 1 free month ---
+// --- referrals: every 2 invited friends who become paying members = 1 free month ---
 
 export const REF_PER_REWARD = 2;
 export const REF_REWARD_DAYS = 30;
@@ -108,12 +108,17 @@ export const setReferredBy = (q, id, referrerId) =>
 export const confirmedReferrals = async (q, id) =>
   (await one(q, "SELECT count(*)::int AS n FROM subscribers WHERE referred_by = $1 AND confirmed", [id]))?.n || 0;
 
+// Invited friends who have paid (free ₦0 grants don't count).
+export const paidReferrals = async (q, id) =>
+  (await one(q, `SELECT count(*)::int AS n FROM subscribers s WHERE s.referred_by = $1
+     AND EXISTS (SELECT 1 FROM payments p WHERE p.subscriber_id = s.id AND p.amount_ngn > 0)`, [id]))?.n || 0;
+
 // Gives the referrer any free months they've newly earned. Returns how many (0 if none).
 // The WHERE on ref_rewards makes it safe if two friends confirm at the same moment.
 export async function rewardReferrer(q, referrerId) {
   const ref = await byId(q, referrerId);
   if (!ref) return 0;
-  const earned = Math.floor((await confirmedReferrals(q, referrerId)) / REF_PER_REWARD);
+  const earned = Math.floor((await paidReferrals(q, referrerId)) / REF_PER_REWARD);
   const add = earned - (ref.ref_rewards || 0);
   if (add <= 0) return 0;
   const done = await one(q, `UPDATE subscribers SET ref_rewards = $2,
