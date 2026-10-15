@@ -53,9 +53,11 @@ export function cleanPrefs(f) {
   if (!words.length || words.some((w) => w.length > 60) || (!remote && !city)) return null;
   const country = String(f.get("country") || "");
   const level = String(f.get("level") || "any");
+  const hours = String(f.get("hours") || "any");
   return {
     keywords: words.join(", "), country: views.COUNTRIES.includes(country) ? country : "",
     level: ["any", "entry", "mid"].includes(level) ? level : "any", remote_only: remote, city,
+    hours: ["any", "full", "part"].includes(hours) ? hours : "any",
   };
 }
 

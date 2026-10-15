@@ -18,6 +18,7 @@ subscribers = Table(
     Column("remote_only", Boolean, nullable=False, default=True),  # False = on-site/hybrid near `city`
     Column("city", String(120), nullable=False, default=""),       # preferred area for on-site jobs
     Column("level", String(20), nullable=False, default="any"),  # any | entry | mid
+    Column("hours", String(10), nullable=False, default="any", server_default="any"),  # any | full | part (full-time / part-time)
     Column("token", String(64), nullable=False, unique=True),     # for confirm/manage/unsubscribe links
     Column("confirmed", Boolean, nullable=False, default=False),
     Column("created_at", DateTime(timezone=True), nullable=False),
@@ -120,7 +121,8 @@ def init_db() -> None:
              "reminded_for": "TIMESTAMP WITH TIME ZONE", "telegram_chat_id": "VARCHAR(32)", "cv_text": "TEXT",
              "ref_code": "VARCHAR(16)", "referred_by": "INTEGER", "ref_rewards": "INTEGER NOT NULL DEFAULT 0",
              "last_run_at": "TIMESTAMP WITH TIME ZONE", "last_run_result": "VARCHAR(200)",
-             "confirm_reminded_at": "TIMESTAMP WITH TIME ZONE", "titles_tip_at": "TIMESTAMP WITH TIME ZONE"}
+             "confirm_reminded_at": "TIMESTAMP WITH TIME ZONE", "titles_tip_at": "TIMESTAMP WITH TIME ZONE",
+             "hours": "VARCHAR(10) NOT NULL DEFAULT 'any'"}
     with engine.begin() as conn:
         for name, sql_type in added.items():
             if name not in have:

@@ -44,7 +44,8 @@ def main() -> None:
     for sub in members:
         try:
             jobs = find_jobs(first_titles(sub["keywords"], payments.PAID_LIMITS[1]), sub["country"], sub["remote_only"],
-                             sub["level"], db.already_sent(sub["id"]), n=PER_RUN, city=sub.get("city") or "")
+                             sub["level"], db.already_sent(sub["id"]), n=PER_RUN, city=sub.get("city") or "",
+                             hours=sub.get("hours") or "any")
             for job in jobs:
                 send(token, sub["telegram_chat_id"], message(job))
                 db.record_sent(sub["id"], [{**job, "key": job_key(job)}])  # one at a time: a failure mid-way doesn't lose track

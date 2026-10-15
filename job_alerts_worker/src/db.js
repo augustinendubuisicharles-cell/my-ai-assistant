@@ -1,6 +1,6 @@
 // Queries against the same Postgres (Neon) tables the Python side creates and
 // uses (job_alerts/db.py owns the schema). `q(text, params)` returns rows.
-const COLS = "id, email, keywords, country, remote_only, city, level, token, confirmed, paid_until, telegram_chat_id, ref_code, referred_by, ref_rewards";
+const COLS = "id, email, keywords, country, remote_only, city, level, hours, token, confirmed, paid_until, telegram_chat_id, ref_code, referred_by, ref_rewards";
 
 const one = async (q, text, params) => (await q(text, params))[0] || null;
 
@@ -19,19 +19,19 @@ export const byId = (q, id) => one(q, `SELECT ${COLS} FROM subscribers WHERE id 
 
 // Creates an unconfirmed subscriber, or updates an existing one's preferences.
 export const upsertSubscriber = (q, email, p) =>
-  one(q, `INSERT INTO subscribers (email, keywords, country, remote_only, city, level, token, confirmed, created_at)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, false, now())
+  one(q, `INSERT INTO subscribers (email, keywords, country, remote_only, city, level, token, confirmed, created_at, hours)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, false, now(), $8)
           ON CONFLICT (email) DO UPDATE SET keywords = EXCLUDED.keywords, country = EXCLUDED.country,
-            remote_only = EXCLUDED.remote_only, city = EXCLUDED.city, level = EXCLUDED.level
+            remote_only = EXCLUDED.remote_only, city = EXCLUDED.city, level = EXCLUDED.level, hours = EXCLUDED.hours
           RETURNING ${COLS}`,
-  [email.trim().toLowerCase(), p.keywords, p.country, p.remote_only, p.city, p.level, randomToken()]);
+  [email.trim().toLowerCase(), p.keywords, p.country, p.remote_only, p.city, p.level, randomToken(), p.hours || "any"]);
 
 export const confirm = (q, token) =>
   one(q, `UPDATE subscribers SET confirmed = true WHERE token = $1 RETURNING ${COLS}`, [token]);
 
 export const updatePrefs = (q, token, p) =>
-  q(`UPDATE subscribers SET keywords = $2, country = $3, remote_only = $4, city = $5, level = $6 WHERE token = $1`,
-    [token, p.keywords, p.country, p.remote_only, p.city, p.level]);
+  q(`UPDATE subscribers SET keywords = $2, country = $3, remote_only = $4, city = $5, level = $6, hours = $7 WHERE token = $1`,
+    [token, p.keywords, p.country, p.remote_only, p.city, p.level, p.hours || "any"]);
 
 // Deletes the subscriber and their sent-job history; payment records stay (for accounting).
 export async function remove(q, token) {
