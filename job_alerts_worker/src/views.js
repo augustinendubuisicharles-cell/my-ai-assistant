@@ -161,17 +161,25 @@ const STYLE = `
   .empty { text-align:center; color:var(--muted); padding:28px 20px; }
   .me-top { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
   .me-top form button { width:auto; margin:4px 0 0; padding:8px 14px; font-size:.85rem; background:transparent; color:var(--muted); border:1px solid var(--border); }
-  .mtiles { display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; margin:0 0 24px; }
-  .mtile { display:block; background:var(--card); border:1px solid var(--border); border-radius:14px; padding:14px; text-decoration:none; color:var(--text); transition:border-color .15s, transform .15s; }
-  .mtile:hover { border-color:var(--accent); transform:translateY(-1px); }
-  .mtile i { font-style:normal; font-size:1.3rem; }
-  .mtile b { display:block; margin-top:6px; font-size:.95rem; }
-  .mtile span { display:block; color:var(--muted); font-size:.8rem; margin-top:2px; }
-  @media (max-width:420px) { .mtiles { grid-template-columns:1fr; } .mtile { display:grid; grid-template-columns:32px 1fr; align-items:center; } .mtile i { grid-row:span 2; } .mtile b { margin:0; } }
-  .mtiles.locked .mtile { position:relative; background:color-mix(in srgb, var(--card) 70%, var(--bg)); border-style:dashed; }
-  .mtiles.locked .mtile::after { content:"🔒"; position:absolute; top:10px; right:12px; font-size:.8rem; opacity:.8; }
-  .mtiles.locked .mtile b, .mtiles.locked .mtile i { opacity:.75; }
-  @media (max-width:420px) { .mtiles.locked { grid-template-columns:1fr 1fr; } .mtiles.locked .mtile { display:block; } .mtiles.locked .mtile b { margin-top:6px; } }
+  .mtiles { display:grid; grid-template-columns:repeat(4, 1fr); gap:10px; margin:0 0 26px; }
+  .mtile { display:flex; flex-direction:column; align-items:center; gap:8px; padding:14px 6px 12px; border-radius:16px; background:var(--card); border:1px solid var(--border); text-decoration:none; color:var(--text); transition:transform .15s, box-shadow .15s; }
+  .mtile:hover { transform:translateY(-2px); box-shadow:0 10px 24px -16px var(--tone); }
+  .mtile i { position:relative; width:46px; height:46px; border-radius:14px; display:grid; place-items:center; color:var(--tone); background:color-mix(in srgb, var(--tone) 14%, transparent); }
+  .mtile i svg { width:24px; height:24px; }
+  .mtile em { position:absolute; top:-6px; right:-8px; min-width:20px; height:20px; padding:0 6px; border-radius:99px; background:var(--tone); color:#fff; font:700 .7rem/20px system-ui, sans-serif; font-style:normal; text-align:center; }
+  .mtile b { font-size:.82rem; font-weight:700; }
+  .sheet { border:0; padding:0; width:min(420px, calc(100% - 24px)); border-radius:22px; background:var(--card); color:var(--text); box-shadow:0 30px 80px -20px #0b153080; }
+  .sheet::backdrop { background:#0b153066; backdrop-filter:blur(3px); }
+  .sheet form { padding:26px 24px 18px; text-align:center; }
+  .sheet-ic { width:56px; height:56px; margin:0 auto 12px; border-radius:18px; display:grid; place-items:center; color:var(--accent); background:color-mix(in srgb, var(--accent) 14%, transparent); }
+  .sheet-ic svg { width:28px; height:28px; }
+  .sheet h2 { margin:0; font-size:1.3rem; }
+  .sheet p { margin:6px 0 16px; color:var(--muted); }
+  .sheet-perks { list-style:none; padding:14px 16px; margin:0 0 4px; text-align:left; border-radius:14px; background:var(--bg); }
+  .sheet-perks li { padding:4px 0 4px 26px; position:relative; font-size:.92rem; }
+  .sheet-perks li::before { content:"✓"; position:absolute; left:2px; color:var(--ok); font-weight:800; }
+  .sheet .sheet-close { margin:10px 0 0; background:transparent; color:var(--muted); font-weight:600; }
+  @media (max-width:560px) { .sheet { margin:auto auto 0; width:100%; max-width:100%; border-radius:22px 22px 0 0; } }
   .mjob { padding:14px 16px; margin:0 0 10px; }
   .mjob .t { font-weight:700; }
   .mjob .links { display:flex; flex-wrap:wrap; gap:6px 16px; margin-top:8px; font-size:.9rem; font-weight:600; }
@@ -822,40 +830,58 @@ export function signinPage(ctx) {
 
 const SAVED = { cv: "Your CV is saved." };
 
-// What trial users see locked in their members' area; each tile leads to joining.
-const MEMBER_PERKS = [
-  ["📋", "Application tracker", "Every job you apply to"],
-  ["🎯", "Tailored CVs", "Your CV rewritten per job"],
-  ["✍️", "Cover letters", "Written for each job"],
-  ["⚡", "Telegram alerts", "New jobs during the day"],
-  ["📬", "5 to 10 jobs a day", "All 5 job titles searched"],
-  ["🔁", "Jobs come back", "\"Not yet\" jobs return"],
-];
 
-export function memberHome(ctx, { sub, member, jobs, applied = 0, interviews = 0, hasCv, letters = false, locked = false, saved = "" }) {
+const MI = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const ME_ICONS = {
+  apps: MI('<rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4h6v3H9zM9 12l2 2 4-4"/>'),
+  cv: MI('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/>'),
+  telegram: MI('<path d="M21 4 3 11l6 2 2 6 3-4 5 4z"/><path d="m9 13 8-6"/>'),
+  settings: MI('<path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/>'),
+};
+
+// What the "unlock" card says when a trial user taps a member feature.
+const UNLOCK = {
+  apps: ["Application tracker", "See every job you've applied to and where each one stands."],
+  cv: ["Tailored CVs", "We rewrite your CV for each job, in the advert's own words."],
+  letter: ["Cover letters", "A cover letter written for each job, in one tap."],
+  telegram: ["Telegram alerts", "New jobs on Telegram during the day, so you apply first."],
+};
+
+export function memberHome(ctx, { sub, member, jobs, applied = 0, interviews = 0, hasCv, letters = false, saved = "" }) {
   const t = esc(sub.token);
-  const tile = (href, icon, title, detail) => `<a class="mtile" href="${href}"><i>${icon}</i><b>${title}</b><span>${detail}</span></a>`;
+  const gate = (feature) => (member ? "" : ` data-unlock="${feature}"`);
+  const tile = (href, icon, label, tone, feature = "", badge = "") =>
+    `<a class="mtile" href="${href}" style="--tone:${tone}"${feature ? gate(feature) : ""}><i>${ME_ICONS[icon]}${badge ? `<em>${badge}</em>` : ""}</i><b>${label}</b></a>`;
+  const q = (j) => esc(new URLSearchParams({ t: j.title, c: j.company || "", u: j.url || "" }).toString());
   const jobCard = (j) => `<div class="card mjob"><div class="t">${esc(j.title)}${j.status && j.status !== "skip"
     ? `<span class="chip-st">${esc({ applied: "Applied", not_yet: "Not yet", interview: "Interview", offer: "Offer", no_reply: "Applied" }[j.status] || "")}</span>` : ""}</div>
   <div class="small" style="margin:2px 0 0">${esc([j.company, j.source && `via ${j.source}`].filter(Boolean).join(" · "))}</div>
-  <div class="links"><a href="/go/${t}/${j.id}">View and apply →</a>${letters || locked
-    ? `<a class="sub" href="/cv/${t}?${esc(new URLSearchParams({ t: j.title, c: j.company || "", u: j.url || "" }).toString())}">${locked ? "🔒" : "📄"} Tailored CV</a>
-    <a class="sub" href="/letter/${t}?${esc(new URLSearchParams({ t: j.title, c: j.company || "", u: j.url || "" }).toString())}">${locked ? "🔒" : "✍️"} Cover letter</a>` : ""}</div></div>`;
+  <div class="links"><a href="/go/${t}/${j.id}">View and apply →</a>${letters || !member
+    ? `<a class="sub" href="/cv/${t}?${q(j)}"${gate("cv")}>Tailored CV</a><a class="sub" href="/letter/${t}?${q(j)}"${gate("letter")}>Cover letter</a>` : ""}</div></div>`;
+  const join = ctx.paidService ? `/pay/${t}` : "/terms";
   return page(ctx, `<div class="me-top"><div><h1>Hi there 👋</h1><p class="lead" style="margin-bottom:18px">${esc(sub.email)}</p></div>
 <form method="post" action="/logout"><button type="submit">Log out</button></form></div>
 ${SAVED[saved] ? `<p class="toast">${SAVED[saved]}</p>` : ""}
 ${ctx.paidService ? membershipCard(ctx, sub, member) : ""}
-<div class="mtiles">
-${member ? tile(`/applications/${t}`, "📋", "My applications", `${applied} applied · ${interviews} interview${interviews === 1 ? "" : "s"}`) : ""}
-${tile("/me/cv", "📄", "My CV", hasCv ? "Saved" : "Not added yet")}
-${tile(`/manage/${t}`, "⚙️", "Job settings", esc(String(sub.keywords || "").split(",").slice(0, 2).join(", ")))}
-</div>
-${member ? "" : `<div class="apps"><h2>Members only</h2></div>
-<div class="mtiles locked">
-${MEMBER_PERKS.map(([icon, title, detail]) => tile(ctx.paidService ? `/pay/${t}` : "/terms", icon, title, detail)).join("\n")}
-</div>`}
+<nav class="mtiles">
+${tile(`/applications/${t}`, "apps", "Applications", "#2457d6", "apps", member && applied ? String(applied) : "")}
+${tile("/me/cv", "cv", "My CV", "#7c3aed", "", hasCv ? "✓" : "")}
+${tile(`/manage/${t}`, "telegram", "Telegram", "#0ea5e9", "telegram")}
+${tile(`/manage/${t}`, "settings", "Settings", "#f97316")}
+</nav>
 <div class="apps"><h2>Your latest jobs</h2>
-${jobs.length ? jobs.map(jobCard).join("") : `<div class="card empty"><p style="margin:0">Your next jobs arrive tomorrow morning.</p></div>`}</div>`);
+${jobs.length ? jobs.map(jobCard).join("") : `<div class="card empty"><p style="margin:0">Your next jobs arrive tomorrow morning.</p></div>`}</div>
+${member ? "" : `<dialog id="unlock" class="sheet"><form method="dialog">
+  <span class="sheet-ic" id="u-ic"></span><h2 id="u-title"></h2><p id="u-text"></p>
+  <ul class="sheet-perks"><li>5 to 10 jobs every morning</li><li>Tailored CV and cover letter per job</li><li>Application tracker and Telegram alerts</li></ul>
+  <a class="plan-cta" href="${join}">Join for ${esc(ctx.price)} <span aria-hidden="true">→</span></a>
+  <button class="sheet-close" value="close">Not now</button>
+</form></dialog>
+<script>(function(){var d=document.getElementById("unlock"),U=${JSON.stringify(UNLOCK)},I=${JSON.stringify({ apps: ME_ICONS.apps, cv: ME_ICONS.cv, letter: ME_ICONS.cv, telegram: ME_ICONS.telegram })};
+if(!d.showModal)return;document.querySelectorAll("[data-unlock]").forEach(function(a){a.addEventListener("click",function(e){var k=a.getAttribute("data-unlock");e.preventDefault();
+document.getElementById("u-title").textContent=U[k][0];document.getElementById("u-text").textContent=U[k][1];
+document.getElementById("u-ic").innerHTML=I[k];d.showModal();});});
+d.addEventListener("click",function(e){if(e.target===d)d.close();});})();</script>`}`);
 }
 
 export function cvPage(ctx, { cv, member }) {
