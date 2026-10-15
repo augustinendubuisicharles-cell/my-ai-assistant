@@ -180,8 +180,10 @@ export const bySession = async (q, session) =>
 
 export const endSession = async (q, session) => q("DELETE FROM logins WHERE session_hash = $1", [await sha256(session)]);
 
-// The jobs in their latest email (for the members' area).
+// The jobs sent to them in the last 24 hours (this morning's email and any Telegram alerts since),
+// or their last email's jobs if nothing came today. Newest first.
 export const latestJobs = (q, subscriberId) =>
   q(`SELECT id, title, company, url, source, status, sent_at FROM sent_jobs
-     WHERE subscriber_id = $1 AND title IS NOT NULL AND sent_at > (SELECT max(sent_at) FROM sent_jobs WHERE subscriber_id = $1) - interval '1 hour'
-     ORDER BY id`, [subscriberId]);
+     WHERE subscriber_id = $1 AND title IS NOT NULL
+       AND sent_at > LEAST(now() - interval '24 hours', (SELECT max(sent_at) FROM sent_jobs WHERE subscriber_id = $1) - interval '1 hour')
+     ORDER BY sent_at DESC, id LIMIT 30`, [subscriberId]);

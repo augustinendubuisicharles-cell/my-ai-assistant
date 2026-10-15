@@ -126,6 +126,14 @@ def init_db() -> None:
                 if engine.dialect.name == "sqlite":
                     sql_type = sql_type.replace("TIMESTAMP WITH TIME ZONE", "DATETIME")
                 conn.execute(text(f"ALTER TABLE sent_jobs ADD COLUMN {name} {sql_type}"))
+        if engine.dialect.name == "postgresql":
+            # Jobs sent before the tracker stored job details: rebuild them from job_key ("t:<title>|<company>\t<link>"),
+            # so they show on the members' area and their Apply links work. Titles come back in Title Case.
+            conn.execute(text(r"""UPDATE sent_jobs SET
+                  title = initcap(substring(split_part(split_part(job_key, E'\t', 1), '|', 1) from 3)),
+                  company = initcap(split_part(split_part(job_key, E'\t', 1), '|', 2)),
+                  url = NULLIF(split_part(job_key, E'\t', 2), '')
+                WHERE title IS NULL AND job_key LIKE 't:%'"""))
         if "kind" not in {c["name"] for c in inspect(engine).get_columns("letters")}:
             conn.execute(text("ALTER TABLE letters ADD COLUMN kind VARCHAR(10) NOT NULL DEFAULT 'letter'"))
         if "ref_code" not in have:  # create_all only adds the unique index on new databases
