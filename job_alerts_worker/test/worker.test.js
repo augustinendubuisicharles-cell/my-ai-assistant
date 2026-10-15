@@ -730,7 +730,7 @@ test("members log in with an emailed link: once, scanner-safe, 30-day cookie, an
   const ok = await call(link, { method: "POST" });
   assert.equal(ok.status, 303);
   const cookie = ok.headers.get("set-cookie");
-  assert.match(cookie, /ja_session=[\w-]+; Path=\/; Max-Age=2592000; HttpOnly; Secure; SameSite=Lax/);
+  assert.match(cookie, /ja_session=[\w-]+; Path=\/; Max-Age=34560000; HttpOnly; Secure; SameSite=Lax/);
   assert.equal((await call(link, { method: "POST" })).status, 410);
   assert.ok(!(await q("SELECT session_hash FROM logins"))[0].session_hash.includes(cookie.split(/[=;]/)[1]));
 
@@ -742,7 +742,10 @@ test("members log in with an emailed link: once, scanner-safe, 30-day cookie, an
   // Trial users see the same tiles; tapping a member feature opens the "join" card.
   assert.match(home, /data-unlock="apps"[\s\S]*data-unlock="telegram"[\s\S]*data-unlock="cv"[\s\S]*data-unlock="letter"/);
   assert.match(home, /<dialog id="unlock"[\s\S]*href="\/pay\/[\w-]+">Join for/);
-  assert.equal((await call("/login", { headers })).headers.get("location"), "/me");
+  const again = await call("/login", { headers }); // logged in already: straight to their page, and the cookie is renewed
+  assert.equal(again.headers.get("location"), "/me");
+  assert.match(again.headers.get("set-cookie"), /Max-Age=34560000/);
+  assert.ok((await q("SELECT expires_at FROM logins WHERE session_hash IS NOT NULL"))[0].expires_at > new Date(Date.now() + 29 * 365 * 864e5));
 
   await call("/me/cv", { method: "POST", form: { cv: "Ada Obi, comms officer." }, headers });
   assert.equal(await (await import("../src/db.js")).getCv(q, sub0.id), "Ada Obi, comms officer.");
