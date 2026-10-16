@@ -434,7 +434,7 @@ ${ctx.paidService ? `<section class="wrap trust-wrap">${trust(ctx)}</section>` :
 
 const DESCRIPTION = "Remote jobs from companies abroad that actually hire Nigerians, checked for scams and never repeated, in your inbox every morning. 7 days free.";
 
-export function page(ctx, body, { landing = false } = {}) {
+export function page(ctx, body, { landing = false, og = null } = {}) {
   const footer = `<footer><a href="/terms">Terms and pricing</a>${
     ctx.contact ? ` &middot; <a href="mailto:${esc(ctx.contact)}">Contact</a>` : ""}</footer>`;
   return `<!doctype html>
@@ -442,7 +442,7 @@ export function page(ctx, body, { landing = false } = {}) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(ctx.siteName)}</title>
+<title>${esc(og?.title || ctx.siteName)}</title>
 <meta name="description" content="${esc(DESCRIPTION)}">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="icon" href="/favicon.png" type="image/png" sizes="48x48">
@@ -450,9 +450,9 @@ export function page(ctx, body, { landing = false } = {}) {
 <meta name="theme-color" content="#2457d6">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="${esc(ctx.siteName)}">
-<meta property="og:title" content="${esc(ctx.siteName)}: remote jobs that actually hire Nigerians">
-<meta property="og:description" content="${esc(DESCRIPTION)}">
-<meta property="og:url" content="${esc(ctx.baseUrl)}/">
+<meta property="og:title" content="${esc(og?.title || `${ctx.siteName}: remote jobs that actually hire Nigerians`)}">
+<meta property="og:description" content="${esc(og?.description || DESCRIPTION)}">
+<meta property="og:url" content="${esc(ctx.baseUrl)}${esc(og?.path || "/")}">
 <meta property="og:image" content="${esc(ctx.baseUrl)}/og.jpg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -1248,4 +1248,66 @@ export function cvPage(ctx, { cv, member }) {
   <button type="submit">Save my CV</button>
 </form>
 <p class="small" style="text-align:center"><a href="/me">Back</a></p>`);
+}
+
+const JOB_STYLE = `<style>
+  .fj-hero { margin:4px 0 18px; padding:22px 20px; border-radius:20px; color:#fff; background:linear-gradient(135deg,#0f1f4d,#2457d6); }
+  .fj-badge { display:inline-block; font-size:.75rem; font-weight:800; letter-spacing:.05em; text-transform:uppercase;
+    background:#ffc75a; color:#1b2440; border-radius:99px; padding:4px 11px; }
+  .fj-hero h1 { margin:12px 0 4px; font-size:1.65rem; line-height:1.2; letter-spacing:-.02em; color:#fff; }
+  .fj-co { opacity:.85; font-weight:600; }
+  .fj-chips { display:flex; flex-wrap:wrap; gap:8px; margin-top:14px; }
+  .fj-chips span { background:#ffffff1f; border:1px solid #ffffff33; border-radius:99px; padding:6px 11px; font-size:.85rem; font-weight:600; }
+  .fj-chips .pay { background:#ffc75a; color:#1b2440; border-color:#ffc75a; font-weight:800; }
+  .fj h2 { font-size:1.05rem; margin:20px 0 8px; }
+  .fj ul { margin:0; padding-left:20px; } .fj li { margin:5px 0; }
+  .fj .muted { color:var(--muted); }
+  .fj-apply { position:relative; margin-top:22px; border-radius:18px; border:2px solid #ffc75a; background:var(--card); padding:18px; overflow:hidden; }
+  .fj-apply h2 { margin-top:0; }
+  .fj-hidden { filter:blur(6px); opacity:.55; user-select:none; pointer-events:none; }
+  .fj-peek { position:relative; margin:-4px 0 14px; }
+  .fj-peek em { position:absolute; inset:0; display:grid; place-items:center; font-style:normal; }
+  .fj-peek em span { background:var(--card); border-radius:99px; padding:7px 14px; font-weight:800; font-size:.88rem;
+    box-shadow:0 6px 20px #0b153033; }
+  .fj-gate { margin:0; }
+  .fj-gate b { font-size:1.15rem; } .fj-gate p { margin:4px 0 10px; color:var(--muted); font-size:.92rem; }
+  .fj-gate input[type=email] { width:100%; padding:13px 14px; border-radius:12px; border:1.5px solid var(--border); font-size:1rem;
+    background:var(--card); color:var(--text); }
+  .fj-gate button, a.fj-go { margin-top:10px; width:100%; display:block; text-align:center; text-decoration:none; padding:14px;
+    border:0; border-radius:12px; background:#ffc75a; color:#1b2440; font-weight:800; font-size:1.05rem; cursor:pointer; }
+  .fj-gate small { display:block; text-align:center; color:var(--muted); margin-top:8px; font-size:.8rem; }
+  .fj-mail { font-size:1.05rem; } .fj-mail code { font-weight:700; background:none; }
+  .fj-tip { margin-top:12px; font-size:.88rem; color:var(--muted); }
+</style>`;
+
+// A shareable job (src/featured.js). Locked: details show, "how to apply" is blurred behind a join form.
+export function featuredJob(ctx, job, slug, { unlocked = false } = {}) {
+  const how = `<h2>How to apply</h2>
+<p class="fj-mail">Email your CV to <code>${esc(job.apply.email)}</code></p>
+<p>Subject: <b>${esc(job.apply.subject)}</b></p>`;
+  const mailto = `mailto:${job.apply.email}?subject=${encodeURIComponent(job.apply.subject)}`;
+  const apply = unlocked
+    ? `<div class="fj-apply">${how}<a class="fj-go" href="${esc(mailto)}">Apply by email</a>
+<p class="fj-tip">💡 Members get a CV tailored to this job in one tap. Your daily matches start tomorrow morning.</p></div>`
+    : `<div class="fj-apply"><h2>How to apply</h2><div class="fj-peek"><div class="fj-hidden" aria-hidden="true">
+<p class="fj-mail">Email your CV to <code>careers@company-hiring.com</code></p><p>Subject: <b>Application for this role</b></p></div>
+<em><span>Hidden until you join</span></em></div>
+<form class="fj-gate" method="post" action="/subscribe">
+<b>Join JobAlert free to see it</b>
+<p>See how to apply, and get jobs like this in your inbox every morning.</p>
+<input type="email" name="email" required placeholder="Your email" autocomplete="email" aria-label="Your email">
+<input type="hidden" name="job" value="${esc(job.keywords)}"><input type="hidden" name="work_type" value="remote">
+<input type="hidden" name="for" value="${esc(slug)}"><input type="hidden" name="heard" value="Job link">
+<input type="text" name="website" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px" aria-hidden="true">
+<button type="submit">Join free &amp; see how to apply</button>
+<small>${ctx.trialDays} days free · no card needed</small></form></div>`;
+  const body = `${JOB_STYLE}<div class="fj"><div class="fj-hero">${job.urgent ? `<span class="fj-badge">🔥 Urgent hire</span>` : ""}
+<h1>${esc(job.title)}</h1><div class="fj-co">${esc(job.company)}</div>
+<div class="fj-chips"><span class="pay">${esc(job.pay)}</span><span>${esc(job.where)}</span><span>${esc(job.level)}</span></div></div>
+<p>${esc(job.summary)}</p>
+<h2>What you'll need</h2><ul>${job.needs.map((n) => `<li>${esc(n)}</li>`).join("")}</ul>
+${job.nice?.length ? `<h2>Nice to have</h2><p class="muted">${job.nice.map(esc).join(" · ")}</p>` : ""}
+${apply}</div>`;
+  return page(ctx, body, { og: { title: `${job.title} at ${job.company}: ${job.pay}, remote`,
+    description: `${job.where}. Join ${ctx.siteName} free to apply.`, path: `/job/${slug}` } });
 }

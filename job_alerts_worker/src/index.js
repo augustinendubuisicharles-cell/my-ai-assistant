@@ -15,6 +15,7 @@ import * as telegram from "./telegram.js";
 import * as firstSearch from "./firstsearch.js";
 import * as letters from "./letters.js";
 import * as admin from "./admin.js";
+import { FEATURED } from "./featured.js";
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
@@ -146,9 +147,15 @@ export async function handle(request, env, q) {
       return msg("Something's missing", "Please enter a valid email, at least one job title, and your preferred area if you chose on-site.",
         { link: "/", linkText: "Go back", status: 400 });
     }
+    // From a shared job page (/job/<slug>): counted as "Job link", and confirming opens that job's apply details.
+    const forJob = Object.hasOwn(FEATURED, String(f.get("for") || "")) ? String(f.get("for")) : "";
+    if (forJob) prefs.heard = "Job link";
     const existing = await db.byEmail(q, email);
     let sub, letter;
-    if (existing?.confirmed) {
+    if (existing?.confirmed && forJob) {
+      sub = existing;
+      letter = mail.jobUnlock(ctx.baseUrl, sub.token, forJob, FEATURED[forJob]);
+    } else if (existing?.confirmed) {
       // Don't let anyone who knows an address change its alerts: email the owner a manage link instead.
       sub = existing;
       letter = mail.manageLink(ctx.baseUrl, sub.token);
@@ -156,13 +163,16 @@ export async function handle(request, env, q) {
       sub = await db.upsertSubscriber(q, email, prefs);
       const referrer = !existing && f.get("ref") ? await db.byRefCode(q, String(f.get("ref"))) : null;
       if (referrer) await db.setReferredBy(q, sub.id, referrer.id);
-      letter = mail.confirmation(ctx.baseUrl, sub.token);
+      letter = mail.confirmation(ctx.baseUrl, sub.token, forJob);
     }
     try {
       await mail.send(env, sub.email, ...letter);
     } catch (e) {
       console.log(`[confirm email] failed for subscriber ${sub.id}: ${e}`);
       return msg("We couldn't send your email", "Please try again in a few minutes.", { status: 502 });
+    }
+    if (existing?.confirmed && forJob) {
+      return msg("Check your inbox 📬", `You're already a member, so we've emailed ${sub.email} the link to apply.`, { ok: true });
     }
     return html(existing?.confirmed ? views.welcomeBack(ctx, sub.email) : views.checkInbox(ctx, sub.email));
   }
@@ -172,6 +182,11 @@ export async function handle(request, env, q) {
     let sub = await db.confirm(q, m[1]);
     if (!sub) return notFound();
     if (!sub.paid_until) sub = await db.startTrial(q, sub.id, ctx.trialDays);
+    const job = url.searchParams.get("job");
+    if (job && Object.hasOwn(FEATURED, job)) {
+      if (!before?.confirmed && db.isPaid(sub)) await firstSearch.start(env, sub.email);
+      return redirect(`/job/${job}?t=${sub.token}`);
+    }
     if (!db.isPaid(sub)) { // trial (or paid time) already used up
       if (ctx.paidService) return html(views.pay(ctx, { sub, heading: "Email confirmed. Pick up where you left off", status: status(ctx, sub) }));
       return msg("Email confirmed", "Your free trial has ended. We'll email you when paid plans open.");
@@ -287,6 +302,14 @@ export async function handle(request, env, q) {
     await db.renewSession(q, session);
     return { "set-cookie": sessionCookie(session) };
   };
+
+  if ((m = path.match(/^\/job\/([\w-]+)$/)) && method === "GET") {
+    const job = Object.hasOwn(FEATURED, m[1]) ? FEATURED[m[1]] : null;
+    if (!job) return notFound();
+    const t = url.searchParams.get("t");
+    const sub = t ? await db.byToken(q, t) : await me();
+    return html(views.featuredJob(ctx, job, m[1], { unlocked: Boolean(sub?.confirmed) }));
+  }
 
   if (path === "/login") {
     if (method === "GET") return (await me()) ? redirect("/me", await stayLoggedIn()) : html(views.loginPage(ctx));
