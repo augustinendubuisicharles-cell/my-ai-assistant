@@ -31,8 +31,13 @@ export const upsertSubscriber = (q, email, p) =>
 export const payingMembers = async (q) =>
   (await one(q, "SELECT count(DISTINCT subscriber_id)::int AS n FROM payments WHERE amount_ngn > 0", []))?.n || 0;
 
-export const confirm = (q, token) =>
-  one(q, `UPDATE subscribers SET confirmed = true WHERE token = $1 RETURNING ${COLS}`, [token]);
+// justConfirmed is true for exactly one request, even if the link is opened twice at the same moment
+// (that would otherwise start two first searches for the same person).
+export async function confirm(q, token) {
+  const first = await one(q, "UPDATE subscribers SET confirmed = true WHERE token = $1 AND NOT confirmed RETURNING id", [token]);
+  const sub = await byToken(q, token);
+  return sub && { ...sub, justConfirmed: Boolean(first) };
+}
 
 export const updatePrefs = (q, token, p) =>
   q(`UPDATE subscribers SET keywords = $2, country = $3, remote_only = $4, city = $5, level = $6, hours = $7 WHERE token = $1`,

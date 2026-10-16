@@ -178,13 +178,13 @@ export async function handle(request, env, q) {
   }
 
   if ((m = path.match(/^\/confirm\/([\w-]+)$/)) && method === "GET") {
-    const before = await db.byToken(q, m[1]);
     let sub = await db.confirm(q, m[1]);
     if (!sub) return notFound();
+    const justConfirmed = sub.justConfirmed;
     if (!sub.paid_until) sub = await db.startTrial(q, sub.id, ctx.trialDays);
     const job = url.searchParams.get("job");
     if (job && Object.hasOwn(FEATURED, job)) {
-      if (!before?.confirmed && db.isPaid(sub)) await firstSearch.start(env, sub.email);
+      if (justConfirmed && db.isPaid(sub)) await firstSearch.start(env, sub.email);
       return redirect(`/job/${job}?t=${sub.token}`);
     }
     if (!db.isPaid(sub)) { // trial (or paid time) already used up
@@ -193,7 +193,7 @@ export async function handle(request, env, q) {
     }
     // First confirmation only: start their first search now instead of waiting for the morning run,
     // and show the jobs as they arrive.
-    const soon = !before?.confirmed ? await firstSearch.start(env, sub.email) : false;
+    const soon = justConfirmed ? await firstSearch.start(env, sub.email) : false;
     if (soon) return redirect(`/found/${sub.token}`);
     return html(views.welcome(ctx, { sub, until: fmtDate(sub.paid_until), trial: !(await db.isMember(q, sub)), soon,
       refLink: await refLink(sub), joined: await db.confirmedReferrals(q, sub.id), paid: await db.paidReferrals(q, sub.id) }));

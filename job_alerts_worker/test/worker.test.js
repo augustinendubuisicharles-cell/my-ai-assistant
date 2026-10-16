@@ -348,6 +348,15 @@ test("a shared job page: details for all, how to apply after joining", async () 
   assert.match(sent.at(-1).htmlContent, new RegExp(`/job/${slug}\\?t=${sub.token}`));
 });
 
+test("opening the confirm link twice at once starts only one first search", async () => {
+  env.GH_TOKEN = "GHTOKEN";
+  env.GITHUB_REPO = "owner/repo";
+  await signUp();
+  const { token } = await subscriber();
+  await Promise.all([call(`/confirm/${token}`), call(`/confirm/${token}`)]);
+  assert.equal(gh.filter((d) => d.inputs?.first === "1").length, 1);
+});
+
 test("without payment keys the site is free", async () => {
   env = { BREVO_API_KEY: "b", FROM_EMAIL: "hi@jobs.test" };
   const home = await (await call("/")).text();
