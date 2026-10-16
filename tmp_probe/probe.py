@@ -1,12 +1,17 @@
-"""Read-only: subscriber 42's tracker rows."""
-from sqlalchemy import text
-from job_alerts import db, send_daily
+"""Read-only: build (not send) a digest with subscriber 42's row 164 as the Did-you-apply item."""
+import traceback
+from datetime import datetime, timezone
+from sqlalchemy import select
+from job_alerts import db, emails
 
 with db.engine.connect() as c:
-    for r in c.execute(text("select id, title, status, status_at, clicked_at, asked_count, sent_at, posted_at, matched is null as m_null, "
-                            "left(matched, 60) as m, url from sent_jobs where subscriber_id=42 and (status is not null or clicked_at is not null) order by id")).mappings():
-        print(dict(r), "open:", send_daily.still_open(r["url"]))
-    print("waiting:", [(w["id"], type(w["matched"]).__name__) for w in db.jobs_waiting(42)])
-    print("ask:", [(w["id"], type(w["matched"]).__name__) for w in db.jobs_to_ask(42)])
-    print("all members' not_yet rows with NULL matched:", c.execute(text("select count(*) from sent_jobs where status='not_yet' and matched is null")).scalar())
-    print("not_yet rows total:", c.execute(text("select count(*) from sent_jobs where status='not_yet'")).scalar())
+    row = dict(c.execute(select(db.sent_jobs).where(db.sent_jobs.c.id == 164)).mappings().first())
+    jobs = [dict(r) for r in c.execute(select(db.sent_jobs).where(db.sent_jobs.c.subscriber_id == 42).order_by(db.sent_jobs.c.id)).mappings()]
+print({k: (v if k != "description" else (v or "")[:40]) for k, v in row.items()})
+for label, kw in (("ask", dict(ask=[row])), ("waiting", dict(waiting=[row])), ("both", dict(ask=[row], waiting=[row]))):
+    try:
+        emails.digest([{**jobs[-1], "matched": ["x"]}], datetime.now(timezone.utc), "https://b", "tok", None,
+                      letters=True, tracker=True, **kw)
+        print(label, "ok")
+    except Exception:
+        print(label, "FAILED"); traceback.print_exc()
