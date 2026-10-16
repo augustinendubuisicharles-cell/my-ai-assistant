@@ -375,6 +375,11 @@ def _fresh(row) -> bool:
     return (_aware(row["posted_at"]) or _aware(row["sent_at"])) >= now() - FRESH
 
 
+def _tracked(row) -> dict:
+    """A stored job as the email's job card expects it: "matched" back to a list (older rows have none)."""
+    return {**row, "matched": [m for m in (row["matched"] or "").split(" · ") if m]}
+
+
 def jobs_to_ask(subscriber_id: int) -> list[dict]:
     """Jobs they opened (or made a CV or letter for) before today, haven't answered about, and are still fresh."""
     start = now().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -382,7 +387,7 @@ def jobs_to_ask(subscriber_id: int) -> list[dict]:
         rows = conn.execute(select(sent_jobs).where(
             sent_jobs.c.subscriber_id == subscriber_id, sent_jobs.c.clicked_at.is_not(None), sent_jobs.c.clicked_at < start,
             sent_jobs.c.status.is_(None), sent_jobs.c.asked_count < ASK_MORNINGS).order_by(sent_jobs.c.clicked_at)).mappings()
-        return [dict(r) for r in rows if _fresh(r)][:5]
+        return [_tracked(r) for r in rows if _fresh(r)][:5]
 
 
 def jobs_waiting(subscriber_id: int) -> list[dict]:
@@ -390,7 +395,7 @@ def jobs_waiting(subscriber_id: int) -> list[dict]:
     with engine.connect() as conn:
         rows = conn.execute(select(sent_jobs).where(sent_jobs.c.subscriber_id == subscriber_id, sent_jobs.c.status == "not_yet")
                             .order_by(sent_jobs.c.status_at)).mappings()
-        return [dict(r) for r in rows if _fresh(r)][:5]
+        return [_tracked(r) for r in rows if _fresh(r)][:5]
 
 
 def mark_asked(ids: list[int]) -> None:
