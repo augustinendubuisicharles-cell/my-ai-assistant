@@ -52,7 +52,8 @@ export function cleanPrefs(f) {
   const remote = f.get("work_type") !== "onsite";
   const city = remote ? "" : String(f.get("city") || "").split(/\s+/).filter(Boolean).join(" ").slice(0, 120);
   if (!words.length || words.some((w) => w.length > 60) || (!remote && !city)) return null;
-  const country = String(f.get("country") || "");
+  // The sign-up cards offer a few countries, then "Another country" with the full list.
+  const country = String((f.get("country") === "other" ? f.get("country_other") : f.get("country")) || "");
   const level = String(f.get("level") || "any");
   const hours = String(f.get("hours") || "any");
   return {
@@ -100,6 +101,7 @@ export async function handle(request, env, q) {
     }
   }
   const msg = (heading, text, opts = {}) => html(views.message(ctx, { heading, text, ...opts }), opts.status || 200);
+  const redirect = (to, headers = {}) => new Response(null, { status: 303, headers: { location: to, ...headers } });
   const notFound = () => msg("Link not recognised", "This link is invalid or you've already unsubscribed.", { status: 404 });
   const refLink = async (sub) => `${ctx.baseUrl}/?ref=${await db.refCode(q, sub)}`;
   let m;
@@ -174,10 +176,24 @@ export async function handle(request, env, q) {
       if (ctx.paidService) return html(views.pay(ctx, { sub, heading: "Email confirmed. Pick up where you left off", status: status(ctx, sub) }));
       return msg("Email confirmed", "Your free trial has ended. We'll email you when paid plans open.");
     }
-    // First confirmation only: start their first search now instead of waiting for the morning run.
+    // First confirmation only: start their first search now instead of waiting for the morning run,
+    // and show the jobs as they arrive.
     const soon = !before?.confirmed ? await firstSearch.start(env, sub.email) : false;
+    if (soon) return redirect(`/found/${sub.token}`);
     return html(views.welcome(ctx, { sub, until: fmtDate(sub.paid_until), trial: !(await db.isMember(q, sub)), soon,
       refLink: await refLink(sub), joined: await db.confirmedReferrals(q, sub.id), paid: await db.paidReferrals(q, sub.id) }));
+  }
+
+  if ((m = path.match(/^\/found\/([\w-]+)$/)) && method === "GET") {
+    const sub = await db.byToken(q, m[1]);
+    if (!sub?.confirmed) return notFound();
+    if (await db.isMember(q, sub)) return redirect("/me");
+    const jobs = await q(`SELECT title, company, location, pay, matched FROM sent_jobs
+      WHERE subscriber_id = $1 AND on_board ORDER BY id LIMIT 3`, [sub.id]);
+    const tries = Math.min(99, Number(url.searchParams.get("n")) || 0);
+    const searched = jobs.length || (await q("SELECT last_run_at FROM subscribers WHERE id = $1", [sub.id]))[0].last_run_at;
+    const state = jobs.length ? "ready" : searched ? "none" : "waiting";
+    return html(views.found(ctx, { sub, jobs, spares: jobs.length ? await db.sparesLeft(q, sub.id) : 0, state, tries }));
   }
 
   if ((m = path.match(/^\/manage\/([\w-]+)$/))) {
@@ -266,7 +282,6 @@ export async function handle(request, env, q) {
   // 30 years. Browsers keep a cookie at most 400 days, so every visit to /login or /me while logged in renews it.
   const session = (request.headers.get("cookie") || "").match(/(?:^|;\s*)ja_session=([\w-]{20,64})/)?.[1];
   const me = async () => (session ? db.bySession(q, session) : null);
-  const redirect = (to, headers = {}) => new Response(null, { status: 303, headers: { location: to, ...headers } });
   const sessionCookie = (value) => `ja_session=${value}; Path=/; Max-Age=${60 * 60 * 24 * db.COOKIE_DAYS}; HttpOnly; Secure; SameSite=Lax`;
   const stayLoggedIn = async () => {
     await db.renewSession(q, session);
