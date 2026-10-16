@@ -10,6 +10,7 @@ import time
 from datetime import datetime, timedelta, timezone
 
 import requests
+from sqlalchemy.exc import IntegrityError
 
 from . import db, emails, mailer, payments
 from .search import clean_keywords, find_jobs, job_key
@@ -74,7 +75,11 @@ def main() -> None:
             # Members' application tracker: ask about jobs they opened, and bring back the "Not yet" ones.
             ask = db.jobs_to_ask(sub["id"]) if member else []
             waiting = [w for w in db.jobs_waiting(sub["id"]) if still_open(w["url"])] if member else []
-            ids = db.record_sent(sub["id"], [{**j, "key": job_key(j)} for j in jobs], board=True)
+            try:
+                ids = db.record_sent(sub["id"], [{**j, "key": job_key(j)} for j in jobs], board=True)
+            except IntegrityError:  # another run started at the same moment already saved (and is sending) these jobs
+                print(f"- subscriber {sub['id']}: skipped, another run is already sending these jobs")
+                continue
             for j, job_id in zip(jobs, ids):
                 j["id"] = job_id
             try:
