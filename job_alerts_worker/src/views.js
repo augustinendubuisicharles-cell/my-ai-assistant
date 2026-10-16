@@ -86,7 +86,7 @@ const STYLE = `
   .plan h3 { margin:0; font-size:1.1rem; }
   .plan .cost { margin:4px 0 12px; color:var(--muted); }
   .plan .cost b { color:var(--text); font-size:1.5rem; }
-  .launch { display:inline-block; margin-top:6px; padding:3px 10px; border-radius:99px; background:#fff1e6; color:#c2410c; font-size:.8rem; font-weight:700; }
+  .launch { display:inline-block; margin-top:6px; padding:4px 10px; border-radius:10px; background:#fff1e6; color:#c2410c; font-size:.8rem; font-weight:700; }
   s { color:var(--muted); font-weight:400; }
   .plan ul { list-style:none; padding:0; margin:0; }
   .plan li { padding:5px 0 5px 26px; position:relative; }
@@ -317,7 +317,10 @@ const LANDING_STYLE = `
     .landing .plans { grid-template-columns:1fr; }
   }
   @media (max-width: 560px) {
-    .landing .wrap { padding:0 16px; } .flow { padding:0 16px; }
+    .landing .wrap { padding-left:16px; padding-right:16px; } .flow { padding:0 16px; }
+    .landing .harder { padding-top:64px; } .harder h2, .landing .plans h2 { font-size:1.85rem; }
+    .pills { gap:10px; } .pills button, .pills button:nth-child(odd), .pills button:nth-child(even) { transform:none; text-align:left; }
+    .answer:empty { min-height:0; margin:0; }
     .nav .brand { font-size:1.25rem; } .nav .brand img { width:38px; height:38px; }
     .job { grid-template-columns:44px 1fr; padding:14px; } .job .av { width:44px; height:44px; } .job .when { display:none; }
     .job:nth-child(2) { transform:rotate(1deg) scale(1.02); } .job:nth-child(3), .job:nth-child(4) { transform:none; }
