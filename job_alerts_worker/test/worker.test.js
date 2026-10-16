@@ -8,7 +8,7 @@ import { createHash, createHmac } from "node:crypto";
 import { PGlite } from "@electric-sql/pglite";
 import * as admin from "../src/admin.js";
 import * as views from "../src/views.js";
-import worker, { handle } from "../src/index.js";
+import worker, { handle, catchUpPayments } from "../src/index.js";
 import COUNTRIES from "../src/countries.js";
 
 const repo = new URL("../../", import.meta.url).pathname;
@@ -59,6 +59,9 @@ async function fakeFetch(url, init = {}) {
   if (u === "https://api.paystack.co/transaction/initialize") {
     txs[body.reference] = body;
     return Response.json({ status: true, data: { authorization_url: "https://checkout.paystack.com/x" } });
+  }
+  if (u.startsWith("https://api.paystack.co/transaction?status=success")) {
+    return Response.json({ status: true, data: [...Object.values(txs).map((t) => ({ reference: t.reference })), { reference: "T_not_ours" }] });
   }
   m = u.match(/^https:\/\/api\.paystack\.co\/transaction\/verify\/(.+)$/);
   if (m) {
@@ -301,6 +304,23 @@ test("Paystack works when only its key is set", async () => {
   const sig = createHmac("sha512", "sk_test_x").update(body).digest("hex");
   assert.equal((await call("/payments/webhook", { method: "POST", body, headers: { "x-paystack-signature": sig } })).status, 200);
   assert.ok(new Date((await subscriber()).paid_until) > new Date());
+});
+
+test("a Paystack payment we never heard about is picked up by the 15-minute check", async () => {
+  env = { BREVO_API_KEY: "b", FROM_EMAIL: "hi@jobs.test", PAYSTACK_SECRET_KEY: "sk_test_x" };
+  await signUp();
+  const { token } = await subscriber();
+  await call(`/confirm/${token}`);
+  await call(`/pay/${token}`, { method: "POST" }); // paid, but no return visit and no webhook
+  const ref = Object.keys(txs)[0];
+  const before = sent.length;
+  assert.deepEqual(await catchUpPayments(env, q), [ref]);
+  assert.equal((await q("SELECT reference FROM payments"))[0].reference, ref);
+  const days = (new Date((await subscriber()).paid_until) - Date.now()) / 86400000;
+  assert.ok(days > 96 && days < 98, `paid days ${days}`); // 90 days on top of the 7-day trial
+  assert.equal(sent.length, before + 1); // our receipt
+  assert.deepEqual(await catchUpPayments(env, q), []); // already recorded: nothing twice
+  assert.equal(sent.length, before + 1);
 });
 
 test("without payment keys the site is free", async () => {

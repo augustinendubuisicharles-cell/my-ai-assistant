@@ -500,6 +500,22 @@ async function rewardReferrer(env, q, ctx, referrerId) {
   }
 }
 
+// Records any successful payment from the last day that isn't in our table yet.
+export async function catchUpPayments(env, q) {
+  if (!payments.provider(env)) return [];
+  const refs = await payments.recentPaidRefs(env);
+  if (!refs.length) return [];
+  const known = new Set((await q("SELECT reference FROM payments WHERE reference = ANY($1)", [refs])).map((r) => r.reference));
+  const ctx = context(env, new Request(env.BASE_URL || "https://jobalert.me.uk"));
+  const added = [];
+  for (const ref of refs.filter((r) => !known.has(r))) {
+    const sub = await applyPayment(env, q, ref, ctx);
+    if (sub?.justPaid) added.push(ref);
+    console.log(`[catch-up] ${ref}: ${sub?.justPaid ? "recorded" : "not recorded"}`);
+  }
+  return added;
+}
+
 async function applyPayment(env, q, ref, ctx) {
   const paid = await payments.verify(env, ref);
   if (!paid) return null;
@@ -527,9 +543,11 @@ export default {
       return html("<h1>Something went wrong</h1><p>Please try again in a minute.</p>", 500);
     }
   },
-  // Cron trigger (wrangler.toml): start the morning job emails on time.
+  // Cron triggers (wrangler.toml): 06:00 starts the morning job emails on time;
+  // every 15 minutes, payments Paystack has but we never heard about are recorded.
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(firstSearch.daily(env));
+    if (event.cron === "0 6 * * *") ctx.waitUntil(firstSearch.daily(env));
+    else ctx.waitUntil(catchUpPayments(env, makeQuery(env)).catch((e) => console.log(`[catch-up] ${e}`)));
   },
 };
 

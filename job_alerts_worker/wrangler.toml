@@ -13,4 +13,4 @@ GITHUB_REPO = "augustinendubuisicharles-cell/my-ai-assistant"   # where the firs
 enabled = true
 
 [triggers]
-crons = ["0 6 * * *"]   # 7am Lagos: starts the morning emails (GitHub's own schedule can run hours late)
+crons = ["0 6 * * *", "*/15 * * * *"]   # 7am Lagos: starts the morning emails (GitHub's own schedule can run hours late); every 15 min: catch missed payments
