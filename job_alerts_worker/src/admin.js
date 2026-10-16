@@ -16,6 +16,14 @@ export const enabled = (env) => adminKey(env).length >= MIN_KEY;
 const digest = async (s) => new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(s)));
 const hex = (b) => [...b].map((x) => x.toString(16).padStart(2, "0")).join("");
 
+// Long error messages (database errors run to several lines) are cut to one short line; the full text shows on hover.
+const SHORT = 80;
+export function short(result) {
+  const line = String(result || "").split("\n")[0].replace(/\((?:psycopg|sqlalchemy)[\w.]*\.(\w+)\)/, "$1").replace(/\s+/g, " ").trim();
+  return line.length > SHORT ? `${line.slice(0, SHORT - 1).trimEnd()}…` : line;
+}
+const full = (result) => (short(result) !== String(result || "").trim() ? ` title="${esc(result)}"` : "");
+
 async function same(x, y) {
   const [a, b] = await Promise.all([digest(x), digest(y)]);
   let diff = 0;
@@ -223,8 +231,8 @@ const PLAN = { member: "Member", trial: "Free trial", expired: "Expired", unconf
 function morning(u) {
   if (!u.confirmed) return `<span class="muted">Not searched until they confirm their email</span>`;
   if (u.status === "expired") return `<span class="muted">Not searched: their trial or membership has ended</span>`;
-  if (u.ranToday) return `<span class="${u.failed ? "bad" : "ok"}">${u.failed ? "✗" : "✓"} This morning: ${esc(u.last_run_result)}</span><div class="small muted">${fmtTime(u.last_run_at)}</div>`;
-  if (u.last_run_at) return `<span class="warn">⚠ Not reached this morning.</span><div class="small muted">Last: ${esc(u.last_run_result)}, ${fmtTime(u.last_run_at)}</div>`;
+  if (u.ranToday) return `<span class="${u.failed ? "bad" : "ok"}"${full(u.last_run_result)}>${u.failed ? "✗" : "✓"} This morning: ${esc(short(u.last_run_result))}</span><div class="small muted">${fmtTime(u.last_run_at)}</div>`;
+  if (u.last_run_at) return `<span class="warn">⚠ Not reached this morning.</span><div class="small muted"${full(u.last_run_result)}>Last: ${esc(short(u.last_run_result))}, ${fmtTime(u.last_run_at)}</div>`;
   if (u.neverSearched) return `<span class="bad">✗ Never searched: their first search didn't start</span>`;
   return `<span class="warn">⚠ No search recorded yet</span>`;
 }
