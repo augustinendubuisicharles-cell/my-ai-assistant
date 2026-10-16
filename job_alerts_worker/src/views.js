@@ -550,20 +550,26 @@ const TRUST_STYLE = `<style>
   .trust h2 { margin:0 0 14px; font-size:1.35rem; letter-spacing:-.02em; }
   .trust ul { list-style:none; margin:0; padding:0; display:grid; gap:12px; }
   .trust li { display:flex; gap:12px; align-items:flex-start; }
-  .trust li b { display:block; } .trust li span { color:var(--muted); font-size:.92rem; }
+  .trust li b { display:block; } .trust li span { display:block; color:var(--muted); font-size:.92rem; }
   .trust i { flex:none; width:30px; height:30px; border-radius:50%; display:grid; place-items:center; font-style:normal; font-weight:800;
     color:var(--ok); background:color-mix(in srgb, var(--ok) 14%, var(--card)); }
   .landing .trust-wrap { padding-top:72px; }
   .found .trust { margin-top:22px; padding:18px; }
+  .trust .mail { display:inline-flex; align-items:center; gap:8px; margin-top:10px; padding:10px 16px; border-radius:999px;
+    background:var(--accent); color:var(--on-accent); font-weight:700; font-size:.92rem; text-decoration:none; }
+  .trust .mail:hover { filter:brightness(1.08); }
+  .trust .mail svg { width:17px; height:17px; }
 </style>`;
 
 export function trust(ctx) {
-  const row = (title, text) => `<li><i>✓</i><div><b>${title}</b><span>${text}</span></div></li>`;
+  const row = (title, text, extra = "") => `<li><i>✓</i><div><b>${title}</b><span>${text}</span>${extra}</div></li>`;
+  const mailIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>`;
   return `${TRUST_STYLE}<section class="trust" aria-labelledby="trust_h"><h2 id="trust_h">Is this real?</h2><ul>
 ${row("Real jobs from real companies", "From over 1,000 companies' own career pages and trusted job boards.")}
 ${row("Every job is checked", "Scams, unpaid work and closed adverts are taken out before they reach you.")}
 ${row("Pay once, no surprises", `${esc(ctx.price)} for ${ctx.months} months. Nothing renews automatically.`)}
-${ctx.contact ? row("Questions? Ask a person", `Email <a href="mailto:${esc(ctx.contact)}">${esc(ctx.contact)}</a> and we'll reply.`) : ""}
+${ctx.contact ? row("Questions? Ask a person", "A real person reads and answers every message.",
+    `<a class="mail" href="mailto:${esc(ctx.contact)}?subject=${encodeURIComponent(`Question about ${ctx.siteName}`)}">${mailIcon}Email us</a>`) : ""}
 </ul></section>`;
 }
 
