@@ -88,6 +88,19 @@ export async function verify(env, ref) {
   return { reference, subscriberId: parseInt(m[1], 10), amount };
 }
 
+// Our references for Paystack charges that succeeded in the last `hours` hours. A backup for
+// when neither the buyer's return visit nor the webhook reaches us (e.g. a bank payment
+// where the buyer closes the page). Each one still goes through verify() before it counts.
+export async function recentPaidRefs(env, hours = 24) {
+  if (provider(env) !== "Paystack") return [];
+  const from = new Date(Date.now() - hours * 3600e3).toISOString();
+  const r = await fetch(`https://api.paystack.co/transaction?status=success&perPage=100&from=${encodeURIComponent(from)}`,
+    { headers: paystackHeaders(env) });
+  const d = await json(r);
+  if (!r.ok || !Array.isArray(d?.data)) throw new Error(`Paystack list failed: ${r.status} ${d?.message}`);
+  return d.data.map((t) => t.reference).filter((ref) => REF_RE.test(ref || ""));
+}
+
 // Checks a webhook came from the provider; returns the reference to verify, or
 // null for events we ignore. Throws on a bad signature.
 export async function webhookRef(env, body, headers) {
