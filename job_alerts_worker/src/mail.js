@@ -58,8 +58,8 @@ You get this because you signed up at <a href="${esc(baseUrl)}" style="color:${M
 </table></td></tr></table></body></html>`;
 }
 
-export function confirmation(baseUrl, token) {
-  const link = `${baseUrl}/confirm/${token}`;
+export function confirmation(baseUrl, token, job = "") {
+  const link = `${baseUrl}/confirm/${token}${job ? `?job=${encodeURIComponent(job)}` : ""}`;
   const body = `<p style="margin:0">Tap the button to confirm your email. That's the last step. We'll start searching straight away.</p>` +
     button(link, "Confirm my job alerts") +
     steps([["Confirm your email", "One tap, right now"],
@@ -69,6 +69,17 @@ export function confirmation(baseUrl, token) {
   return ["Confirm your job alerts 🚀",
     `One click and your jobs are on their way.\n\nConfirm your job alerts here:\n${link}\n\nIf you didn't sign up, ignore this email and nothing more will be sent.`,
     layout(baseUrl, "One click and your job alerts start.", hero("Your jobs are on their way 🚀", "Just confirm it's you."), body)];
+}
+
+// An existing member asked to apply to a shared job: the link opens its apply details.
+export function jobUnlock(baseUrl, token, slug, job) {
+  const link = `${baseUrl}/job/${slug}?t=${token}`;
+  const body = `<p style="margin:0">You're already a member, so here's your link to apply for <b>${esc(job.title)}</b> at ${esc(job.company)}.</p>` +
+    button(link, "See how to apply") +
+    `<p style="color:${MUTED};font-size:13px;margin:6px 0 0">If this wasn't you, ignore this email.</p>`;
+  return [`How to apply: ${job.title} at ${job.company}`,
+    `Here's your link to apply for ${job.title} at ${job.company}:\n${link}\n\nIf this wasn't you, ignore this email.`,
+    layout(baseUrl, `How to apply for ${job.title}.`, hero("Here's how to apply 👇", `${job.title} · ${job.company}`), body)];
 }
 
 export function manageLink(baseUrl, token) {

@@ -323,6 +323,31 @@ test("a Paystack payment we never heard about is picked up by the 15-minute chec
   assert.equal(sent.length, before + 1);
 });
 
+test("a shared job page: details for all, how to apply after joining", async () => {
+  const slug = "vibesmeet-integration-engineer";
+  const locked = await (await call(`/job/${slug}`)).text();
+  assert.match(locked, /Application Integration Engineer/);
+  assert.match(locked, /og:title" content="Application Integration Engineer at VibesMeet/);
+  assert.doesNotMatch(locked, /support@vibesmeet\.com/);
+  assert.equal((await call("/job/nope")).status, 404);
+  // Joining from the page: confirming opens the apply details.
+  await call("/subscribe", { method: "POST", form: { email: "dev@example.com", job: "Software developer", work_type: "remote", for: slug } });
+  const sub = await subscriber();
+  assert.equal(sub.keywords, "Software developer");
+  assert.equal(sub.heard, "Job link");
+  assert.match(sent.at(-1).htmlContent, new RegExp(`/confirm/${sub.token}\\?job=${slug}`));
+  const r = await call(`/confirm/${sub.token}?job=${slug}`);
+  assert.equal(r.headers.get("location"), `/job/${slug}?t=${sub.token}`);
+  const open = await (await call(`/job/${slug}?t=${sub.token}`)).text();
+  assert.match(open, /support@vibesmeet\.com/);
+  assert.match(open, /mailto:support@vibesmeet\.com\?subject=Application%20Integration%20Engineer%20Application/);
+  // Already a member: we email them the link instead of changing anything.
+  const page = await (await call("/subscribe", { method: "POST", form: { email: "dev@example.com", job: "Software developer", work_type: "remote", for: slug } })).text();
+  assert.match(page, /already a member/);
+  assert.match(sent.at(-1).subject, /How to apply: Application Integration Engineer at VibesMeet/);
+  assert.match(sent.at(-1).htmlContent, new RegExp(`/job/${slug}\\?t=${sub.token}`));
+});
+
 test("without payment keys the site is free", async () => {
   env = { BREVO_API_KEY: "b", FROM_EMAIL: "hi@jobs.test" };
   const home = await (await call("/")).text();
