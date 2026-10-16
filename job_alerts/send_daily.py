@@ -37,6 +37,8 @@ def main() -> None:
                 sub = db.start_trial(sub["id"], payments.TRIAL_DAYS)
             remind(sub, base_url)
             if not db.is_paid(sub):
+                if not only and not first:
+                    win_back(sub, base_url)
                 db.note_run(sub["id"], "not active: trial or membership ended")
                 continue
         try:
@@ -128,11 +130,43 @@ def price_now() -> int:
     return _price
 
 
+def places_left() -> int:
+    """Launch-price places still open (0 once the offer is over or can't be counted)."""
+    try:
+        return max(0, payments.LAUNCH_SPOTS - db.paying_members()) if price_now() == payments.LAUNCH_PRICE_NGN else 0
+    except Exception:
+        return 0
+
+
+def win_back(sub: dict, base_url: str) -> None:
+    """Two "we miss you" emails after the free trial (or membership) ends: 1 day after, then 4 days after,
+    each with a few of today's jobs for them and the pay link. Never more than that per ending."""
+    until = db._aware(sub.get("paid_until"))
+    if not until or not payments.enabled():
+        return
+    days = (db.now() - until).days
+    stage = 1 if 1 <= days < 3 else 2 if 4 <= days < 7 else 0
+    sent = (sub.get("winback_sent") or 0) if db._aware(sub.get("winback_for")) == until else 0
+    if not stage or sent >= stage:
+        return
+    try:
+        n, titles = payments.limits(False)
+        jobs = find_jobs(first_titles(sub["keywords"], titles), sub["country"], sub["remote_only"], sub["level"],
+                         db.already_sent(sub["id"]), n=3, city=sub.get("city") or "", hours=sub.get("hours") or "any")
+        subject, text, html = emails.win_back(base_url, sub["token"], jobs, f"₦{price_now():,}", True, places_left(),
+                                              second=stage == 2)
+        mailer.send(sub["email"], subject, text, html, unsubscribe_url=f"{base_url}/unsubscribe/{sub['token']}")
+        db.mark_winback(sub["id"], until, stage)
+        print(f"- subscriber {sub['id']}: we-miss-you email {stage} sent ({len(jobs)} job(s) shown)")
+    except Exception as e:
+        print(f"- subscriber {sub['id']}: we-miss-you email FAILED {e}")
+
+
 def trial_info(sub: dict) -> dict:
     """What the free-trial countdown box in each email needs."""
     left = (db._aware(sub["paid_until"]) - db.now()).total_seconds() / 86400 if sub.get("paid_until") else 0
     jobs, titles = payments.PAID_LIMITS
-    return {"days_left": max(1, math.ceil(left)), "price": f"₦{price_now():,}",
+    return {"days_left": max(1, math.ceil(left)), "price": f"₦{price_now():,}", "places_left": places_left(),
             "perks": f"the {jobs} best jobs every morning and more whenever you ask, all {titles} job titles, a CV tailored to each job, AI cover letters and Telegram alerts, "
                      f"for {payments.PERIOD_DAYS // 30} months", "can_pay": payments.enabled()}
 

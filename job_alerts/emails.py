@@ -142,6 +142,24 @@ def _job_card(j: dict, letter_url: str = "", cv_url: str = "", apply_url: str = 
             + extra + "</div></td></tr></table>")
 
 
+def _last_day_box(trial: dict, pay: str, n: int) -> str:
+    """The trial's last morning: what membership would add to today's jobs, the price and the places left."""
+    places = trial.get("places_left") or 0
+    jobs = f"these {n} jobs" if n != 1 else "this job"
+    return (f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:4px 0 16px"><tr>'
+            f'<td style="background:#fff6e0;border:2px solid {GOLD};border-radius:12px;padding:18px">'
+            f'<div style="font-size:18px;font-weight:800">⏳ Your free trial ends today</div>'
+            f'<div style="margin-top:8px;font-size:14px">Members would get for {jobs}:</div>'
+            f'<div style="margin-top:6px;font-size:14px;line-height:1.7">📄 A CV tailored to each one<br>✍️ A cover letter for each one<br>'
+            f'⭐ The 5 best jobs every morning, and more whenever you ask</div>'
+            + (f'<div style="margin-top:12px"><a href="{_a(pay)}" style="display:inline-block;background:{BLUE};color:#fff;font-weight:700;'
+               f'text-decoration:none;padding:12px 20px;border-radius:8px">Keep my jobs for {escape(trial["price"])}</a></div>'
+               if trial.get("can_pay") else "")
+            + (f'<div style="margin-top:8px;color:{MUTED};font-size:13px">Launch price: {places} place{"s" if places != 1 else ""} left</div>'
+               if places and trial.get("can_pay") else "")
+            + "</td></tr></table>")
+
+
 def _trial_box(trial: dict, pay: str) -> str:
     """Countdown for free-trial users plus, in one line, what members get."""
     days = trial["days_left"]
@@ -232,7 +250,10 @@ def digest(jobs: list[dict], today, base_url: str, token: str, trial: dict | Non
         if letters:
             lines += [f"   Tailored CV: {letter_link(base_url, token, j, 'cv')}", f"   Cover letter: {letter_link(base_url, token, j)}"]
         lines += [""]
-    if trial:
+    if trial and trial["days_left"] <= 1:
+        lines += [f"Your free trial ends today. Members would get a tailored CV and a cover letter for each of these jobs, "
+                  f"and {trial['perks']}." + (f" Keep your jobs for {trial['price']}: {pay}" if trial.get("can_pay") else ""), ""]
+    elif trial:
         lines += [f"{trial['days_left']} day(s) left in your free trial. Members get {trial['perks']}."
                   + (f" Become a member: {pay}" if trial.get("can_pay") else " Membership opens soon."), ""]
     lines += [FOOTER, "", f"Log in: {base_url}/login/{token}", ""] + ([f"My applications: {apps}"] if tracker else []) + [f"Change what you get: {manage}", f"Unsubscribe: {unsub}"]
@@ -250,7 +271,8 @@ def digest(jobs: list[dict], today, base_url: str, token: str, trial: dict | Non
     if waiting:
         body += _heading("Still waiting for you") + "".join(card(j, answers(j)) for j in waiting)
         body += _heading("New today") if jobs else ""
-    body += "".join(card(j) for j in jobs) + (_trial_box(trial, pay) if trial else "")
+    last_day = bool(trial) and trial["days_left"] <= 1
+    body += "".join(card(j) for j in jobs) + ((_last_day_box(trial, pay, n) if last_day else _trial_box(trial, pay)) if trial else "")
     body += f'<p style="color:{MUTED};font-size:13px;margin:6px 0 0">💡 Apply early. {escape(FOOTER)}</p>'
     body += button(f"{base_url}/login/{token}", "Log in")
     footer = ((f'<a href="{_a(apps)}" style="color:{MUTED}">📋 My applications</a> &middot; ' if tracker else "")
@@ -277,6 +299,37 @@ def no_matches_yet(base_url: str, token: str, keywords: str) -> tuple[str, str, 
             + button(manage, "Change my job titles"))
     return "We're searching for your jobs 🔎", text, layout(base_url, "Nothing yet, we'll keep looking every morning.",
                                                            _hero("We're on it 🔎", "No matches yet"), body)
+
+
+def win_back(base_url: str, token: str, jobs: list[dict], price: str, can_pay: bool, places_left: int = 0,
+             second: bool = False) -> tuple[str, str, str]:
+    """After the free trial ends: a few of today's jobs they're missing (titles only; opening one goes to the pay page),
+    the price and the launch places left. Sent 1 day and 4 days after the trial ends."""
+    pay, unsub = f"{base_url}/pay/{token}", f"{base_url}/unsubscribe/{token}"
+    n = len(jobs)
+    head = (f"{n} new job{'s' if n != 1 else ''} matched you today" if n else "New jobs are still coming in")
+    subject = ("Last chance: your jobs are waiting 👀" if second else "We miss you 👋 Your jobs are still coming in")
+    places = f"Launch price: {places_left} place{'s' if places_left != 1 else ''} left." if places_left and can_pay else ""
+    lines = [head + ", but your free trial has ended.", ""]
+    lines += [f"- {j['title']}" + (f" at {j['company']}" if j.get("company") else "") for j in jobs]
+    lines += ["", f"Get them back, with a tailored CV and cover letter for each, for {price}: {pay}" if can_pay else
+              "Paid plans open soon. We'll email you when you can continue.", places, "", f"Unsubscribe: {unsub}"]
+    rows = "".join(
+        f'<tr><td style="padding:12px 14px;border:1px solid {LINE};border-radius:10px;background:#fff">'
+        f'<a href="{_a(pay)}" style="color:{INK};text-decoration:none;font-weight:700">{escape(j["title"])}</a>'
+        + (f'<div style="color:{MUTED};font-size:13px">{escape(j["company"])}</div>' if j.get("company") else "")
+        + '</td></tr><tr><td style="height:8px"></td></tr>' for j in jobs)
+    body = (f'<p style="margin:0 0 14px">{"Your free trial has ended, but the jobs haven't stopped." if not second else "Your jobs are still waiting for you."} '
+            f'Here {"are" if n != 1 else "is"} {"some of " if n > 1 else ""}today\'s:</p>' if n else
+            '<p style="margin:0 0 14px">Your free trial has ended, but new jobs that fit you arrive every morning.</p>')
+    body += f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0">{rows}</table>' if rows else ""
+    body += ((button(pay, f"Get my jobs back for {price}", BLUE)
+              + f'<p style="color:{MUTED};font-size:13px;margin:6px 0 0">A tailored CV and cover letter for each job. '
+              f'Pay once, nothing renews automatically.{(" " + escape(places)) if places else ""}</p>') if can_pay else
+             f'<p style="color:{MUTED};font-size:14px">Paid plans open soon. We\'ll email you when you can continue.</p>')
+    footer = f'<a href="{_a(unsub)}" style="color:{MUTED}">Unsubscribe</a>'
+    return subject, "\n".join(l for l in lines if l is not None), layout(base_url, head, _hero(head + " 👀" if n else "We miss you 👋",
+                                                                 "Your free trial has ended"), body, footer)
 
 
 def update_news(base_url: str, token: str, member: bool, price: str = "") -> tuple[str, str, str]:
