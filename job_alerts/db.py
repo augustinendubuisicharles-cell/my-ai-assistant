@@ -36,6 +36,8 @@ subscribers = Table(
     Column("last_run_result", String(200)),              # what it did: "sent 5 jobs", "no new matches", "FAILED: ..."
     Column("confirm_reminded_at", DateTime(timezone=True)),  # one "please confirm" reminder for unconfirmed sign-ups
     Column("titles_tip_at", DateTime(timezone=True)),    # one "try broader job titles" email when nothing ever matched
+    Column("winback_for", DateTime(timezone=True)),      # paid_until the "we miss you" emails were sent for
+    Column("winback_sent", Integer, nullable=False, server_default="0"),  # how many of them (1 or 2)
 )
 
 payments = Table(
@@ -145,7 +147,8 @@ def init_db() -> None:
              "ref_code": "VARCHAR(16)", "referred_by": "INTEGER", "ref_rewards": "INTEGER NOT NULL DEFAULT 0",
              "last_run_at": "TIMESTAMP WITH TIME ZONE", "last_run_result": "VARCHAR(200)",
              "confirm_reminded_at": "TIMESTAMP WITH TIME ZONE", "titles_tip_at": "TIMESTAMP WITH TIME ZONE",
-             "hours": "VARCHAR(10) NOT NULL DEFAULT 'any'", "whatsapp": "VARCHAR(20)", "heard": "VARCHAR(30)"}
+             "hours": "VARCHAR(10) NOT NULL DEFAULT 'any'", "whatsapp": "VARCHAR(20)", "heard": "VARCHAR(30)",
+             "winback_for": "TIMESTAMP WITH TIME ZONE", "winback_sent": "INTEGER NOT NULL DEFAULT 0"}
     with engine.begin() as conn:
         for name, sql_type in added.items():
             if name not in have:
@@ -310,6 +313,11 @@ def mark(subscriber_id: int, column: str) -> None:
     """Stamps one of the once-only email columns (confirm_reminded_at, titles_tip_at) with now."""
     with engine.begin() as conn:
         conn.execute(update(subscribers).where(subscribers.c.id == subscriber_id).values({column: now()}))
+
+
+def mark_winback(subscriber_id: int, paid_until: datetime, sent: int) -> None:
+    with engine.begin() as conn:
+        conn.execute(update(subscribers).where(subscribers.c.id == subscriber_id).values(winback_for=paid_until, winback_sent=sent))
 
 
 def mark_reminded(subscriber_id: int, paid_until: datetime) -> None:

@@ -158,6 +158,7 @@ test("home page shows the trial, the price and the form", async () => {
   // Sign-up is four cards: jobs, country, experience, then email last.
   assert.match(page, /What job do you want\?[\s\S]*Where do you live\?[\s\S]*How much experience\?[\s\S]*Where should we send your jobs\?/);
   assert.match(page, /action="\/subscribe"/);
+  assert.match(page, /Is this real\?[\s\S]*₦5,000 for 3 months\. Nothing renews automatically/);
   assert.doesNotMatch(page, /people getting alerts/); // no counts until there are 10+
 });
 
@@ -847,6 +848,7 @@ test("after confirming, new sign-ups wait for their first jobs, then see 3 with 
   assert.doesNotMatch(ready, /Secret Job|Hidden Co/); // the blurred jobs aren't the real ones
   assert.match(ready, new RegExp(`href="/pay/${s.token}">Unlock all, ₦5,000<small>Get a tailored CV and cover letter for each job`));
   assert.match(ready, new RegExp(`href="/login/${s.token}">start the free trial`));
+  assert.match(ready, /Is this real\?[\s\S]*Every job is checked[\s\S]*Nothing renews automatically/);
 
   await q("DELETE FROM sent_jobs");
   assert.match(await (await call(`/found/${s.token}`)).text(), /Change my job titles/); // searched, nothing found

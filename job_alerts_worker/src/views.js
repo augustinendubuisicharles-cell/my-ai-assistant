@@ -407,6 +407,8 @@ function landing(ctx, formHtml) {
 </ol>
 </section>
 
+${ctx.paidService ? `<section class="wrap trust-wrap">${trust(ctx)}</section>` : ""}
+
 <section class="wrap harder">
   <h2>What's <em>harder</em> for you right now?</h2>
   <p>Tap one.</p>
@@ -542,6 +544,29 @@ export function checkInbox(ctx, email) {
 <p class="note">Can't find it? Check Spam or Promotions${ctx.fromEmail ? `. It comes from <b>${esc(ctx.fromEmail)}</b>` : ""}.</p>`);
 }
 
+// "Is this real?": the answers people from an ad want before they pay. Facts only, no made-up reviews.
+const TRUST_STYLE = `<style>
+  .trust { max-width:860px; margin:0 auto; padding:24px; border-radius:22px; background:var(--card); border:1px solid var(--border); }
+  .trust h2 { margin:0 0 14px; font-size:1.35rem; letter-spacing:-.02em; }
+  .trust ul { list-style:none; margin:0; padding:0; display:grid; gap:12px; }
+  .trust li { display:flex; gap:12px; align-items:flex-start; }
+  .trust li b { display:block; } .trust li span { color:var(--muted); font-size:.92rem; }
+  .trust i { flex:none; width:30px; height:30px; border-radius:50%; display:grid; place-items:center; font-style:normal; font-weight:800;
+    color:var(--ok); background:color-mix(in srgb, var(--ok) 14%, var(--card)); }
+  .landing .trust-wrap { padding-top:72px; }
+  .found .trust { margin-top:22px; padding:18px; }
+</style>`;
+
+export function trust(ctx) {
+  const row = (title, text) => `<li><i>✓</i><div><b>${title}</b><span>${text}</span></div></li>`;
+  return `${TRUST_STYLE}<section class="trust" aria-labelledby="trust_h"><h2 id="trust_h">Is this real?</h2><ul>
+${row("Real jobs from real companies", "From over 1,000 companies' own career pages and trusted job boards.")}
+${row("Every job is checked", "Scams, unpaid work and closed adverts are taken out before they reach you.")}
+${row("Pay once, no surprises", `${esc(ctx.price)} for ${ctx.months} months. Nothing renews automatically.`)}
+${ctx.contact ? row("Questions? Ask a person", `Email <a href="mailto:${esc(ctx.contact)}">${esc(ctx.contact)}</a> and we'll reply.`) : ""}
+</ul></section>`;
+}
+
 // Right after confirming: their first jobs (3 shown, the rest blurred), with the membership offer.
 // Until the first search has run, a short wait page that reloads itself.
 const FOUND_STYLE = `<style>
@@ -587,7 +612,8 @@ ${jobs.map(card).join("")}
 ${spares ? `<div class="blurred" aria-hidden="true"><div class="fjob"><b>Customer Success Associate</b><span>Remote · Worldwide</span></div>
 <div class="fjob"><b>Operations Assistant</b><span>Remote · EMEA</span></div><em><span>+${spares} more job${spares === 1 ? "" : "s"}</span></em></div>` : ""}
 ${ctx.paidService ? `<a class="unlock" href="/pay/${t}">${spares ? "Unlock all" : "Get 5 jobs a day"}, ${esc(ctx.price)}<small>Get a tailored CV and cover letter for each job</small></a>` : ""}
-<p class="trial">or <a href="/login/${t}">start the free trial</a></p></div>`);
+<p class="trial">or <a href="/login/${t}">start the free trial</a></p>
+${ctx.paidService ? trust(ctx) : ""}</div>`);
 }
 
 // Someone signed up again with an address that's already confirmed: nothing changes, and the
