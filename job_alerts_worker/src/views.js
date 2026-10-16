@@ -327,6 +327,34 @@ const LANDING_STYLE = `
     .hardwork { padding:18px; }
   }
   @media (prefers-reduced-motion: reduce) { .job, .answer span { animation:none; } }
+  /* Sign-up cards: one question at a time, email last. Without JavaScript every card shows at once. */
+  .cards .progress { display:flex; gap:6px; margin-bottom:6px; }
+  .cards .progress i { flex:1; height:5px; border-radius:5px; background:#e4e9f2; }
+  .cards .progress i.on { background:#ff9f1c; }
+  .cards .count { font-size:.8rem; color:var(--muted); font-weight:600; }
+  .cards .step + .step { margin-top:22px; }
+  .js .cards .step + .step { margin-top:0; }
+  .js .cards .step:not(.now) { display:none; }
+  .cards h2 { font-size:1.45rem; letter-spacing:-.025em; line-height:1.2; margin:10px 0 4px; font-weight:800; }
+  .cards .sub { color:var(--muted); font-size:.9rem; margin:0 0 14px; }
+  .cards .chips { display:flex; flex-wrap:wrap; gap:8px; }
+  .cards .chips input, .cards .opts input { position:absolute; opacity:0; pointer-events:none; }
+  .cards .chips label { margin:0; padding:9px 14px; border-radius:99px; border:1.5px solid var(--border); font-weight:600; font-size:.92rem; cursor:pointer; }
+  .cards .chips input:checked + label { background:#1f5fe0; border-color:#1f5fe0; color:#fff; }
+  .cards .chips input:disabled + label { opacity:.45; cursor:default; }
+  .cards .chips input:focus-visible + label, .cards .opts input:focus-visible + label { outline:3px solid #1f6bff66; outline-offset:2px; }
+  .cards .opts { display:grid; gap:10px; }
+  .cards .opts label { margin:0; display:flex; justify-content:space-between; align-items:center; gap:12px; padding:14px 16px; border-radius:14px;
+    border:1.5px solid var(--border); font-weight:700; cursor:pointer; }
+  .cards .opts label small { display:block; font-weight:500; color:var(--muted); font-size:.82rem; }
+  .cards .opts label::after { content:""; flex:none; width:18px; height:18px; border-radius:50%; border:2px solid var(--border); }
+  .cards .opts input:checked + label { border-color:#1f5fe0; background:color-mix(in srgb, #1f6bff 8%, var(--card)); }
+  .cards .opts input:checked + label::after { border:6px solid #1f5fe0; }
+  .cards .hours { margin-top:14px; }
+  .cards .navrow { display:flex; gap:10px; margin-top:18px; }
+  .cards .navrow button { margin:0; }
+  .landing .cards button.back { width:auto; flex:none; padding:14px 18px; background:none; color:var(--muted); box-shadow:none; font-weight:700; }
+  .cards #country_box[hidden] { display:none; }
 `;
 
 const FLOW_ICONS = {
@@ -396,8 +424,7 @@ function landing(ctx, formHtml) {
       out.innerHTML = ""; var s = document.createElement("span"); s.textContent = b.dataset.a; out.appendChild(s);
     }); });
     document.querySelector(".hardwork").addEventListener("click", function (e) {
-      e.preventDefault(); var f = document.getElementById("prefs"); f.scrollIntoView({ behavior: "smooth", block: "center" });
-      setTimeout(function () { document.getElementById("email").focus({ preventScroll: true }); }, 500);
+      e.preventDefault(); document.getElementById("prefs").scrollIntoView({ behavior: "smooth", block: "center" });
     });
   })();
 </script>`;
@@ -515,6 +542,54 @@ export function checkInbox(ctx, email) {
 <p class="note">Can't find it? Check Spam or Promotions${ctx.fromEmail ? `. It comes from <b>${esc(ctx.fromEmail)}</b>` : ""}.</p>`);
 }
 
+// Right after confirming: their first jobs (3 shown, the rest blurred), with the membership offer.
+// Until the first search has run, a short wait page that reloads itself.
+const FOUND_STYLE = `<style>
+  .found .hero { text-align:left; }
+  .found .ready { font-size:.8rem; font-weight:800; letter-spacing:.06em; text-transform:uppercase; color:#ff9f1c; }
+  .found h1 { margin:6px 0 4px; }
+  .fjob { border:1px solid var(--border); border-radius:14px; padding:13px 15px; margin-bottom:10px; background:var(--card); }
+  .fjob b { display:block; } .fjob span { color:var(--muted); font-size:.88rem; }
+  .fjob i { display:inline-block; margin-top:7px; font-style:normal; font-size:.75rem; font-weight:700; color:var(--ok); background:color-mix(in srgb, var(--ok) 12%, var(--card)); border-radius:20px; padding:3px 9px; }
+  .blurred { position:relative; } .blurred .fjob { filter:blur(5px); opacity:.6; user-select:none; }
+  .blurred em { position:absolute; inset:0; display:grid; place-items:center; font-style:normal; }
+  .blurred em span { background:var(--card); border-radius:99px; padding:8px 16px; font-weight:800; box-shadow:0 6px 20px #0b153033; }
+  a.unlock { display:block; text-align:center; text-decoration:none; margin-top:16px; padding:15px; border-radius:14px; background:#ffc75a; color:#1b2440; font-weight:800; font-size:1.1rem; }
+  a.unlock small { display:block; font-size:.85rem; font-weight:600; margin-top:3px; }
+  .found .trial { text-align:center; color:var(--muted); font-size:.92rem; margin-top:12px; }
+  .found .trial a { font-weight:700; }
+  .spin { width:44px; height:44px; border-radius:50%; border:4px solid var(--border); border-top-color:var(--accent); animation:spin 1s linear infinite; margin:10px 0 18px; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spin { animation:none; } }
+</style>`;
+
+export function found(ctx, { sub, jobs, spares, state, tries = 0 }) {
+  const t = esc(sub.token);
+  if (state === "waiting") {
+    const next = tries < 36 ? `<meta http-equiv="refresh" content="5;url=/found/${t}?n=${tries + 1}">` : "";
+    return page(ctx, `${FOUND_STYLE}${next}<div class="found"><div class="hero"><div class="spin" role="status" aria-label="Searching"></div>
+<h1>Finding your jobs 🔎</h1><p>${tries < 36 ? "This takes about a minute. Keep this page open." : "Still searching. Your jobs will be in your inbox shortly."}</p></div></div>`);
+  }
+  if (state === "none") {
+    return page(ctx, `${FOUND_STYLE}<div class="found"><div class="hero"><h1>We're on it 🔎</h1>
+<p>Nothing fits yet, but new jobs arrive every morning. Broader job titles find more.</p></div>
+<a class="btn" href="/manage/${t}">Change my job titles</a></div>`);
+  }
+  const card = (j) => {
+    const tags = String(j.matched || "").split(" · ").filter((m) => /^open to |entry-level|part-time|full-time/.test(m)).slice(0, 2);
+    return `<div class="fjob"><b>${esc(j.title)}</b><span>${esc([j.company, j.location, j.pay].filter(Boolean).join(" · "))}</span>${
+      tags.map((m) => `<br><i>✓ ${esc(m)}</i>`).join("")}</div>`;
+  };
+  const total = jobs.length + spares;
+  return page(ctx, `${FOUND_STYLE}<div class="found"><div class="hero"><span class="ready">Your jobs are ready</span>
+<h1>We found ${total} job${total === 1 ? "" : "s"} for you</h1></div>
+${jobs.map(card).join("")}
+${spares ? `<div class="blurred" aria-hidden="true"><div class="fjob"><b>Customer Success Associate</b><span>Remote · Worldwide</span></div>
+<div class="fjob"><b>Operations Assistant</b><span>Remote · EMEA</span></div><em><span>+${spares} more job${spares === 1 ? "" : "s"}</span></em></div>` : ""}
+${ctx.paidService ? `<a class="unlock" href="/pay/${t}">${spares ? "Unlock all" : "Get 5 jobs a day"}, ${esc(ctx.price)}<small>Get a tailored CV and cover letter for each job</small></a>` : ""}
+<p class="trial">or <a href="/login/${t}">start the free trial</a></p></div>`);
+}
+
 // Someone signed up again with an address that's already confirmed: nothing changes, and the
 // manage link goes to their inbox, so only the address owner can change or pay.
 export function welcomeBack(ctx, email) {
@@ -581,6 +656,108 @@ function plans(ctx) {
   ${li("No auto-renewal; we remind you before it ends")}
 </ul></div></section>`;
 }
+
+// The home page's sign-up: four cards, one question each, email last (fields as in form(), so /subscribe is unchanged).
+const QUICK_COUNTRIES = ["Nigeria", "Ghana", "Kenya", "South Africa"];
+
+function signupCards(ctx, ref) {
+  const bar = (n) => `<div class="progress">${[1, 2, 3, 4].map((i) => `<i${i <= n ? ' class="on"' : ""}></i>`).join("")}</div>
+  <span class="count">${n < 4 ? `${n} of 4` : "Last step"}</span>`;
+  const nav = (n, next = "Next") => `<div class="navrow">${n > 1 ? '<button type="button" class="back">Back</button>' : ""}${
+    n < 4 ? `<button type="button" class="next">${next}</button>` : '<button type="submit" id="submit">Send me jobs</button>'}</div>`;
+  const opt = (name, value, text, hint = "", checked = false) => `<input id="${name}_${esc(value || "any").replace(/\W/g, "_")}" name="${name}" type="radio" value="${esc(value)}"${chk(checked)}>
+    <label for="${name}_${esc(value || "any").replace(/\W/g, "_")}"><span>${text}${hint ? `<small>${hint}</small>` : ""}</span></label>`;
+  return `<form class="card cards" method="post" action="/subscribe" id="prefs" novalidate>
+<section class="step now" data-step="1">${bar(1)}
+  <h2>What job do you want?</h2><p class="sub">Pick up to 5</p>
+  <div class="chips">${JOBS.map((j, i) => `<input id="job${i}" name="job" type="checkbox" value="${esc(j)}"><label for="job${i}">${esc(j)}</label>`).join("")}</div>
+  <label for="other">Something else <span class="hint">Separate with commas</span></label>
+  <input id="other" name="other" type="text" maxlength="200" placeholder="e.g. public relations">
+  ${nav(1)}
+</section>
+<section class="step" data-step="2">${bar(2)}
+  <h2>Where do you live?</h2><p class="sub">We only send jobs open to your country</p>
+  <div class="opts">${QUICK_COUNTRIES.map((c, i) => opt("country", c, esc(c), "", i === 0)).join("")}
+  ${opt("country", "other", "Another country")}</div>
+  <div id="country_box" hidden><label for="country_pick">Your country</label>
+  <select id="country_pick" name="country_other"><option value="">Anywhere / don't filter</option>
+    ${COUNTRIES.filter((c) => !QUICK_COUNTRIES.includes(c)).map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join("")}</select></div>
+  ${nav(2)}
+</section>
+<section class="step" data-step="3">${bar(3)}
+  <h2>How much experience?</h2>
+  <div class="opts">${opt("level", "entry", "Just starting", "Entry level, junior", true)}${opt("level", "mid", "A few years", "Mid level")}${opt("level", "any", "Any level")}</div>
+  <label id="hours_label">Hours</label>
+  <div class="hours" role="radiogroup" aria-labelledby="hours_label">
+    ${[["any", "Any"], ["full", "Full-time"], ["part", "Part-time"]].map(([v, l]) =>
+      `<input id="h_${v}" name="hours" type="radio" value="${v}"${chk(v === "any")}><label for="h_${v}">${l}</label>`).join("")}
+  </div>
+  ${nav(3)}
+</section>
+<section class="step" data-step="4">${bar(4)}
+  <h2>Where should we send your jobs?</h2>
+  <input id="email" name="email" type="email" required maxlength="320" placeholder="you@example.com" autocomplete="email">
+  <label for="heard">How did you hear about us? <span class="hint">Optional</span></label>
+  <select id="heard" name="heard"><option value="">Choose one</option>${HEARD.map((h) => `<option>${esc(h)}</option>`).join("")}</select>
+  <input class="hp" name="website" tabindex="-1" autocomplete="off">${ref ? `
+  <input type="hidden" name="ref" value="${esc(ref)}">` : ""}
+  ${nav(4)}
+  <p class="free">${ctx.trialDays} days free &middot; no card</p>
+</section>
+</form>`;
+}
+
+const SIGNUP_SCRIPT = `<script>
+  (function () {
+    var form = document.getElementById("prefs"), steps = form.querySelectorAll(".step"), at = 0;
+    document.documentElement.classList.add("js");
+    var boxes = form.querySelectorAll("input[name=job]"), other = document.getElementById("other");
+    var countryBox = document.getElementById("country_box");
+    function chosen() {
+      var list = [];
+      boxes.forEach(function (b) { if (b.checked) list.push(b.value); });
+      other.value.split(",").forEach(function (w) { if (w.trim()) list.push(w.trim()); });
+      return list;
+    }
+    function syncJobs() {
+      var n = chosen().length;
+      boxes.forEach(function (b) { b.disabled = !b.checked && n >= 5; });
+    }
+    function show(i) {
+      steps[at].classList.remove("now"); at = i; steps[at].classList.add("now");
+      var first = steps[at].querySelector("input:not([type=hidden]):not(.hp), select");
+      if (first && at === 3) first.focus();
+    }
+    function ok() {
+      if (at === 0) {
+        var n = chosen().length;
+        other.setCustomValidity(!n ? "Pick at least one job, or type your own" : n > 5 ? "Pick up to 5 jobs" : "");
+        if (!other.reportValidity()) return false;
+        other.setCustomValidity("");
+      }
+      return true;
+    }
+    form.addEventListener("input", syncJobs);
+    form.addEventListener("change", function () {
+      var c = form.querySelector("input[name=country]:checked");
+      countryBox.hidden = !(c && c.value === "other");
+    });
+    form.querySelectorAll(".next").forEach(function (b) { b.addEventListener("click", function () { if (ok()) show(at + 1); }); });
+    form.querySelectorAll(".back").forEach(function (b) { b.addEventListener("click", function () { show(at - 1); }); });
+    form.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" && at < 3 && e.target.tagName !== "BUTTON") { e.preventDefault(); if (ok()) show(at + 1); }
+    });
+    form.addEventListener("submit", function (e) {
+      var email = document.getElementById("email");
+      if (!chosen().length) { e.preventDefault(); show(0); ok(); return; }
+      if (!email.checkValidity()) { e.preventDefault(); email.reportValidity(); return; }
+      var b = document.getElementById("submit");
+      b.disabled = true;
+      b.textContent = "Sending...";
+    });
+    syncJobs();
+  })();
+</script>`;
 
 const FORM_SCRIPT = `<script>
   (function () {
@@ -724,7 +901,7 @@ export function form(ctx, { sub = null, action, button, heading, lead, status = 
   ${sub ? "" : `<p class="free">${ctx.trialDays} days free &middot; no card</p>`}
 </form>`;
   const script = FORM_SCRIPT;
-  if (!sub) return page(ctx, landing(ctx, formHtml) + script, { landing: true });
+  if (!sub) return page(ctx, landing(ctx, signupCards(ctx, ref)) + SIGNUP_SCRIPT, { landing: true });
   return page(ctx, `${intro}
 ${statusBox}${member ? `<a class="card apps-link" href="/applications/${esc(sub.token)}">📋 My applications <span>&rarr;</span></a>` : ""}${telegramBox}${whatsappBox}
 ${formHtml}

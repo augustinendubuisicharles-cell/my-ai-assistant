@@ -155,7 +155,9 @@ test("home page shows the trial, the price and the form", async () => {
   assert.match(page, /<b>3 jobs<\/b>[\s\S]*<b>₦5,000<\/b> for 3 months[\s\S]*<b>5 best jobs<\/b>/);
   assert.match(page, /₦5,000/);
   assert.match(page, /7 days free/);
-  assert.match(page, /How do you want to work\?/);
+  // Sign-up is four cards: jobs, country, experience, then email last.
+  assert.match(page, /What job do you want\?[\s\S]*Where do you live\?[\s\S]*How much experience\?[\s\S]*Where should we send your jobs\?/);
+  assert.match(page, /action="\/subscribe"/);
   assert.doesNotMatch(page, /people getting alerts/); // no counts until there are 10+
 });
 
@@ -411,7 +413,9 @@ test("confirming starts the first job search once, and says jobs arrive in minut
   env.GITHUB_REPO = "owner/repo";
   await call("/subscribe", { method: "POST", form: { email: "new@example.com", keywords: "pr", work_type: "remote" } });
   const fresh = (await q("SELECT token FROM subscribers WHERE email = 'new@example.com'"))[0].token;
-  assert.match(await (await call(`/confirm/${fresh}`)).text(), /In a few minutes/);
+  const r = await call(`/confirm/${fresh}`);
+  assert.equal(r.status, 303);
+  assert.equal(r.headers.get("location"), `/found/${fresh}`);
   assert.deepEqual(gh, [{ ref: "main", inputs: { only_email: "new@example.com", first: "1" } }]);
   await call(`/confirm/${fresh}`); // clicking the link again doesn't search again
   assert.equal(gh.length, 1);
@@ -808,4 +812,42 @@ test("the search form saves Hours (any, full-time or part-time), and junk values
   await call(`/manage/${sub.token}`, { method: "POST", form: { job: "Virtual assistant", country: "Nigeria", work_type: "remote", level: "any", hours: "weekends" } });
   sub = await subscriber();
   assert.equal(sub.hours, "any");
+});
+
+test("the sign-up cards' 'Another country' list is saved like the main list", async () => {
+  await signUp({ country: "other", country_other: "Egypt" });
+  assert.equal((await subscriber()).country, "Egypt");
+  await call("/subscribe", { method: "POST", form: { email: "b@example.com", job: "Customer support", country: "other", country_other: "Atlantis" } });
+  assert.equal((await q("SELECT country FROM subscribers WHERE email = 'b@example.com'"))[0].country, "");
+});
+
+test("after confirming, new sign-ups wait for their first jobs, then see 3 with the rest blurred and the offer", async () => {
+  await signUp();
+  const s = await subscriber();
+  assert.equal((await call(`/found/${s.token}`)).status, 404); // not confirmed yet
+  await call(`/confirm/${s.token}`);
+  const waiting = await (await call(`/found/${s.token}`)).text();
+  assert.match(waiting, /Finding your jobs/);
+  assert.match(waiting, new RegExp(`http-equiv="refresh" content="5;url=/found/${s.token}\\?n=1"`));
+  assert.doesNotMatch(await (await call(`/found/${s.token}?n=36`)).text(), /http-equiv="refresh"/); // stops reloading after ~3 minutes
+
+  for (const [i, title] of ["Virtual Assistant", "Data Entry Clerk", "Admin Assistant"].entries()) {
+    await q(`INSERT INTO sent_jobs (subscriber_id, job_key, sent_at, title, company, location, matched, on_board)
+      VALUES ($1, $2, now(), $3, 'Acme', 'Worldwide', 'open to Nigeria · remote, Worldwide', true)`, [s.id, `k${i}`, title]);
+  }
+  for (let i = 0; i < 12; i++) {
+    await q(`INSERT INTO spare_jobs (subscriber_id, rank, job_key, title, company, url) VALUES ($1, $2, $3, 'Secret Job', 'Hidden Co', 'https://x')`, [s.id, i, `spare${i}`]);
+  }
+  await q("UPDATE subscribers SET last_run_at = now() WHERE id = $1", [s.id]);
+  const ready = await (await call(`/found/${s.token}`)).text();
+  assert.match(ready, /We found 15 jobs for you/);
+  assert.match(ready, /Virtual Assistant[\s\S]*Data Entry Clerk[\s\S]*Admin Assistant/);
+  assert.match(ready, /✓ open to Nigeria/);
+  assert.match(ready, /\+12 more jobs/);
+  assert.doesNotMatch(ready, /Secret Job|Hidden Co/); // the blurred jobs aren't the real ones
+  assert.match(ready, new RegExp(`href="/pay/${s.token}">Unlock all, ₦5,000<small>Get a tailored CV and cover letter for each job`));
+  assert.match(ready, new RegExp(`href="/login/${s.token}">start the free trial`));
+
+  await q("DELETE FROM sent_jobs");
+  assert.match(await (await call(`/found/${s.token}`)).text(), /Change my job titles/); // searched, nothing found
 });

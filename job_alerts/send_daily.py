@@ -53,7 +53,7 @@ def main() -> None:
                 print(f"- subscriber {sub['id']}: searching {first_titles(sub['keywords'], titles)!r}, country "
                       f"{sub['country'] or 'any'}, {'remote' if sub['remote_only'] else 'on-site near ' + (sub.get('city') or '?')}, "
                       f"level {sub['level']}, hours {sub.get('hours') or 'any'}, {len(sent_before)} job(s) already sent")
-            spares = [] if member else None  # members can ask for more from their dashboard
+            spares = []  # members ask for more from their dashboard; trial users see how many are waiting
             jobs = find_jobs(first_titles(sub["keywords"], titles), sub["country"], sub["remote_only"], sub["level"],
                              sent_before, n=n, city=sub.get("city") or "", minimum=payments.DAILY_MINIMUM[member],
                              hours=sub.get("hours") or "any", cv=(sub.get("cv_text") or "") if member else None,
@@ -84,8 +84,7 @@ def main() -> None:
             except Exception:
                 db.unsend(ids)
                 raise
-            if member:
-                db.save_spares(sub["id"], [{**j, "key": job_key(j)} for j in spares])
+            db.save_spares(sub["id"], [{**j, "key": job_key(j)} for j in spares])
             db.mark_asked([a["id"] for a in ask])
             sent += 1
             extra = (f", asked about {len(ask)}" if ask else "") + (f", {len(waiting)} waiting" if waiting else "")
