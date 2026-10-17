@@ -334,12 +334,12 @@ def win_back(base_url: str, token: str, jobs: list[dict], price: str, can_pay: b
 
 # Mirrors RELATED in job_alerts_worker/src/views.js, for the examples in similar_jobs_news.
 RELATED = {
-    "Virtual assistant": ["Executive assistant", "Administrative assistant", "Personal assistant", "Data entry"],
+    "Virtual assistant": ["Executive assistant", "Administrative assistant", "Personal assistant", "Data entry", "AI trainer"],
     "Customer support": ["Customer service", "Customer success", "Live chat agent", "Technical support"],
     "Software developer": ["Mobile developer", "Full stack developer", "Frontend developer", "Backend developer",
                            "Machine learning engineer", "AI engineer"],
     "Data analyst": ["Business analyst", "Data scientist", "Research analyst", "BI analyst"],
-    "Content writer": ["Copywriter", "Technical writer", "SEO writer", "Editor"],
+    "Content writer": ["Copywriter", "Technical writer", "SEO writer", "Editor", "Prompt engineer"],
     "Social media manager": ["Community manager", "Content creator", "Social media marketer", "Video editor"],
     "Graphic designer": ["UI/UX designer", "Brand designer", "Illustrator", "Motion designer"],
     "Digital marketing": ["SEO specialist", "Email marketing", "Marketing assistant", "Growth marketer"],
