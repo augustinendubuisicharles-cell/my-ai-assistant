@@ -922,6 +922,18 @@ def sent_keys(stored: set[str]) -> set[str]:
     return {part for value in stored for part in value.split("\t") if part}
 
 
+# Jobs already sent to someone in the last 14 days (db.recent_jobs, loaded by send_daily). Adverts drop out of
+# the live feeds after a few days but are often still open, so a new user whose titles are quiet today can
+# still get them. They pass every check like any other listing (age, country, level, hours, never sent twice).
+BACKLOG: list[dict] = []
+
+
+def set_backlog(rows: list[dict]) -> None:
+    BACKLOG[:] = [{**_raw(r["title"], r["company"], r["location"], r["url"], r["source"] or "Earlier matches",
+                          r["posted_at"], r["description"], "remote" in (r["matched"] or "").lower(), pay=r["pay"] or ""),
+                   "backlog": True} for r in rows if r.get("title")]
+
+
 def _search(keywords: list[str], country: str, remote_only: bool, level: str, city: str,
             seen: set[str], why: Counter, hours: str = "any", max_age: timedelta = MAX_AGE,
             any_title: bool = False) -> tuple[list[dict], Counter]:
@@ -936,7 +948,8 @@ def _search(keywords: list[str], country: str, remote_only: bool, level: str, ci
             pool += from_himalayas(k, country) + from_jobicy(k)
         if not remote_only:
             pool += from_adzuna(k, country, city) + (from_reed(k, city) if country == "United Kingdom" else ())
-    pool.sort(key=lambda j: j["source"] in SIGNUP_BOARDS)  # duplicates keep the open board's link
+    pool += BACKLOG  # after the live listings, so a job still in today's feeds keeps its fresh copy
+    pool.sort(key=lambda j: j["source"] in SIGNUP_BOARDS)  # duplicates keep the open board's link (stable sort)
     ranked = []
     for job in pool:
         keys = job_keys(job)
@@ -952,7 +965,7 @@ def _search(keywords: list[str], country: str, remote_only: bool, level: str, ci
             ranked.append({**job, "score": result[0], "matched": matched,
                            "hit": "other role" if any_title else title_hit(job["title"], keywords)})
     ranked.sort(key=lambda j: j["score"], reverse=True)
-    return ranked, Counter(j["source"].split(" (")[0] for j in pool)
+    return ranked, Counter("Earlier matches" if j.get("backlog") else j["source"].split(" (")[0] for j in pool)
 
 
 def _pick(ranked: list[dict], keywords: list[str], n: int) -> list[dict]:
