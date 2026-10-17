@@ -129,8 +129,10 @@ const STYLE = `
   details.pick .opts { border:1px solid var(--border); border-radius:8px; padding:6px 12px 10px; margin-top:4px; background:var(--bg); }
   details.pick .row { margin:6px 0; }
   details.pick .row label { margin:0; font-weight:400; }
-  details.pick .simh { margin:12px 0 2px; font-size:.85rem; color:var(--muted); }
-  details.pick .row[hidden] { display:none; }
+  details.pick .subs { margin:2px 0 10px 26px; padding:4px 0 2px 12px; border-left:2px solid var(--accent); }
+  details.pick .subs[hidden] { display:none; }
+  details.pick .subs .simh { margin:0 0 2px; font-size:.78rem; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+  details.pick .subs .row { margin:4px 0; }
   details.info { margin-top:22px; text-align:center; }
   details.info[open] { text-align:left; }
   details.info > summary { text-align:center; }
@@ -836,7 +838,7 @@ const FORM_SCRIPT = `<script>
         other = document.getElementById("other"), label = jobs.querySelector("summary");
     function chosen() {
       var list = [];
-      boxes.forEach(function (b) { if (b.checked) list.push(b.value); });
+      boxes.forEach(function (b) { if (b.checked && list.indexOf(b.value) < 0) list.push(b.value); });
       other.value.split(",").forEach(function (w) { if (w.trim()) list.push(w.trim()); });
       return list;
     }
@@ -844,17 +846,18 @@ const FORM_SCRIPT = `<script>
       var list = chosen();
       label.textContent = list.length ? list.join(", ") : "Choose jobs";
       label.className = list.length ? "" : "empty";
-      var any = false;
-      jobs.querySelectorAll(".rel").forEach(function (r) {
-        var show = r.querySelector("input").checked || r.dataset.for.split("|").some(function (p) {
-          var b = jobs.querySelector('input[value="' + p + '"]'); return b && b.checked; });
-        r.hidden = !show; any = any || show;
+      jobs.querySelectorAll(".subs").forEach(function (g) {
+        var parent = jobs.querySelector('.row > input[value="' + g.dataset.parent + '"]');
+        g.hidden = !(parent.checked || g.querySelector("input:checked"));
       });
-      jobs.querySelector(".simh").hidden = !any;
       boxes.forEach(function (b) { b.disabled = !b.checked && list.length >= 5; });
       other.setCustomValidity(list.length > 5 ? "Pick up to 5 jobs" : "");
     }
-    jobs.addEventListener("input", syncJobs);
+    jobs.addEventListener("input", function (e) {
+      // A similar job listed under two picks (e.g. Data entry) stays ticked or unticked in both places.
+      boxes.forEach(function (b) { if (b.value === e.target.value) b.checked = e.target.checked; });
+      syncJobs();
+    });
     syncJobs();
     form.addEventListener("submit", function (e) {
       if (!chosen().length) {
@@ -929,10 +932,10 @@ export function form(ctx, { sub = null, action, button, heading, lead, status = 
     esc([...picked, other].filter(Boolean).join(", ") || "Choose jobs")}</summary>
   <div class="opts">
     ${JOBS.map((j, i) => `<div class="row"><input id="job${i}" name="job" type="checkbox" value="${esc(j)}"${chk(picked.includes(j))}>
-      <label for="job${i}">${esc(j)}</label></div>`).join("\n    ")}
-    <p class="simh" hidden>Similar jobs</p>
-    ${ALL_JOBS.filter((j) => !JOBS.includes(j)).map((j, i) => `<div class="row rel" data-for="${esc(JOBS.filter((b) => RELATED[b].includes(j)).join("|"))}"${picked.includes(j) ? "" : " hidden"}><input id="rel${i}" name="job" type="checkbox" value="${esc(j)}"${chk(picked.includes(j))}>
-      <label for="rel${i}">${esc(j)}</label></div>`).join("\n    ")}
+      <label for="job${i}">${esc(j)}</label></div>
+    <div class="subs" data-parent="${esc(j)}"${picked.includes(j) || RELATED[j].some((r) => picked.includes(r)) ? "" : " hidden"}><p class="simh">Similar jobs</p>${
+      RELATED[j].map((r, k) => `<div class="row"><input id="rel${i}_${k}" name="job" type="checkbox" value="${esc(r)}"${chk(picked.includes(r))}>
+      <label for="rel${i}_${k}">${esc(r)}</label></div>`).join("")}</div>`).join("\n    ")}
     <label for="other">Something else <span class="hint">Separate with commas</span></label>
     <input id="other" name="other" type="text" maxlength="200" placeholder="e.g. public relations" value="${esc(other)}">
   </div></details>
