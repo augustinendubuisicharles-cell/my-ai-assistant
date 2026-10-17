@@ -1049,7 +1049,7 @@ export const JOBS = ["Virtual assistant", "Customer support", "Software develope
 export const RELATED = {
   "Virtual assistant": ["Executive assistant", "Administrative assistant", "Personal assistant", "Data entry", "Operations assistant"],
   "Customer support": ["Customer service", "Customer success", "Live chat agent", "Technical support", "Call centre agent"],
-  "Software developer": ["Mobile developer", "Full stack developer", "Frontend developer", "Backend developer", "Web developer", "QA tester"],
+  "Software developer": ["Mobile developer", "Full stack developer", "Frontend developer", "Backend developer", "Web developer", "QA tester", "Machine learning engineer", "AI engineer"],
   "Data analyst": ["Business analyst", "Data scientist", "Research analyst", "BI analyst", "Data entry"],
   "Content writer": ["Copywriter", "Technical writer", "SEO writer", "Editor", "Proofreader"],
   "Social media manager": ["Community manager", "Content creator", "Social media marketer", "Video editor"],

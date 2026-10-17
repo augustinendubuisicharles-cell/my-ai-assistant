@@ -336,7 +336,8 @@ def win_back(base_url: str, token: str, jobs: list[dict], price: str, can_pay: b
 RELATED = {
     "Virtual assistant": ["Executive assistant", "Administrative assistant", "Personal assistant", "Data entry"],
     "Customer support": ["Customer service", "Customer success", "Live chat agent", "Technical support"],
-    "Software developer": ["Mobile developer", "Full stack developer", "Frontend developer", "Backend developer"],
+    "Software developer": ["Mobile developer", "Full stack developer", "Frontend developer", "Backend developer",
+                           "Machine learning engineer", "AI engineer"],
     "Data analyst": ["Business analyst", "Data scientist", "Research analyst", "BI analyst"],
     "Content writer": ["Copywriter", "Technical writer", "SEO writer", "Editor"],
     "Social media manager": ["Community manager", "Content creator", "Social media marketer", "Video editor"],
