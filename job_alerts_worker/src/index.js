@@ -65,6 +65,13 @@ export function cleanPrefs(f) {
   };
 }
 
+// Tops a title list up to 5 with similar jobs (views.RELATED), closest first.
+export function withSimilar(keywords) {
+  const words = keywords.split(", ");
+  for (const w of [...words]) for (const r of views.RELATED[w] || []) if (words.length < 5 && !words.includes(r)) words.push(r);
+  return words.join(", ");
+}
+
 function status(ctx, sub) {
   if (db.isPaid(sub)) return `Active until ${fmtDate(sub.paid_until)}.`;
   if (!sub.confirmed) return "";
@@ -150,6 +157,11 @@ export async function handle(request, env, q) {
     // From a shared job page (/job/<slug>): counted as "Job link", and confirming opens that job's apply details.
     const forJob = Object.hasOwn(FEATURED, String(f.get("for") || "")) ? String(f.get("for")) : "";
     if (forJob) prefs.heard = "Job link";
+    // Everyone searches 5 titles. The job-link form only sends the job's own title, so its similar jobs fill the rest.
+    if (forJob) prefs.keywords = withSimilar(prefs.keywords);
+    if (prefs.keywords.split(", ").length < 5) {
+      return msg("Pick 5 jobs", "Please pick 5 job titles so we can find you more matches.", { link: "/", linkText: "Go back", status: 400 });
+    }
     const existing = await db.byEmail(q, email);
     let sub, letter;
     if (existing?.confirmed && forJob) {
