@@ -13,7 +13,7 @@ import requests
 from sqlalchemy.exc import IntegrityError
 
 from . import db, emails, mailer, payments
-from .search import clean_keywords, find_jobs, job_key
+from .search import clean_keywords, find_jobs, job_key, set_backlog
 
 
 def main() -> None:
@@ -22,6 +22,10 @@ def main() -> None:
         sys.exit("BASE_URL is required so emails can link to the site.")
     db.init_db()
     db.trim_descriptions()
+    try:
+        set_backlog(db.recent_jobs())  # jobs sent to anyone in the last 14 days, for quiet titles (search.BACKLOG)
+    except Exception as e:
+        print(f"Earlier matches not loaded: {e}")
     subs = db.confirmed_subscribers()
     only = os.environ.get("ONLY_EMAIL", "").strip().lower()
     if only:  # test run for one subscriber

@@ -228,6 +228,8 @@ const STYLE = `
   .hours label { margin:0; padding:9px 4px; text-align:center; border-radius:9px; font-weight:600; font-size:.92rem; color:var(--muted); cursor:pointer; transition:background .15s, color .15s; }
   .hours input:checked + label { background:var(--card); color:var(--accent); box-shadow:0 1px 3px #0b15301f, 0 0 0 1px var(--border); }
   .hours input:focus-visible + label { outline:2px solid var(--accent); outline-offset:1px; }
+  .hours-note { display:none; margin:8px 0 0; padding:8px 12px; border-radius:8px; background:#fff7e6; color:#8a5300; font-size:.85rem; text-align:left; }
+  .hours:has(input[value=part]:checked) + .hours-note { display:block; }
   .copylink { display:flex; align-items:center; gap:8px; margin-top:12px; padding:6px 6px 6px 12px; border-radius:14px; background:var(--bg); border:1px solid var(--border); }
   .copylink .cl-ic { flex:none; width:20px; height:20px; color:var(--muted); display:grid; place-items:center; } .copylink .cl-ic svg { width:18px; height:18px; }
   .copylink input { flex:1; min-width:0; border:0; background:transparent; padding:6px 0; font-size:.9rem; color:var(--text); text-overflow:ellipsis; outline:none; }
@@ -743,6 +745,7 @@ function signupCards(ctx, ref) {
     ${[["any", "Any"], ["full", "Full-time"], ["part", "Part-time"]].map(([v, l]) =>
       `<input id="h_${v}" name="hours" type="radio" value="${v}"${chk(v === "any")}><label for="h_${v}">${l}</label>`).join("")}
   </div>
+  <p class="hours-note">Part-time remote jobs are rare. Some days we'll add full-time ones too. Choose <b>Any</b> for more matches.</p>
   ${nav(3)}
 </section>
 <section class="step" data-step="4">${bar(4)}
@@ -949,6 +952,7 @@ export function form(ctx, { sub = null, action, button, heading, lead, status = 
     ${[["any", "Any"], ["full", "Full-time"], ["part", "Part-time"]].map(([v, l]) =>
       `<input id="h_${v}" name="hours" type="radio" value="${v}"${chk((sub?.hours || "any") === v)}><label for="h_${v}">${l}</label>`).join("")}
   </div>
+  <p class="hours-note">Part-time remote jobs are rare. Some days we'll add full-time ones too. Choose <b>Any</b> for more matches.</p>
   <details class="fold more"${onsite || (sub && sub.level !== "entry") ? " open" : ""}><summary>More options</summary>
   <fieldset>
     <legend>How do you want to work?</legend>

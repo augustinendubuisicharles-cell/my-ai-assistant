@@ -330,6 +330,21 @@ def already_sent(subscriber_id: int) -> set[str]:
         return {r.job_key for r in conn.execute(select(sent_jobs.c.job_key).where(sent_jobs.c.subscriber_id == subscriber_id))}
 
 
+def recent_jobs(days: int = 14) -> list[dict]:
+    """Every distinct job sent to anyone and posted in the last `days` days, newest send first, for
+    search.BACKLOG: adverts drop out of the live feeds after a few days, but they may still be open."""
+    since = now() - timedelta(days=days)
+    q = select(sent_jobs).where(sent_jobs.c.posted_at >= since, sent_jobs.c.url.is_not(None)).order_by(sent_jobs.c.sent_at.desc())
+    seen, jobs = set(), []
+    with engine.connect() as conn:
+        for r in conn.execute(q).mappings():
+            if r["job_key"] in seen:
+                continue
+            seen.add(r["job_key"])
+            jobs.append(dict(r))
+    return jobs
+
+
 def paying_members() -> int:
     """People who have paid real money (₦0 granted memberships don't count)."""
     with engine.connect() as conn:
