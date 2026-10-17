@@ -638,6 +638,7 @@ RELATED = [
     ["email marketing", "email marketer", "email marketing specialist"],
     ["ai automation", "automation specialist", "automation engineer", "no-code developer"],
     ["machine learning engineer", "ml engineer", "ai engineer", "ai/ml engineer", "llm engineer", "applied ai engineer"],
+    ["prompt engineer", "prompt writer", "ai prompt engineer", "prompt engineering"],
     ["operations associate", "operations assistant", "operations coordinator", "operations specialist"],
 ]
 
@@ -672,6 +673,7 @@ NEIGHBOURS = {
     "email marketing": ["digital marketing", "content writer"],
     "ai automation": ["software engineer", "data annotation"],
     "operations associate": ["virtual assistant", "project manager"],
+    "prompt engineer": ["content writer", "data annotation", "ai automation"],
     "machine learning engineer": ["software engineer", "data analyst", "ai automation"],
 }
 

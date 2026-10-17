@@ -1047,11 +1047,11 @@ export const JOBS = ["Virtual assistant", "Customer support", "Software develope
   "Social media manager", "Graphic designer", "Digital marketing", "Project manager", "Bookkeeper"];
 // Similar titles offered on the sign-up card once someone picks one of JOBS, to keep their 5 picks in one field.
 export const RELATED = {
-  "Virtual assistant": ["Executive assistant", "Administrative assistant", "Personal assistant", "Data entry", "Operations assistant"],
+  "Virtual assistant": ["Executive assistant", "Administrative assistant", "Personal assistant", "Data entry", "Operations assistant", "AI trainer"],
   "Customer support": ["Customer service", "Customer success", "Live chat agent", "Technical support", "Call centre agent"],
   "Software developer": ["Mobile developer", "Full stack developer", "Frontend developer", "Backend developer", "Web developer", "QA tester", "Machine learning engineer", "AI engineer"],
   "Data analyst": ["Business analyst", "Data scientist", "Research analyst", "BI analyst", "Data entry"],
-  "Content writer": ["Copywriter", "Technical writer", "SEO writer", "Editor", "Proofreader"],
+  "Content writer": ["Copywriter", "Technical writer", "SEO writer", "Editor", "Proofreader", "Prompt engineer"],
   "Social media manager": ["Community manager", "Content creator", "Social media marketer", "Video editor"],
   "Graphic designer": ["UI/UX designer", "Brand designer", "Illustrator", "Motion designer", "Video editor"],
   "Digital marketing": ["SEO specialist", "Email marketing", "Marketing assistant", "Growth marketer", "PPC specialist"],
