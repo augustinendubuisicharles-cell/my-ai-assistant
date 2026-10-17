@@ -159,7 +159,7 @@ test("home page shows the trial, the price and the form", async () => {
   assert.match(page, /₦5,000/);
   assert.match(page, /7 days free/);
   // Sign-up is four cards: jobs, country, experience, then email last.
-  assert.match(page, /What job do you want\?[\s\S]*Where do you live\?[\s\S]*How much experience\?[\s\S]*Where should we send your jobs\?/);
+  assert.match(page, /Pick 5 jobs you'd do[\s\S]*Where do you live\?[\s\S]*How much experience\?[\s\S]*Where should we send your jobs\?/);
   assert.match(page, /action="\/subscribe"/);
   assert.match(page, /Is this real\?[\s\S]*₦5,000 for 3 months\. Nothing renews automatically/);
   assert.doesNotMatch(page, /people getting alerts/); // no counts until there are 10+

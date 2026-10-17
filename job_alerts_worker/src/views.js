@@ -345,6 +345,15 @@ const LANDING_STYLE = `
   .cards .chips label { margin:0; padding:9px 14px; border-radius:99px; border:1.5px solid var(--border); font-weight:600; font-size:.92rem; cursor:pointer; }
   .cards .chips input:checked + label { background:#1f5fe0; border-color:#1f5fe0; color:#fff; }
   .cards .chips input:disabled + label { opacity:.45; cursor:default; }
+  .cards .picked { display:flex; align-items:center; gap:10px; margin:-4px 0 14px; font-size:.9rem; color:var(--muted); }
+  .cards .picked .dots { display:flex; gap:5px; } .cards .picked i { width:22px; height:6px; border-radius:6px; background:var(--border); transition:background .2s; }
+  .cards .picked i.on { background:#ff8a1c; } .cards .picked b { font-weight:700; }
+  .cards .next.wait { opacity:.55; }
+  .cards .similar { margin:14px 0 4px; padding:12px; border-radius:16px; background:color-mix(in srgb, #ff8a1c 8%, var(--card)); animation:pop .25s ease-out; }
+  .cards .similar .simh { margin:0 0 8px; font-size:.82rem; font-weight:800; letter-spacing:.04em; text-transform:uppercase; color:#c2410c; }
+  .cards .similar label { border-style:dashed; } .cards .similar label::before { content:"+ "; }
+  .cards .similar input:checked + label::before { content:""; }
+  .cards .chips label[hidden] { display:none; }
   .cards .chips input:focus-visible + label, .cards .opts input:focus-visible + label { outline:3px solid #1f6bff66; outline-offset:2px; }
   .cards .opts { display:grid; gap:10px; }
   .cards .opts label { margin:0; display:flex; justify-content:space-between; align-items:center; gap:12px; padding:14px 16px; border-radius:14px;
@@ -704,11 +713,14 @@ function signupCards(ctx, ref) {
     <label for="${name}_${esc(value || "any").replace(/\W/g, "_")}"><span>${text}${hint ? `<small>${hint}</small>` : ""}</span></label>`;
   return `<form class="card cards" method="post" action="/subscribe" id="prefs" novalidate>
 <section class="step now" data-step="1">${bar(1)}
-  <h2>What job do you want?</h2><p class="sub">Pick up to 5</p>
+  <h2>Pick 5 jobs you'd do</h2><p class="sub">More job titles, more matches</p>
+  <div class="picked" aria-live="polite"><span class="dots">${"<i></i>".repeat(5)}</span><b>0 of 5</b></div>
   <div class="chips">${JOBS.map((j, i) => `<input id="job${i}" name="job" type="checkbox" value="${esc(j)}"><label for="job${i}">${esc(j)}</label>`).join("")}</div>
+  <div class="similar" hidden><p class="simh">Similar jobs</p><div class="chips">${ALL_JOBS.filter((j) => !JOBS.includes(j)).map((j, i) =>
+    `<input id="rel${i}" name="job" type="checkbox" value="${esc(j)}" data-for="${esc(JOBS.filter((b) => RELATED[b].includes(j)).join("|"))}"><label for="rel${i}" hidden>${esc(j)}</label>`).join("")}</div></div>
   <label for="other">Something else <span class="hint">Separate with commas</span></label>
   <input id="other" name="other" type="text" maxlength="200" placeholder="e.g. public relations">
-  ${nav(1)}
+  ${nav(1, "Pick 5 jobs")}
 </section>
 <section class="step" data-step="2">${bar(2)}
   <h2>Where do you live?</h2><p class="sub">We only send jobs open to your country</p>
@@ -754,9 +766,22 @@ const SIGNUP_SCRIPT = `<script>
       other.value.split(",").forEach(function (w) { if (w.trim()) list.push(w.trim()); });
       return list;
     }
+    var picked = form.querySelector(".picked"), next1 = steps[0].querySelector(".next");
+    var similar = form.querySelector(".similar");
     function syncJobs() {
+      var picks = []; boxes.forEach(function (b) { if (b.checked && !b.dataset.for) picks.push(b.value); });
+      var any = false;
+      form.querySelectorAll(".similar input").forEach(function (b) {
+        var show = b.checked || b.dataset.for.split("|").some(function (p) { return picks.indexOf(p) >= 0; });
+        b.nextElementSibling.hidden = !show; any = any || show;
+      });
+      similar.hidden = !any;
       var n = chosen().length;
       boxes.forEach(function (b) { b.disabled = !b.checked && n >= 5; });
+      picked.querySelectorAll("i").forEach(function (d, i) { d.className = i < n ? "on" : ""; });
+      picked.querySelector("b").textContent = Math.min(n, 5) + " of 5";
+      next1.textContent = n >= 5 ? "Next" : n ? "Pick " + (5 - n) + " more" : "Pick 5 jobs";
+      next1.classList.toggle("wait", n < 5);
     }
     function show(i) {
       steps[at].classList.remove("now"); at = i; steps[at].classList.add("now");
@@ -766,7 +791,7 @@ const SIGNUP_SCRIPT = `<script>
     function ok() {
       if (at === 0) {
         var n = chosen().length;
-        other.setCustomValidity(!n ? "Pick at least one job, or type your own" : n > 5 ? "Pick up to 5 jobs" : "");
+        other.setCustomValidity(n < 5 ? "Pick " + (5 - n) + " more, or type your own (separate with commas)" : n > 5 ? "Pick only 5 jobs" : "");
         if (!other.reportValidity()) return false;
         other.setCustomValidity("");
       }
@@ -784,7 +809,7 @@ const SIGNUP_SCRIPT = `<script>
     });
     form.addEventListener("submit", function (e) {
       var email = document.getElementById("email");
-      if (!chosen().length) { e.preventDefault(); show(0); ok(); return; }
+      if (chosen().length < 5) { e.preventDefault(); show(0); ok(); return; }
       if (!email.checkValidity()) { e.preventDefault(); email.reportValidity(); return; }
       var b = document.getElementById("submit");
       b.disabled = true;
@@ -1005,6 +1030,20 @@ const was = (ctx) => (ctx.fullPrice ? ` <s>${esc(ctx.fullPrice)}</s>` : "");
 
 export const JOBS = ["Virtual assistant", "Customer support", "Software developer", "Data analyst", "Content writer",
   "Social media manager", "Graphic designer", "Digital marketing", "Project manager", "Bookkeeper"];
+// Similar titles offered on the sign-up card once someone picks one of JOBS, to keep their 5 picks in one field.
+export const RELATED = {
+  "Virtual assistant": ["Executive assistant", "Administrative assistant", "Personal assistant", "Data entry", "Operations assistant"],
+  "Customer support": ["Customer service", "Customer success", "Live chat agent", "Technical support", "Call centre agent"],
+  "Software developer": ["Mobile developer", "Full stack developer", "Frontend developer", "Backend developer", "Web developer", "QA tester"],
+  "Data analyst": ["Business analyst", "Data scientist", "Research analyst", "BI analyst", "Data entry"],
+  "Content writer": ["Copywriter", "Technical writer", "SEO writer", "Editor", "Proofreader"],
+  "Social media manager": ["Community manager", "Content creator", "Social media marketer", "Video editor"],
+  "Graphic designer": ["UI/UX designer", "Brand designer", "Illustrator", "Motion designer", "Video editor"],
+  "Digital marketing": ["SEO specialist", "Email marketing", "Marketing assistant", "Growth marketer", "PPC specialist"],
+  "Project manager": ["Product manager", "Operations manager", "Scrum master", "Program coordinator"],
+  "Bookkeeper": ["Accountant", "Accounts assistant", "Payroll officer", "Finance assistant"],
+};
+export const ALL_JOBS = [...new Set([...JOBS, ...Object.values(RELATED).flat()])];
 
 // AI cover letter or tailored CV for one job (members). Shows the result once written, and the form to (re)write it.
 // The tailored CV can also be downloaded as a Word file, built in the browser from the text.
