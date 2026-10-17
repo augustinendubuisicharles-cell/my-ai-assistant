@@ -927,7 +927,7 @@ export function form(ctx, { sub = null, action, button, heading, lead, status = 
   const formHtml = `<form class="card" method="post" action="${esc(action)}" id="prefs">
   ${sub ? "" : `<label for="email">Your email</label>
   <input id="email" name="email" type="email" required maxlength="320" placeholder="you@example.com">`}
-  <label id="jobs_label">What jobs do you want? <span class="hint">Pick 5 for more matches${sub && !member ? ". The free trial searches the first 2" : ""}</span></label>
+  <label id="jobs_label">What jobs do you want? <span class="hint">Pick 5 for more matches${sub && !member && !allTitlesTrial(sub) ? ". The free trial searches the first 2" : ""}</span></label>
   <details class="pick" id="jobs"><summary class="${picked.length || other ? "" : "empty"}" aria-labelledby="jobs_label">${
     esc([...picked, other].filter(Boolean).join(", ") || "Choose jobs")}</summary>
   <div class="opts">
@@ -996,7 +996,7 @@ export function pay(ctx, { sub, heading, status }) {
 <form class="card" method="post" action="/pay/${esc(sub.token)}" id="payform">
   <p class="price"><b>${esc(ctx.price)}</b>${was(ctx)} for ${ctx.months} months</p>${ctx.launchLeft ? `<p class="small">${launchNote(ctx)}</p>` : ""}
   <ul class="perks">
-    <li>The 5 best new matches every morning across all 5 of your job titles, and 5 more whenever you ask (the trial gets 3 jobs a day from 2 titles)</li>
+    <li>The 5 best new matches every morning across all 5 of your job titles, and 5 more whenever you ask (the trial gets 3 jobs a day${allTitlesTrial(sub) ? "" : " from 2 titles"})</li>
     <li>New matches on Telegram during the day, so you can apply first</li>
     <li>${sub.remote_only ? "Remote jobs" : `Jobs near ${esc(sub.city)}, plus remote ones`}, checked for scams and dead links</li>
     <li>One payment. Nothing renews automatically; we'll email you before it ends</li>
@@ -1058,6 +1058,8 @@ export const RELATED = {
   "Project manager": ["Product manager", "Operations manager", "Scrum master", "Program coordinator"],
   "Bookkeeper": ["Accountant", "Accounts assistant", "Payroll officer", "Finance assistant"],
 };
+// Owner's rule (17 Oct 2026, same as payments.ALL_TITLES_TRIAL_FROM): trials started after this search all 5 titles.
+export const allTitlesTrial = (sub) => !!sub?.created_at && new Date(sub.created_at) >= new Date("2026-10-17T14:42:00Z");
 export const ALL_JOBS = [...new Set([...JOBS, ...Object.values(RELATED).flat()])];
 
 // AI cover letter or tailored CV for one job (members). Shows the result once written, and the form to (re)write it.

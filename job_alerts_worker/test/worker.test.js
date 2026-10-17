@@ -413,7 +413,7 @@ test("paying members can connect Telegram; trial users can't, and the webhook ch
   await call(`/confirm/${token}`);
   const trial = await (await call(`/manage/${token}`)).text();
   assert.doesNotMatch(trial, /Connect Telegram/);
-  assert.match(trial, /free trial searches the first 2/);
+  assert.doesNotMatch(trial, /free trial searches the first 2/);  // trials started after 17 Oct 2026 14:42 UTC search all 5
 
   await call(`/pay/${token}`, { method: "POST" });
   await call("/paid?transRef=vs_1");
