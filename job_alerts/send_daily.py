@@ -44,7 +44,7 @@ def main() -> None:
                 continue
         try:
             member = db.is_member(sub, paid_ids)
-            n, titles = payments.limits(member)
+            n, titles = payments.limits(member, sub)
             sent_before = db.already_sent(sub["id"])
             if first and sent_before:
                 print(f"- subscriber {sub['id']}: already has jobs, skipping the first-search email")
@@ -155,7 +155,7 @@ def win_back(sub: dict, base_url: str) -> None:
     if not stage or sent >= stage:
         return
     try:
-        n, titles = payments.limits(False)
+        n, titles = payments.limits(False, sub)
         jobs = find_jobs(first_titles(sub["keywords"], titles), sub["country"], sub["remote_only"], sub["level"],
                          db.already_sent(sub["id"]), n=3, city=sub.get("city") or "", hours=sub.get("hours") or "any")
         subject, text, html = emails.win_back(base_url, sub["token"], jobs, f"₦{price_now():,}", True, places_left(),
@@ -172,7 +172,8 @@ def trial_info(sub: dict) -> dict:
     left = (db._aware(sub["paid_until"]) - db.now()).total_seconds() / 86400 if sub.get("paid_until") else 0
     jobs, titles = payments.PAID_LIMITS
     return {"days_left": max(1, math.ceil(left)), "price": f"₦{price_now():,}", "places_left": places_left(),
-            "perks": f"the {jobs} best jobs every morning and more whenever you ask, all {titles} job titles, a CV tailored to each job, AI cover letters and Telegram alerts, "
+            "perks": f"the {jobs} best jobs every morning and more whenever you ask, "
+                     f"{'' if payments.all_titles_trial(sub) else f'all {titles} job titles, '}a CV tailored to each job, AI cover letters and Telegram alerts, "
                      f"for {payments.PERIOD_DAYS // 30} months", "can_pay": payments.enabled()}
 
 

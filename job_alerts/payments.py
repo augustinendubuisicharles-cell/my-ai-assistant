@@ -18,6 +18,7 @@ import json
 import os
 import re
 import secrets
+from datetime import datetime, timezone
 
 import requests
 
@@ -33,8 +34,21 @@ PAID_LIMITS = (5, 5)  # members: the 5 best jobs each morning, more on request f
 DAILY_MINIMUM = {True: 5, False: 3}  # members, trial: similar roles fill any gap (search.find_jobs)
 
 
-def limits(member: bool) -> tuple[int, int]:
-    return PAID_LIMITS if member else TRIAL_LIMITS
+# Owner's rule (17 Oct 2026): trials that start after this search all 5 titles; earlier trials keep 2.
+ALL_TITLES_TRIAL_FROM = datetime(2026, 10, 17, 14, 42, tzinfo=timezone.utc)
+
+
+def all_titles_trial(sub: dict | None) -> bool:
+    created = (sub or {}).get("created_at")
+    if created and created.tzinfo is None:
+        created = created.replace(tzinfo=timezone.utc)
+    return bool(created) and created >= ALL_TITLES_TRIAL_FROM
+
+
+def limits(member: bool, sub: dict | None = None) -> tuple[int, int]:
+    if member:
+        return PAID_LIMITS
+    return (TRIAL_LIMITS[0], PAID_LIMITS[1]) if all_titles_trial(sub) else TRIAL_LIMITS
 REF_RE = re.compile(r"^ja(\d+)x[0-9a-f]+$")  # our reference: ja<subscriber id>x<random>
 
 
