@@ -75,6 +75,8 @@ SIGNUP_BOARDS = {"We Work Remotely", "Himalayas", "Jobicy", "RemoteOK"}
 # The owner's call (15 Oct 2026): open remote VA and support jobs for Nigeria are rare, so for these titles only,
 # sign-up boards fill the gap after open jobs, tagged "sign-up needed to apply".
 SIGNUP_ROLES = re.compile(r"assistant|support|customer|admin|receptionist|data entry|help ?desk|call cent", re.I)
+# Specialist tech titles: never used as an "other role" for someone who isn't looking for tech work.
+TECH_TITLE = re.compile(r"engineer|developer|devops|\bsre\b|programmer|architect|data scien|machine learning|python|java|node\.?js|full.?stack|backend|frontend", re.I)
 SIGNUP_PENALTY = 100
 
 
@@ -989,6 +991,7 @@ def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, ex
     ranked, boards = _search(keywords, country, remote_only, level, city, seen, why, hours)
     matched = len(ranked)
     signup = lambda j: j["source"] in SIGNUP_BOARDS
+    tech = any(TECH_TITLE.search(k) for k in keywords)  # only people looking for tech jobs get other tech roles
     # Jobs people can apply to without signing up come first: their own titles, then similar roles.
     open_jobs = [j for j in ranked if not signup(j)]
     if cv is not None:
@@ -1015,6 +1018,14 @@ def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, ex
     gated = fill([j for j in ranked if gated_ok(j)])
     extra = fill([j for j in more if not signup(j)])
     gated += fill([j for j in more if gated_ok(j)])
+    # Part-time and still short (few part-time adverts are open to every country): their own and similar
+    # titles at any hours, marked "full-time", come before older adverts and other roles.
+    relaxed = 0
+    if hours == "part" and len(picked) < minimum:
+        pool, _ = _search(keywords + near, country, remote_only, level, city, seen, Counter(), "any")
+        for j in pool:
+            j["matched"] = ["full-time"] + j["matched"]
+        relaxed = fill([j for j in pool if not signup(j)]) + fill([j for j in pool if gated_ok(j)])
     # Still short: nobody gets fewer than the minimum. First their own and similar titles posted in the last
     # 14 days, then the best other open roles at their level, open to their country.
     # Members' "More jobs" spares come from the same places when the first ones run short.
@@ -1033,19 +1044,17 @@ def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, ex
         taken = {id(j) for j in picked}
     if short():
         other_pool, _ = _search([], country, remote_only, level, city, seen, Counter(), hours, any_title=True)
-        other_pool = [j for j in other_pool if not signup(j)][:ai_match.TOP * 2]
+        other_pool = [j for j in other_pool if not signup(j) and (tech or not TECH_TITLE.search(j["title"]))][:ai_match.TOP * 2]
         if cv is not None:
             other_pool = ai_match.rerank(other_pool, keywords, level, country, cv)
         other = fill(other_pool)
-    # Part-time only and still short (rare: few part-time adverts are open to every country): their own and
-    # similar titles, then other roles, at any hours, marked "full-time".
+    # Part-time only and still short: other roles at any hours, marked "full-time".
     if hours == "part" and len(picked) < minimum:
-        for words, any_title in ((keywords + near, False), ([], True)):
-            pool, _ = _search(words, country, remote_only, level, city, seen, Counter(), "any", any_title=any_title)
-            pool = [j for j in pool if not signup(j)]
-            for j in pool:
-                j["matched"] = ["full-time"] + j["matched"]
-            other += fill(pool)
+        pool, _ = _search([], country, remote_only, level, city, seen, Counter(), "any", any_title=True)
+        pool = [j for j in pool if not signup(j) and (tech or not TECH_TITLE.search(j["title"]))]
+        for j in pool:
+            j["matched"] = ["full-time"] + j["matched"]
+        other += fill(pool)
     if spares is not None:
         taken = {id(j) for j in picked}
         rest = [j for j in open_jobs + more + older_pool + other_pool if id(j) not in taken and not signup(j)][:SPARES * 2]
@@ -1055,6 +1064,7 @@ def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, ex
     print(f"  checked {sum(boards.values())} listings ({', '.join(f'{s} {c}' for s, c in boards.most_common())}), "
           f"{matched} matched, picked {len(picked)}{f' ({extra} from similar roles to reach the daily minimum)' if extra else ''}"
           f"{f', {gated} from sign-up boards to fill the gap' if gated else ''}"
+          f"{f', {relaxed} full-time for a part-time search' if relaxed else ''}"
           f"{f', {older} posted 8-14 days ago' if older else ''}{f', {other} from other roles' if other else ''}"
           f"{f', {len(spares)} spare for More jobs' if spares is not None else ''}; "
           f"left out: {', '.join(f'{c} {r}' for r, c in why.most_common()) or 'none'}")
