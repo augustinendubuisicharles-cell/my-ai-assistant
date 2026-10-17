@@ -129,6 +129,8 @@ const STYLE = `
   details.pick .opts { border:1px solid var(--border); border-radius:8px; padding:6px 12px 10px; margin-top:4px; background:var(--bg); }
   details.pick .row { margin:6px 0; }
   details.pick .row label { margin:0; font-weight:400; }
+  details.pick .simh { margin:12px 0 2px; font-size:.85rem; color:var(--muted); }
+  details.pick .row[hidden] { display:none; }
   details.info { margin-top:22px; text-align:center; }
   details.info[open] { text-align:left; }
   details.info > summary { text-align:center; }
@@ -842,6 +844,13 @@ const FORM_SCRIPT = `<script>
       var list = chosen();
       label.textContent = list.length ? list.join(", ") : "Choose jobs";
       label.className = list.length ? "" : "empty";
+      var any = false;
+      jobs.querySelectorAll(".rel").forEach(function (r) {
+        var show = r.querySelector("input").checked || r.dataset.for.split("|").some(function (p) {
+          var b = jobs.querySelector('input[value="' + p + '"]'); return b && b.checked; });
+        r.hidden = !show; any = any || show;
+      });
+      jobs.querySelector(".simh").hidden = !any;
       boxes.forEach(function (b) { b.disabled = !b.checked && list.length >= 5; });
       other.setCustomValidity(list.length > 5 ? "Pick up to 5 jobs" : "");
     }
@@ -894,7 +903,7 @@ export function form(ctx, { sub = null, action, button, heading, lead, status = 
   whatsapp = false, ref = "", inviteBox = "" }) {
   const onsite = sub && !sub.remote_only;
   const words = String(sub?.keywords || "").split(",").map((w) => w.trim()).filter(Boolean);
-  const listed = (w) => JOBS.find((j) => j.toLowerCase() === w.toLowerCase());
+  const listed = (w) => ALL_JOBS.find((j) => j.toLowerCase() === w.toLowerCase());
   const picked = words.map(listed).filter(Boolean);
   const other = words.filter((w) => !listed(w)).join(", ");
   // Home page: only the headline and a short form; everything else waits behind "See what you get".
@@ -915,12 +924,15 @@ export function form(ctx, { sub = null, action, button, heading, lead, status = 
   const formHtml = `<form class="card" method="post" action="${esc(action)}" id="prefs">
   ${sub ? "" : `<label for="email">Your email</label>
   <input id="email" name="email" type="email" required maxlength="320" placeholder="you@example.com">`}
-  <label id="jobs_label">What jobs do you want? <span class="hint">Pick up to 5${sub && !member ? ". The free trial searches the first 2" : ""}</span></label>
+  <label id="jobs_label">What jobs do you want? <span class="hint">Pick 5 for more matches${sub && !member ? ". The free trial searches the first 2" : ""}</span></label>
   <details class="pick" id="jobs"><summary class="${picked.length || other ? "" : "empty"}" aria-labelledby="jobs_label">${
     esc([...picked, other].filter(Boolean).join(", ") || "Choose jobs")}</summary>
   <div class="opts">
     ${JOBS.map((j, i) => `<div class="row"><input id="job${i}" name="job" type="checkbox" value="${esc(j)}"${chk(picked.includes(j))}>
       <label for="job${i}">${esc(j)}</label></div>`).join("\n    ")}
+    <p class="simh" hidden>Similar jobs</p>
+    ${ALL_JOBS.filter((j) => !JOBS.includes(j)).map((j, i) => `<div class="row rel" data-for="${esc(JOBS.filter((b) => RELATED[b].includes(j)).join("|"))}"${picked.includes(j) ? "" : " hidden"}><input id="rel${i}" name="job" type="checkbox" value="${esc(j)}"${chk(picked.includes(j))}>
+      <label for="rel${i}">${esc(j)}</label></div>`).join("\n    ")}
     <label for="other">Something else <span class="hint">Separate with commas</span></label>
     <input id="other" name="other" type="text" maxlength="200" placeholder="e.g. public relations" value="${esc(other)}">
   </div></details>
