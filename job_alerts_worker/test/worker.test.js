@@ -105,7 +105,7 @@ const call = (path, { method = "GET", form, body, headers } = {}) =>
   }), env, q);
 
 const signUp = (extra = {}) => call("/subscribe", { method: "POST",
-  form: { email: "Ada@Example.com", keywords: "virtual assistant, pr", country: "Nigeria", level: "entry", ...extra } });
+  form: { email: "Ada@Example.com", keywords: "virtual assistant, pr, sales, marketing, editor", country: "Nigeria", level: "entry", ...extra } });
 const subscriber = async () => (await q("SELECT * FROM subscribers"))[0];
 
 test("the first members pay the launch price, and the page counts the places left", async () => {
@@ -126,7 +126,7 @@ test("the first members pay the launch price, and the page counts the places lef
   // A ₦0 grant doesn't use a place; the second real payment ends the offer.
   await q("INSERT INTO payments (reference, subscriber_id, amount_ngn, paid_at) VALUES ('grant1', NULL, 0, now())");
   assert.match(await (await call("/")).text(), /1 place left/);
-  await call("/subscribe", { method: "POST", form: { email: "b@example.com", keywords: "pr" } });
+  await call("/subscribe", { method: "POST", form: { email: "b@example.com", keywords: "pr, sales, marketing, editor, writer" } });
   const second = (await q("SELECT id FROM subscribers WHERE email = 'b@example.com'"))[0].id;
   await q(`INSERT INTO payments (reference, subscriber_id, amount_ngn, paid_at) VALUES ('p2', ${second}, 3500, now())`);
   const after = await (await call("/")).text();
@@ -140,7 +140,7 @@ test("new sign-ups can say how they heard about us, and the dashboard counts it"
   assert.equal((await subscriber()).heard, "TikTok");
   await signUp({ heard: "Instagram" }); // signing up again doesn't change the first answer
   assert.equal((await subscriber()).heard, "TikTok");
-  await call("/subscribe", { method: "POST", form: { email: "b@example.com", keywords: "pr", heard: "<script>" } });
+  await call("/subscribe", { method: "POST", form: { email: "b@example.com", keywords: "pr, sales, marketing, editor, writer", heard: "<script>" } });
   assert.equal((await q("SELECT heard FROM subscribers WHERE email = 'b@example.com'"))[0].heard, null);
 });
 
@@ -190,8 +190,8 @@ test("on-site needs a city; bots and bad input are refused", async () => {
 test("a confirmed address can't be changed by someone else signing up again", async () => {
   await signUp();
   await call(`/confirm/${(await subscriber()).token}`);
-  const r = await signUp({ keywords: "hacker" });
-  assert.equal((await subscriber()).keywords, "virtual assistant, pr");
+  const r = await signUp({ keywords: "hacker, a, b, c, d" });
+  assert.equal((await subscriber()).keywords, "virtual assistant, pr, sales, marketing, editor");
   assert.match(sent.at(-1).subject, /Change your job alerts/);
   assert.match(sent.at(-1).htmlContent, /renew your membership/);
   // They're recognised: a welcome-back page, not the new-user "confirm your email" steps.
@@ -333,7 +333,7 @@ test("a shared job page: details for all, how to apply after joining", async () 
   // Joining from the page: confirming opens the apply details.
   await call("/subscribe", { method: "POST", form: { email: "dev@example.com", job: "Software developer", work_type: "remote", for: slug } });
   const sub = await subscriber();
-  assert.equal(sub.keywords, "Software developer");
+  assert.equal(sub.keywords, "Software developer, Mobile developer, Full stack developer, Frontend developer, Backend developer");
   assert.equal(sub.heard, "Job link");
   assert.match(sent.at(-1).htmlContent, new RegExp(`/confirm/${sub.token}\\?job=${slug}`));
   const r = await call(`/confirm/${sub.token}?job=${slug}`);
@@ -384,7 +384,7 @@ test("preferences save, and unsubscribe deletes the subscriber but keeps payment
 });
 
 test("user text is escaped in pages", async () => {
-  await signUp({ keywords: "<script>alert(1)</script>" });
+  await signUp({ keywords: "<script>alert(1)</script>, pr, sales, marketing, editor" });
   const { token } = await subscriber();
   for (const path of [`/pay/${token}`, `/manage/${token}`]) {
     const page = await (await call(path)).text();
@@ -466,7 +466,7 @@ test("confirming starts the first job search once, and says jobs arrive in minut
 
   env.GH_TOKEN = "GHTOKEN";
   env.GITHUB_REPO = "owner/repo";
-  await call("/subscribe", { method: "POST", form: { email: "new@example.com", keywords: "pr", work_type: "remote" } });
+  await call("/subscribe", { method: "POST", form: { email: "new@example.com", keywords: "pr, sales, marketing, editor, writer", work_type: "remote" } });
   const fresh = (await q("SELECT token FROM subscribers WHERE email = 'new@example.com'"))[0].token;
   const r = await call(`/confirm/${fresh}`);
   assert.equal(r.status, 303);
@@ -488,7 +488,7 @@ test("every 2 invited friends who become paying members give the inviter a free 
 
   const friend = async (email) => {
     assert.match(await (await call(`/?ref=${code}`)).text(), new RegExp(`name="ref" value="${code}"`));
-    await call("/subscribe", { method: "POST", form: { email, keywords: "pr", work_type: "remote", ref: code } });
+    await call("/subscribe", { method: "POST", form: { email, keywords: "pr, sales, marketing, editor, writer", work_type: "remote", ref: code } });
     const { token } = (await q("SELECT token FROM subscribers WHERE email = $1", [email]))[0];
     await call(`/confirm/${token}`);
     return token;
@@ -510,7 +510,7 @@ test("every 2 invited friends who become paying members give the inviter a free 
   assert.match(await (await call(`/manage/${ada.token}`)).text(), /0 of 2 friends became members &middot; 2 joined &middot; 1 free month earned/);
 
   // Re-subscribing an existing address through someone's link doesn't count.
-  await call("/subscribe", { method: "POST", form: { email: "Ada@Example.com", keywords: "pr", work_type: "remote", ref: code } });
+  await call("/subscribe", { method: "POST", form: { email: "Ada@Example.com", keywords: "pr, sales, marketing, editor, writer", work_type: "remote", ref: code } });
   assert.equal((await q("SELECT referred_by FROM subscribers WHERE id = $1", [ada.id]))[0].referred_by, null);
 });
 
@@ -872,7 +872,7 @@ test("the search form saves Hours (any, full-time or part-time), and junk values
 test("the sign-up cards' 'Another country' list is saved like the main list", async () => {
   await signUp({ country: "other", country_other: "Egypt" });
   assert.equal((await subscriber()).country, "Egypt");
-  await call("/subscribe", { method: "POST", form: { email: "b@example.com", job: "Customer support", country: "other", country_other: "Atlantis" } });
+  await call("/subscribe", { method: "POST", form: { email: "b@example.com", job: "Customer support", other: "pr, sales, marketing, editor", country: "other", country_other: "Atlantis" } });
   assert.equal((await q("SELECT country FROM subscribers WHERE email = 'b@example.com'"))[0].country, "");
 });
 
@@ -906,4 +906,11 @@ test("after confirming, new sign-ups wait for their first jobs, then see 3 with 
 
   await q("DELETE FROM sent_jobs");
   assert.match(await (await call(`/found/${s.token}`)).text(), /Change my job titles/); // searched, nothing found
+});
+
+test("sign-up needs 5 job titles, and a job-link sign-up gets the job's similar titles", async () => {
+  const r = await signUp({ keywords: "virtual assistant, pr" });
+  assert.equal(r.status, 400);
+  assert.match(await r.text(), /Pick 5 jobs/);
+  assert.equal(await subscriber(), undefined);
 });
