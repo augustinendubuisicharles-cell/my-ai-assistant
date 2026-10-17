@@ -332,24 +332,57 @@ def win_back(base_url: str, token: str, jobs: list[dict], price: str, can_pay: b
                                                                  "Your free trial has ended"), body, footer)
 
 
-def more_titles(base_url: str, token: str, titles: list[str]) -> tuple[str, str, str]:
-    """One-off news email (17 Oct 2026): sign-up now asks for 5 job titles, so we ask earlier sign-ups to add more."""
-    manage = f"{base_url}/manage/{token}"
-    n = min(len(titles), 5)
-    dots = "".join(f'<span style="display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:6px;'
-                   f'background:{BLUE if k < n else "#dbe3f3"}"></span>' for k in range(5))
-    chips = "".join(f'<span style="display:inline-block;margin:0 6px 6px 0;padding:6px 12px;border-radius:20px;'
-                    f'background:#eef3ff;color:{BLUE};font-size:14px;font-weight:700">{escape(t)}</span>' for t in titles)
-    body = (f'<p style="margin:0 0 16px">More job titles means more matches. You now pick <b>5</b>, '
-            "and we suggest similar ones as you go.</p>"
-            f'<div style="margin:0 0 6px">{dots}<b style="font-size:14px">{n} of 5 picked</b></div>'
-            f'<div style="margin:10px 0 0">{chips}</div>'
-            + button(manage, "Add my job titles")
-            + f'<p style="color:{MUTED};font-size:13px;margin:6px 0 0">Add them today and tomorrow morning\'s email '
-              "searches all of them.</p>")
-    text = (f"More job titles means more matches. You can now pick 5, and we suggest similar ones as you go.\n\n"
-            f"You've picked {n} of 5: {', '.join(titles)}\n\n"
-            f"Add yours today and tomorrow morning's email searches all of them:\n{manage}")
-    html = layout(base_url, "Pick 5 job titles and get more matches tomorrow.", _hero("Pick 5 jobs, get more matches 🎯",
-                  "A quick update to your job alerts."), body)
-    return "Add more job titles for more matches tomorrow 🎯", text, html
+# Mirrors RELATED in job_alerts_worker/src/views.js, for the examples in similar_jobs_news.
+RELATED = {
+    "Virtual assistant": ["Executive assistant", "Administrative assistant", "Personal assistant", "Data entry"],
+    "Customer support": ["Customer service", "Customer success", "Live chat agent", "Technical support"],
+    "Software developer": ["Mobile developer", "Full stack developer", "Frontend developer", "Backend developer"],
+    "Data analyst": ["Business analyst", "Data scientist", "Research analyst", "BI analyst"],
+    "Content writer": ["Copywriter", "Technical writer", "SEO writer", "Editor"],
+    "Social media manager": ["Community manager", "Content creator", "Social media marketer", "Video editor"],
+    "Graphic designer": ["UI/UX designer", "Brand designer", "Illustrator", "Motion designer"],
+    "Digital marketing": ["SEO specialist", "Email marketing", "Marketing assistant", "Growth marketer"],
+    "Project manager": ["Product manager", "Operations manager", "Scrum master", "Program coordinator"],
+    "Bookkeeper": ["Accountant", "Accounts assistant", "Payroll officer", "Finance assistant"],
+}
+
+
+def similar_jobs_news(base_url: str, token: str, titles: list[str], member: bool, price: str = "") -> tuple[str, str, str]:
+    """One-off news email (17 Oct 2026): pick a job and we now suggest similar ones. Members are asked to update
+    their job titles; trial users (whose plan searches 2 titles) are asked to join to use all 5."""
+    manage, pay = f"{base_url}/manage/{token}", f"{base_url}/pay/{token}"
+    picked = {t.lower() for t in titles}
+    mine = next((t for t in RELATED if t.lower() in picked), None)
+    examples = [(mine, RELATED[mine])] if mine else [("Software developer", RELATED["Software developer"]),
+                                                      ("Virtual assistant", RELATED["Virtual assistant"])]
+
+    def example(job: str, similar: list[str]) -> str:
+        chips = "".join(f'<span style="display:inline-block;margin:0 6px 6px 0;padding:6px 12px;border-radius:20px;'
+                        f'background:#eef3ff;color:{BLUE};font-size:14px;font-weight:700">+ {escape(s)}</span>' for s in similar)
+        return (f'<div style="margin:0 0 14px;padding:14px 16px;border:1px solid #e3e8f2;border-radius:12px">'
+                f'<div style="font-size:13px;color:{MUTED};margin-bottom:8px">You pick <b style="color:#111">{escape(job)}</b>, we suggest</div>'
+                f'{chips}</div>')
+
+    lead = (f'<p style="margin:0 0 16px">When you choose a job, we now suggest <b>similar jobs</b> close to it. '
+            "More job titles in your field means more matches every morning.</p>")
+    boxes = "".join(example(j, s) for j, s in examples)
+    text_examples = "\n".join(f"- You pick {j}, we suggest: {', '.join(s)}" for j, s in examples)
+    if member:
+        cta = (f'<p style="margin:4px 0 0">Update your job titles now and pick up to <b>5</b> in your career field.</p>'
+               + button(manage, "Update my jobs")
+               + f'<p style="color:{MUTED};font-size:13px;margin:6px 0 0">Save today and tomorrow morning\'s email searches all of them.</p>')
+        text_cta = f"Update your job titles now (up to 5) and tomorrow morning's email searches all of them:\n{manage}"
+        subject, hero_sub = "New: similar jobs to grow your matches 🎯", "Update your jobs for more matches."
+    else:
+        cta = (f'<p style="margin:4px 0 0">Your free trial searches your first <b>2</b> job titles. '
+               f"Members get all <b>5</b>, plus the 5 best jobs every morning, tailored CVs and cover letters.</p>"
+               + button(pay, f"Join for {price}")
+               + f'<p style="color:{MUTED};font-size:13px;margin:6px 0 0">One payment &middot; no auto-renewal.</p>')
+        text_cta = (f"Your free trial searches your first 2 job titles. Members get all 5, plus the 5 best jobs every "
+                    f"morning, tailored CVs and cover letters. Join for {price}:\n{pay}")
+        subject, hero_sub = "New: similar jobs, and how to get all 5 searched 🎯", "Join to search up to 5 jobs."
+    text = (f"New on JobAlert: when you choose a job, we now suggest similar jobs close to it. "
+            f"More job titles in your field means more matches.\n\n{text_examples}\n\n{text_cta}")
+    html = layout(base_url, "Pick a job and we suggest similar ones for more matches.",
+                  _hero("Similar jobs, more matches 🎯", hero_sub), lead + boxes + cta)
+    return subject, text, html
