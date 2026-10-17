@@ -1,15 +1,17 @@
-"""Sends the one-off "pick 5 job titles" email (emails.more_titles) to active members and trial users with fewer than 5.
+"""Sends the one-off "similar jobs" email (emails.similar_jobs_news) to active members and trial users:
+members are asked to update their job titles, trial users to join so all 5 are searched.
 
-    ONLY_EMAIL=you@example.com python -m job_alerts.announce   # one test email (they must have signed up)
+    ONLY_EMAIL=you@example.com python -m job_alerts.announce   # test: both versions to one address (they must have signed up)
     SEND_ALL=yes python -m job_alerts.announce                 # everyone with alerts running
 
-Run by .github/workflows/job_alerts_announce.yml. Expired and unconfirmed sign-ups, and anyone with 5 titles already, are skipped.
+Run by .github/workflows/job_alerts_announce.yml. Expired and unconfirmed sign-ups, and members who already have 5 titles, are skipped.
 """
 import os
 import sys
 import time
 
 from . import db, emails, mailer
+from .send_daily import price_now
 
 
 def titles(sub: dict) -> list[str]:
@@ -29,18 +31,19 @@ def main() -> None:
     if only and not subs:
         sys.exit(f"{only} isn't a confirmed subscriber with alerts running.")
     if not only:
-        subs = [s for s in subs if len(titles(s)) < 5]
+        subs = [s for s in subs if not db.is_member(s, paid_ids) or len(titles(s)) < 5]
     members = sum(db.is_member(s, paid_ids) for s in subs)
     print(f"Sending to {len(subs)}: {members} member(s), {len(subs) - members} on trial.")
     sent = failed = 0
     for sub in subs:
         member = db.is_member(sub, paid_ids)
         try:
-            subject, text, html = emails.more_titles(base_url, sub["token"], titles(sub))
-            mailer.send(sub["email"], subject, text, html, unsubscribe_url=f"{base_url}/unsubscribe/{sub['token']}")
+            for version in ([True, False] if only else [member]):  # a test gets both versions
+                subject, text, html = emails.similar_jobs_news(base_url, sub["token"], titles(sub), version, f"₦{price_now():,}")
+                mailer.send(sub["email"], subject, text, html, unsubscribe_url=f"{base_url}/unsubscribe/{sub['token']}")
+                print(f"- subscriber {sub['id']}: sent ({'member' if version else 'trial'} version)")
+                time.sleep(1)
             sent += 1
-            print(f"- subscriber {sub['id']}: sent ({'member' if member else 'trial'})")
-            time.sleep(1)
         except Exception as e:
             failed += 1
             print(f"- subscriber {sub['id']}: FAILED {e}")
