@@ -46,7 +46,7 @@ const html = (body, status = 200) => new Response(body, { status, headers: { "co
 export function cleanPrefs(f) {
   // Ticked jobs from the list, then "Something else" (and the old free-text field, for forms still open).
   const typed = [f.get("other"), f.get("keywords")].map((v) => String(v || "")).join(",");
-  const listed = f.getAll("job").map(String).filter((j) => views.JOBS.includes(j));
+  const listed = f.getAll("job").map(String).filter((j) => views.ALL_JOBS.includes(j));
   const seen = new Set();
   const words = [...listed, ...typed.split(",").map((w) => w.trim()).filter(Boolean)]
     .filter((w) => !seen.has(w.toLowerCase()) && seen.add(w.toLowerCase())).slice(0, 5);
