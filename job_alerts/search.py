@@ -1089,14 +1089,16 @@ def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, ex
     gated = fill([j for j in ranked if gated_ok(j)])
     extra = fill([j for j in more if not signup(j)])
     gated += fill([j for j in more if gated_ok(j)])
-    # Part-time and still short after part-time, freelance and flexible-hours jobs (owner's rule, 18 Oct 2026):
-    # their own and similar titles at any hours, marked "full-time", come before older adverts and other roles.
-    relaxed = 0
+    # Part-time and still short: part-time jobs one step further out (the similar roles of their similar roles),
+    # then their own and similar titles' part-time jobs from the last 14 days, before any full-time job.
+    far = []
     if hours == "part" and len(picked) < minimum:
-        pool, _ = _search(keywords + near, country, remote_only, level, city, seen, Counter(), "any")
-        for j in pool:
-            j["matched"] = ["full-time"] + j["matched"]
-        relaxed = fill([j for j in pool if not signup(j)]) + fill([j for j in pool if gated_ok(j)])
+        far = [t for t in neighbours(keywords + near) if t not in keywords + near]
+        if far:
+            pool, _ = _search(far, country, remote_only, level, city, seen, Counter(), hours)
+            for j in pool:
+                j["matched"] = ["similar role"] + j["matched"]
+            extra += fill([j for j in pool if not signup(j)])
     # Still short: nobody gets fewer than the minimum. First their own and similar titles posted in the last
     # 14 days, then the best other open roles at their level, open to their country.
     # Members' "More jobs" spares come from the same places when the first ones run short.
@@ -1106,12 +1108,21 @@ def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, ex
     short = lambda: len(picked) < minimum or (spares is not None and
         sum(id(j) not in taken and not signup(j) for j in open_jobs + more + older_pool) < SPARES)
     if short():
-        older_pool, _ = _search(keywords + near, country, remote_only, level, city, seen, Counter(), hours, max_age=OLDER_AGE)
+        older_pool, _ = _search(keywords + near + far, country, remote_only, level, city, seen, Counter(), hours, max_age=OLDER_AGE)
         older_pool = [j for j in older_pool if not signup(j)]
         for j in older_pool:
             if j["hit"] not in keywords:
                 j["matched"] = ["similar role"] + j["matched"]
         older = fill(older_pool)
+        taken = {id(j) for j in picked}
+    # Part-time and still short after every part-time job with a close title (owner's rule, 18 Oct 2026):
+    # their own and similar titles at any hours, marked "full-time", come before other roles.
+    relaxed = 0
+    if hours == "part" and len(picked) < minimum:
+        pool, _ = _search(keywords + near, country, remote_only, level, city, seen, Counter(), "any")
+        for j in pool:
+            j["matched"] = ["full-time"] + j["matched"]
+        relaxed = fill([j for j in pool if not signup(j)]) + fill([j for j in pool if gated_ok(j)])
         taken = {id(j) for j in picked}
     if short():
         other_pool, _ = _search([], country, remote_only, level, city, seen, Counter(), hours, any_title=True)
