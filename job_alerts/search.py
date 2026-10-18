@@ -1067,9 +1067,14 @@ def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, ex
     gated = fill([j for j in ranked if gated_ok(j)])
     extra = fill([j for j in more if not signup(j)])
     gated += fill([j for j in more if gated_ok(j)])
-    # Owner's rule (18 Oct 2026): people who asked for part-time never get full-time jobs, even on days
-    # with fewer than the minimum.
+    # Part-time and still short after part-time, freelance and flexible-hours jobs (owner's rule, 18 Oct 2026):
+    # their own and similar titles at any hours, marked "full-time", come before older adverts and other roles.
     relaxed = 0
+    if hours == "part" and len(picked) < minimum:
+        pool, _ = _search(keywords + near, country, remote_only, level, city, seen, Counter(), "any")
+        for j in pool:
+            j["matched"] = ["full-time"] + j["matched"]
+        relaxed = fill([j for j in pool if not signup(j)]) + fill([j for j in pool if gated_ok(j)])
     # Still short: nobody gets fewer than the minimum. First their own and similar titles posted in the last
     # 14 days, then the best other open roles at their level, open to their country.
     # Members' "More jobs" spares come from the same places when the first ones run short.
@@ -1092,6 +1097,13 @@ def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, ex
         if cv is not None:
             other_pool = ai_match.rerank(other_pool, keywords, level, country, cv)
         other = fill(other_pool)
+    # Part-time only and still short: other roles at any hours, marked "full-time".
+    if hours == "part" and len(picked) < minimum:
+        pool, _ = _search([], country, remote_only, level, city, seen, Counter(), "any", any_title=True)
+        pool = [j for j in pool if not signup(j) and (tech or not TECH_TITLE.search(j["title"]))]
+        for j in pool:
+            j["matched"] = ["full-time"] + j["matched"]
+        other += fill(pool)
     if spares is not None:
         taken = {id(j) for j in picked}
         rest = [j for j in open_jobs + more + older_pool + other_pool if id(j) not in taken and not signup(j)][:SPARES * 2]
