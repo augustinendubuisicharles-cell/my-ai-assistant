@@ -10,15 +10,18 @@ export const start = (env, email) => dispatch(env, { only_email: email, first: "
 // schedule can start hours late, so it is only a fallback (send_daily skips anyone already emailed today).
 export const daily = (env) => dispatch(env, { first: "0" }, "daily run");
 
-async function dispatch(env, inputs, what, tries = 2) {
+// The daily check-up (job_alerts/health_check.py), started by the 06:30 UTC cron tick once the morning emails are out.
+export const checkup = (env) => dispatch(env, {}, "check-up", 2, "job_alerts_health.yml");
+
+async function dispatch(env, inputs, what, tries = 2, workflow = "job_alerts_daily.yml") {
   if (!enabled(env)) return false;
-  for (let i = 0; i < tries; i++) if (await dispatchOnce(env, inputs, what)) return true;
+  for (let i = 0; i < tries; i++) if (await dispatchOnce(env, inputs, what, workflow)) return true;
   return false;
 }
 
-async function dispatchOnce(env, inputs, what) {
+async function dispatchOnce(env, inputs, what, workflow) {
   try {
-    const r = await fetch(`https://api.github.com/repos/${env.GITHUB_REPO.trim()}/actions/workflows/job_alerts_daily.yml/dispatches`, {
+    const r = await fetch(`https://api.github.com/repos/${env.GITHUB_REPO.trim()}/actions/workflows/${workflow}/dispatches`, {
       method: "POST",
       headers: { authorization: `Bearer ${env.GH_TOKEN.trim()}`, accept: "application/vnd.github+json",
                  "user-agent": "jobalert-worker", "content-type": "application/json" },

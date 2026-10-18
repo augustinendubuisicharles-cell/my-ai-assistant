@@ -4,9 +4,7 @@ name: Job alerts -- daily check-up
 # owner a short report (to the JOB_ALERTS_OWNER_EMAIL secret). It only reads; it never changes accounts or
 # emails subscribers. The log shows subscriber numbers, never addresses.
 on:
-  schedule:
-    - cron: "0 7 * * *"  # 8am Lagos, an hour after the 06:00 morning run
-  workflow_dispatch:
+  workflow_dispatch:  # started by the website's 06:30 UTC cron tick (7:30am Lagos), once the morning emails are out
 
 jobs:
   check:
