@@ -836,6 +836,21 @@ def is_part_time(job: dict) -> bool:
     return bool(PART_TIME.search(f"{job['job_type']} {job['title']} {job['desc'][:1500]}".lower()))
 
 
+# Work that suits someone after part-time hours, even when the advert doesn't say "part-time".
+FLEXIBLE = re.compile(r"\bfreelanc|\bflexible (?:hours|schedule|working hours)|\bset your own (?:hours|schedule)|\bhourly\b"
+                      r"|\bper hour\b|\bproject[\s-]based\b|\b(?:[5-9]|[12]\d|30)\s*(?:-\s*\d+\s*)?(?:hours?|hrs?)\s*(?:per|a|/)\s*week\b")
+
+
+def fits_part_time(job: dict) -> bool:
+    """For people who asked for part-time: part-time, freelance, hourly or flexible-hours work."""
+    if is_part_time(job):
+        return True
+    # A board or title that says full-time wins over "flexible hours" in the advert.
+    if re.search(r"\bfull[\s_-]?time\b", f"{job['job_type']} {job['title']}".lower()):
+        return False
+    return bool(FLEXIBLE.search(f"{job['job_type']} {job['title']} {job['desc'][:1500]}".lower()))
+
+
 def score(job: dict, keywords: list[str], country: str, remote_only: bool, level: str,
           city: str = "", why: Counter | None = None, hours: str = "any", max_age: timedelta = MAX_AGE,
           any_title: bool = False) -> tuple[int, list[str]] | None:
@@ -867,7 +882,7 @@ def score(job: dict, keywords: list[str], country: str, remote_only: bool, level
                                 or job["level"].lower() in ("senior", "director", "executive")
                                 or (job["level"].lower() == "manager" and "manager" not in hit)):
         return no("too senior")
-    if hours == "part" and not is_part_time(job):
+    if hours == "part" and not fits_part_time(job):
         return no("not part-time")
     if hours == "full" and is_part_time(job):
         return no("part-time")
@@ -883,6 +898,8 @@ def score(job: dict, keywords: list[str], country: str, remote_only: bool, level
         reasons.append("entry-level")
     if is_part_time(job):
         reasons.append("part-time")
+    elif hours == "part" and fits_part_time(job):
+        reasons.append("flexible hours")
     if job["pay"]:
         pts += 2
         reasons.append(job["pay"])
@@ -1050,14 +1067,9 @@ def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, ex
     gated = fill([j for j in ranked if gated_ok(j)])
     extra = fill([j for j in more if not signup(j)])
     gated += fill([j for j in more if gated_ok(j)])
-    # Part-time and still short (few part-time adverts are open to every country): their own and similar
-    # titles at any hours, marked "full-time", come before older adverts and other roles.
+    # Owner's rule (18 Oct 2026): people who asked for part-time never get full-time jobs, even on days
+    # with fewer than the minimum.
     relaxed = 0
-    if hours == "part" and len(picked) < minimum:
-        pool, _ = _search(keywords + near, country, remote_only, level, city, seen, Counter(), "any")
-        for j in pool:
-            j["matched"] = ["full-time"] + j["matched"]
-        relaxed = fill([j for j in pool if not signup(j)]) + fill([j for j in pool if gated_ok(j)])
     # Still short: nobody gets fewer than the minimum. First their own and similar titles posted in the last
     # 14 days, then the best other open roles at their level, open to their country.
     # Members' "More jobs" spares come from the same places when the first ones run short.
@@ -1080,13 +1092,6 @@ def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, ex
         if cv is not None:
             other_pool = ai_match.rerank(other_pool, keywords, level, country, cv)
         other = fill(other_pool)
-    # Part-time only and still short: other roles at any hours, marked "full-time".
-    if hours == "part" and len(picked) < minimum:
-        pool, _ = _search([], country, remote_only, level, city, seen, Counter(), "any", any_title=True)
-        pool = [j for j in pool if not signup(j) and (tech or not TECH_TITLE.search(j["title"]))]
-        for j in pool:
-            j["matched"] = ["full-time"] + j["matched"]
-        other += fill(pool)
     if spares is not None:
         taken = {id(j) for j in picked}
         rest = [j for j in open_jobs + more + older_pool + other_pool if id(j) not in taken and not signup(j)][:SPARES * 2]
