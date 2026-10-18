@@ -536,6 +536,18 @@ async function rewardReferrer(env, q, ctx, referrerId) {
 }
 
 // Records any successful payment from the last day that isn't in our table yet.
+// Hourly: a first search that never started (the GitHub call failed when they confirmed) is started again,
+// for people who joined in the last 6 hours (so at most 6 tries each). The morning run covers everyone else.
+export async function retryFirstSearches(env, q) {
+  if (!firstSearch.enabled(env)) return [];
+  const due = await q(`SELECT email FROM subscribers s WHERE confirmed AND paid_until > now() AND last_run_at IS NULL
+    AND created_at BETWEEN now() - interval '6 hours' AND now() - interval '20 minutes'
+    AND NOT EXISTS (SELECT 1 FROM sent_jobs j WHERE j.subscriber_id = s.id) ORDER BY created_at LIMIT 5`);
+  const started = [];
+  for (const { email } of due) if (await firstSearch.start(env, email)) started.push(email);
+  return started;
+}
+
 export async function catchUpPayments(env, q) {
   if (!payments.provider(env)) return [];
   const refs = await payments.recentPaidRefs(env);
@@ -581,8 +593,11 @@ export default {
   // Cron triggers (wrangler.toml): 06:00 starts the morning job emails on time;
   // every 15 minutes, payments Paystack has but we never heard about are recorded.
   async scheduled(event, env, ctx) {
-    if (event.cron === "0 6 * * *") ctx.waitUntil(firstSearch.daily(env));
-    else ctx.waitUntil(catchUpPayments(env, makeQuery(env)).catch((e) => console.log(`[catch-up] ${e}`)));
+    if (event.cron === "0 6 * * *") return ctx.waitUntil(firstSearch.daily(env));
+    ctx.waitUntil(catchUpPayments(env, makeQuery(env)).catch((e) => console.log(`[catch-up] ${e}`)));
+    if (new Date(event.scheduledTime || Date.now()).getUTCMinutes() < 15) {
+      ctx.waitUntil(retryFirstSearches(env, makeQuery(env)).catch((e) => console.log(`[first search retry] ${e}`)));
+    }
   },
 };
 
