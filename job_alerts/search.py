@@ -794,6 +794,10 @@ _LIMITS = [
     r"\bright to work in {p}\b",
     r"\b{p}[- ](?:based )?(?:candidates|applicants|residents|citizens) only\b",
     r"\bonly (?:open to|accepting|hiring) (?:candidates |applicants )?(?:in|from|based in) {p}\b",
+    r"\bopen to (?:candidates|applicants|residents|people|talent|those) (?:who are )?(?:in|from|based in|located in|living in|residing in) {p}\b",
+    r"\b(?:hiring|recruiting|available|open) (?:only )?(?:in|within) {p}(?: only)?\b",
+    r"\bremote (?:role|position|job|opportunity)?\s?(?:in|within|across) {p}(?: only)?\b",
+    r"\banywhere (?:in|within) {p}\b",
 ]
 _LIMIT_RES = [(re.compile(t.format(p=f"(?:{place})")), allowed) for place, allowed in _PLACES.items() for t in _LIMITS]
 _CITIZENS = re.compile(r"\b(?:us|u\.s\.) citizen(?:s|ship)?\b|\bsecurity clearance\b|\bw-2\b")
