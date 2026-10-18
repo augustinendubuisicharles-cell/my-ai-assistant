@@ -1,6 +1,7 @@
 // HTML pages, ported from job_alerts/templates (the Python site). Every value
 // that comes from a user or the database goes through esc().
 import COUNTRIES from "./countries.js";
+import { cvDocx } from "./docx.js";
 
 export const esc = (s) =>
   String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -1064,7 +1065,7 @@ export const allTitlesTrial = (sub) => !!sub?.created_at && new Date(sub.created
 export const ALL_JOBS = [...new Set([...JOBS, ...Object.values(RELATED).flat()])];
 
 // AI cover letter or tailored CV for one job (members). Shows the result once written, and the form to (re)write it.
-// The tailored CV can also be downloaded as a Word file, built in the browser from the text.
+// The tailored CV can also be downloaded as a Word file (.docx, docx.js), built in the browser from the text.
 export function letterPage(ctx, { kind = "letter", sub, job, hasCv, cv = "", letter = "", left, error = "" }) {
   const isCv = kind === "cv", isPrep = kind === "prep";
   const noun = isCv ? "CV" : isPrep ? "prep sheet" : "letter";
@@ -1089,16 +1090,10 @@ ${job.url ? `<a class="btn ghost" href="${esc(job.url)}">Open the job and apply<
 <a href="${esc(other)}">${otherText}</a></p></div>
 <script>document.getElementById("copy").onclick=function(){var t=document.getElementById("letter");t.select();
 navigator.clipboard?navigator.clipboard.writeText(t.value):document.execCommand("copy");this.textContent="Copied ✓";};
-${isCv ? `document.getElementById("word").onclick=function(){
-var e=function(s){return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");},out=[],list=false;
-document.getElementById("letter").value.split("\\n").forEach(function(l,i){var t=l.trim();
-if(/^[-•*] /.test(t)){if(!list){out.push("<ul>");list=true;}out.push("<li>"+e(t.slice(2))+"</li>");return;}
-if(list){out.push("</ul>");list=false;}if(!t)return;
-if(i===0)out.push("<h1>"+e(t)+"</h1>");else if(t.length<40&&t===t.toUpperCase()&&/[A-Z]/.test(t))out.push("<h2>"+e(t)+"</h2>");else out.push("<p>"+e(t)+"</p>");});
-if(list)out.push("</ul>");
-var doc="<html><head><meta charset='utf-8'><style>body{font-family:Calibri,Arial,sans-serif;font-size:11pt}h1{font-size:18pt;margin:0}h2{font-size:12pt;border-bottom:1px solid #999;margin:14pt 0 4pt}p,li{margin:2pt 0}</style></head><body>"+out.join("")+"</body></html>";
-var a=document.createElement("a");a.href=URL.createObjectURL(new Blob(["\\ufeff"+doc],{type:"application/msword"}));
-a.download=${JSON.stringify(fileName + ".doc").replace(/</g, "\\u003c")};document.body.appendChild(a);a.click();a.remove();};` : ""}</script>` : ""}
+${isCv ? `var cvDocx=${cvDocx.toString().replace(/<\//g, "<\\/")};
+document.getElementById("word").onclick=function(){
+var a=document.createElement("a");a.href=URL.createObjectURL(new Blob([cvDocx(document.getElementById("letter").value)],{type:"application/vnd.openxmlformats-officedocument.wordprocessingml.document"}));
+a.download=${JSON.stringify(fileName + ".docx").replace(/</g, "\\u003c")};document.body.appendChild(a);a.click();a.remove();};` : ""}</script>` : ""}
 <form class="card" method="post" id="write"${letter ? ' style="margin-top:16px"' : ""}>
   ${hasCv ? `<details class="fold more" style="margin-top:0"><summary>Update my CV</summary>${cvField}</details>` : cvField}
   <button type="submit" id="go">${letter ? "Write it again" : isCv ? "Tailor my CV" : isPrep ? "Prepare me" : "Write my cover letter"}</button>
