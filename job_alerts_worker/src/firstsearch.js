@@ -10,8 +10,13 @@ export const start = (env, email) => dispatch(env, { only_email: email, first: "
 // schedule can start hours late, so it is only a fallback (send_daily skips anyone already emailed today).
 export const daily = (env) => dispatch(env, { first: "0" }, "daily run");
 
-async function dispatch(env, inputs, what) {
+async function dispatch(env, inputs, what, tries = 2) {
   if (!enabled(env)) return false;
+  for (let i = 0; i < tries; i++) if (await dispatchOnce(env, inputs, what)) return true;
+  return false;
+}
+
+async function dispatchOnce(env, inputs, what) {
   try {
     const r = await fetch(`https://api.github.com/repos/${env.GITHUB_REPO.trim()}/actions/workflows/job_alerts_daily.yml/dispatches`, {
       method: "POST",

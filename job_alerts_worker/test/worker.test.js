@@ -8,7 +8,7 @@ import { createHash, createHmac } from "node:crypto";
 import { PGlite } from "@electric-sql/pglite";
 import * as admin from "../src/admin.js";
 import * as views from "../src/views.js";
-import worker, { handle, catchUpPayments } from "../src/index.js";
+import worker, { handle, catchUpPayments, retryFirstSearches } from "../src/index.js";
 import COUNTRIES from "../src/countries.js";
 
 const repo = new URL("../../", import.meta.url).pathname;
@@ -913,4 +913,17 @@ test("sign-up needs 5 job titles, and a job-link sign-up gets the job's similar 
   assert.equal(r.status, 400);
   assert.match(await r.text(), /Pick 5 jobs/);
   assert.equal(await subscriber(), undefined);
+});
+
+test("a first search that never started is started again by the hourly check", async () => {
+  await signUp();
+  const { token } = await subscriber();
+  await call(`/confirm/${token}`); // no GH_TOKEN yet: the first search can't start
+  await q("UPDATE subscribers SET created_at = now() - interval '1 hour'");
+  env.GH_TOKEN = "GHTOKEN";
+  env.GITHUB_REPO = "owner/repo";
+  assert.deepEqual(await retryFirstSearches(env, q), ["ada@example.com"]);
+  assert.deepEqual(gh.at(-1), { ref: "main", inputs: { only_email: "ada@example.com", first: "1" } });
+  await q("UPDATE subscribers SET last_run_at = now()");
+  assert.deepEqual(await retryFirstSearches(env, q), []); // searched: nothing to do
 });
