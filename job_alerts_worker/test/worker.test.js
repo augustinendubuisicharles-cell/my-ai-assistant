@@ -233,11 +233,14 @@ test("trial then pay with Credo -> 90 days added on top, counted once", async ()
 
   const before = sent.length;
   const done = await call("/paid?transRef=vs_1");
-  assert.equal(done.status, 200);
+  assert.equal(done.status, 303);  // straight to the members' dashboard, logged in
+  assert.equal(done.headers.get("location"), "/me?saved=paid");
+  assert.match(done.headers.get("set-cookie"), /ja_session=/);
   const s = await subscriber();
   const receipts = () => sent.slice(before).filter((m) => m.subject.startsWith("Payment received"));
   assert.equal(receipts().length, 1);
   assert.match(receipts()[0].htmlContent, /₦5,000/);
+  assert.match(receipts()[0].htmlContent, new RegExp(`/login/${token}"[^>]*>Open my dashboard`));
   assert.equal(receipts()[0].sender.name, "JobAlert");
   const days = (new Date(s.paid_until) - Date.now()) / 86400000;
   assert.ok(days > 96.9 && days < 97.1, `paid days ${days}`);

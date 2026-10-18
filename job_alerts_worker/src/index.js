@@ -472,7 +472,8 @@ export async function handle(request, env, q) {
         "If you were charged, it will show on your account within a few minutes and we'll email you. " +
         `Otherwise you can try again from the link in your email${ctx.contact ? ` or contact ${ctx.contact}` : ""}.`, { status: 402 });
     }
-    return html(views.welcome(ctx, { sub, title: "Payment received 🎉", until: fmtDate(sub.paid_until), trial: false }));
+    // Straight to their members' dashboard (CV, cover letters, more jobs), logged in on this device.
+    return redirect("/me?saved=paid", { "set-cookie": sessionCookie(await db.sessionFor(q, sub.id)) });
   }
 
   if (path === "/telegram/webhook" && method === "POST") {
