@@ -764,7 +764,9 @@ test("members track applications: Apply links note the click, one-tap answers sa
   tracker = await (await call(`/applications/${token}`)).text();
   assert.match(tracker, /<b>1<\/b><span>Interviews/);
   assert.doesNotMatch(tracker, /Virtual Assistant/);
-  assert.match(await (await call(`/manage/${token}`)).text(), /My applications/);
+  const managed = await (await call(`/manage/${token}`)).text();
+  assert.match(managed, /My applications/);
+  assert.match(managed, new RegExp(`href="/login/${token}">🏠 My dashboard`));
 });
 
 test("members log in with an emailed link: once, scanner-safe, 30-day cookie, and log out ends it", async () => {

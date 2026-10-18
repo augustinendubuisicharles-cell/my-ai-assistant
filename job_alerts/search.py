@@ -62,6 +62,16 @@ ANYWHERE = ["worldwide", "anywhere", "global", "remote (any", "all countries"]
 TOO_SENIOR = {"entry": ["senior", "sr.", "sr ", "staff ", "lead ", "head of", "director", "principal", "manager", "chief", "vp ",
                         "vice president"],
               "mid": ["head of", "director", "chief", "vp ", "vice president", "principal"]}
+# Jobs for speakers of another language ("AI Trainer - Bosnian", "CX Associate - German"). Nigerian languages and
+# English stay in. Kept only when the person's own titles name that language.
+LANGUAGES = re.compile(r"\b(albanian|arabic|armenian|bengali|bosnian|bulgarian|cantonese|catalan|chinese|croatian|czech|danish"
+                       r"|dutch|estonian|farsi|finnish|flemish|french|georgian|german|greek|gujarati|hebrew|hindi|hungarian"
+                       r"|icelandic|indonesian|italian|japanese|kazakh|korean|latvian|lithuanian|malay|mandarin|marathi"
+                       r"|norwegian|persian|polish|portuguese|punjabi|romanian|russian|serbian|slovak|slovenian|spanish"
+                       r"|swahili|swedish|tagalog|tamil|telugu|thai|turkish|ukrainian|urdu|uzbek|vietnamese)\b")
+NON_LATIN = re.compile(r"[\u0400-\u04ff\u0590-\u06ff\u0900-\u097f\u0e00-\u0e7f\u3040-\u30ff\u4e00-\u9fff\uac00-\ud7af]")
+# Other roles (the last resort for the daily minimum) are never senior, whatever level the person chose.
+OTHER_ROLE_SENIOR = re.compile(r"\b(senior|sr\.?|staff|lead|principal|head of|director|chief|vp|vice president)\b")
 ENTRY_SIGNS = ["entry", "junior", "graduate", "trainee", "no experience", "intern"]
 UNPAID = ["volunteer", "unpaid", "commission only", "commission-only", "equity only"]
 SCAM_SIGNS = ["registration fee", "training fee", "pay a fee", "processing fee", "starter kit", "telegram",
@@ -899,6 +909,11 @@ def score(job: dict, keywords: list[str], country: str, remote_only: bool, level
     if level in TOO_SENIOR and (any(w in f" {title} " for w in senior)
                                 or job["level"].lower() in ("senior", "director", "executive")
                                 or (job["level"].lower() == "manager" and "manager" not in hit)):
+        return no("too senior")
+    lang = LANGUAGES.search(title)
+    if (lang and not any(lang.group(1) in k.lower() for k in keywords)) or NON_LATIN.search(job["title"]):
+        return no("needs another language")
+    if any_title and OTHER_ROLE_SENIOR.search(title):
         return no("too senior")
     if hours == "part" and not fits_part_time(job):
         return no("not part-time")
