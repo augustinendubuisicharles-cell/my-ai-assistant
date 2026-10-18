@@ -1,7 +1,7 @@
 """Finds jobs for one subscriber's preferences and ranks them.
 
 Remote jobs (no keys needed): the careers pages of about 1,000 companies on Greenhouse, Lever,
-Ashby, Workable and Recruitee (CAREER_PAGES + career_pages.json), plus Remotive, Working Nomads,
+Ashby, Workable and Recruitee (CAREER_PAGES + career_pages.json), plus Working Nomads,
 Arbeitnow, The Muse and Jobspresso. Every one lets people apply without a job-board account.
 Jooble (optional free key JOOBLE_API_KEY) searches thousands of sites, like Indeed, remote and on-site.
 On-site/hybrid jobs (optional keys): Adzuna (19 countries, free key at
@@ -165,10 +165,13 @@ def _in_country(place: str | None, country: str) -> str:
 # --- sources (each cached per run, so many subscribers with the same search cost one call) ---
 
 @lru_cache(maxsize=None)
-def from_himalayas(keyword: str, country: str) -> tuple:
+def from_himalayas(keyword: str, country: str, employment: str = "") -> tuple:
+    """employment: Himalayas' employment_type filter, e.g. "Part Time,Contractor" for part-time searches."""
     out = []
     try:
         params = {"q": keyword, "sort": "recent"}
+        if employment:
+            params["employment_type"] = employment
         if country:
             params["country"] = COUNTRIES.get(country, (country,))[0]
         for j in _get("https://himalayas.app/jobs/api/search", **params).get("jobs", []):
@@ -206,22 +209,37 @@ def from_jobicy(keyword: str) -> tuple:
     return tuple(out)
 
 
-# Whole-feed sources: fetched once per run and matched against every subscriber's job titles.
-
 @lru_cache(maxsize=1)
-def from_remotive() -> tuple:
-    out = []
-    try:
-        for j in _get("https://remotive.com/api/remote-jobs").get("jobs", []):
-            posted = j.get("publication_date")
-            out.append(_raw(
-                j.get("title"), j.get("company_name"), j.get("candidate_required_location"), j.get("url"), "Remotive",
-                datetime.fromisoformat(posted).replace(tzinfo=timezone.utc) if posted else None,
-                _clean(j.get("description")), True, pay=j.get("salary") or "", job_type=j.get("job_type") or ""))
-    except Exception as e:
-        print(f"[Remotive] skipped: {e}")
+def from_jobicy_latest() -> tuple:
+    """Jobicy's newest jobs open anywhere or in EMEA, whatever the title: its tag search finds nothing for most
+    titles (VA, support, data entry), so these are matched by title like the other feeds."""
+    out, urls = [], set()
+    for geo in ("anywhere", "emea"):
+        for j in from_jobicy_geo(geo):
+            if j["url"] not in urls:
+                urls.add(j["url"])
+                out.append(j)
     return tuple(out)
 
+
+def from_jobicy_geo(geo: str) -> tuple:
+    out = []
+    try:
+        for j in _get("https://jobicy.com/api/v2/remote-jobs", count=100, geo=geo).get("jobs", []):
+            out.append(_raw(
+                unescape(j.get("jobTitle", "")), j.get("companyName"), j.get("jobGeo") or "Anywhere", j.get("url"),
+                "Jobicy", datetime.fromisoformat(j["pubDate"]) if j.get("pubDate") else None,
+                _clean(j.get("jobExcerpt") or j.get("jobDescription")), True, j.get("jobLevel"),
+                _pay(j.get("salaryMin"), j.get("salaryMax"), j.get("salaryCurrency"), j.get("salaryPeriod")),
+                str(j.get("jobType") or ""),
+                _monthly(j.get("salaryMin"), j.get("salaryMax"), j.get("salaryCurrency"), j.get("salaryPeriod"))))
+        time.sleep(1)
+    except Exception as e:
+        print(f"[Jobicy:{geo}] skipped: {e}")
+    return tuple(out)
+
+
+# Whole-feed sources: fetched once per run and matched against every subscriber's job titles.
 
 @lru_cache(maxsize=1)
 def from_weworkremotely() -> tuple:
@@ -481,7 +499,7 @@ def _local_pages_live() -> tuple:
 
 def _remote_feeds_live() -> tuple:
     # Career pages go first, so when the same job is on a board too, the employer's own link is kept.
-    return (from_career_pages() + from_remotive() + from_workingnomads() + from_weworkremotely() + from_remoteok()
+    return (from_career_pages() + from_workingnomads() + from_weworkremotely() + from_remoteok()
             + from_arbeitnow() + from_themuse() + from_jobspresso())
 
 
@@ -978,10 +996,14 @@ def _search(keywords: list[str], country: str, remote_only: bool, level: str, ci
     pool = list(remote_feeds()) + ([] if remote_only else list(from_local_pages()))
     # Sign-up boards' jobs only count for VA and support titles (SIGNUP_ROLES).
     pool = [j for j in pool if j["source"] not in SIGNUP_BOARDS or any(SIGNUP_ROLES.search(k) for k in keywords)]
+    if any(SIGNUP_ROLES.search(k) for k in keywords):
+        pool += from_jobicy_latest()
     for k in keywords:
         pool += from_jooble(k, "" if remote_only else (city or country))
         if SIGNUP_ROLES.search(k):
             pool += from_himalayas(k, country) + from_jobicy(k)
+            if hours == "part":  # Himalayas can be asked for part-time and contract work only
+                pool += from_himalayas(k, country, "Part Time,Contractor")
         if not remote_only:
             pool += from_adzuna(k, country, city) + (from_reed(k, city) if country == "United Kingdom" else ())
     pool += BACKLOG  # after the live listings, so a job still in today's feeds keeps its fresh copy
