@@ -978,7 +978,8 @@ export function form(ctx, { sub = null, action, button, heading, lead, status = 
   const script = FORM_SCRIPT;
   if (!sub) return page(ctx, landing(ctx, signupCards(ctx, ref)) + SIGNUP_SCRIPT, { landing: true });
   return page(ctx, `${intro}
-${statusBox}${member ? `<a class="card apps-link" href="/applications/${esc(sub.token)}">📋 My applications <span>&rarr;</span></a>` : ""}${telegramBox}${whatsappBox}
+${statusBox}${member ? `<a class="card apps-link" href="/login/${esc(sub.token)}">🏠 My dashboard: CV, cover letters, more jobs <span>&rarr;</span></a>
+<a class="card apps-link" href="/applications/${esc(sub.token)}">📋 My applications <span>&rarr;</span></a>` : ""}${telegramBox}${whatsappBox}
 ${formHtml}
 <details class="fold info" id="plans"><summary>${sub ? "How it works" : "See what you get"}</summary>
 ${sub ? "" : strengths() + plans(ctx) + compare()}
