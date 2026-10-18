@@ -334,6 +334,7 @@ test("a shared job page: details for all, how to apply after joining", async () 
   await call("/subscribe", { method: "POST", form: { email: "dev@example.com", job: "Software developer", work_type: "remote", for: slug } });
   const sub = await subscriber();
   assert.equal(sub.keywords, "Software developer, Mobile developer, Full stack developer, Frontend developer, Backend developer");
+  assert.equal(sub.country, "Nigeria");
   assert.equal(sub.heard, "Job link");
   assert.match(sent.at(-1).htmlContent, new RegExp(`/confirm/${sub.token}\\?job=${slug}`));
   const r = await call(`/confirm/${sub.token}?job=${slug}`);

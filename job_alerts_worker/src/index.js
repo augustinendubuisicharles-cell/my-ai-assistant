@@ -157,6 +157,8 @@ export async function handle(request, env, q) {
     // From a shared job page (/job/<slug>): counted as "Job link", and confirming opens that job's apply details.
     const forJob = Object.hasOwn(FEATURED, String(f.get("for") || "")) ? String(f.get("for")) : "";
     if (forJob) prefs.heard = "Job link";
+    // The job-link form doesn't ask where they live: these shared jobs are for Nigeria, like the home page.
+    if (forJob && !prefs.country) prefs.country = "Nigeria";
     // Everyone searches 5 titles. The job-link form only sends the job's own title, so its similar jobs fill the rest.
     if (forJob) prefs.keywords = withSimilar(prefs.keywords);
     if (prefs.keywords.split(", ").length < 5) {
