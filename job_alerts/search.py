@@ -813,6 +813,14 @@ def open_to(job: dict, country: str) -> bool:
     return all(country in allowed for rx, allowed in _LIMIT_RES if rx.search(text))
 
 
+def open_worldwide(job: dict) -> bool:
+    """A remote job anyone can take: the listing says worldwide/anywhere, and the advert names no country it's limited to."""
+    loc = re.sub(r"anywhere in (?!the world)", "in ", job["location"].lower())
+    text = f"{job['title']} {job['location']} {job['desc']}".lower()
+    return (job["remote"] and any(w in loc for w in ANYWHERE) and not _CITIZENS.search(text)
+            and not any(rx.search(text) for rx, _ in _LIMIT_RES))
+
+
 def says_open_to(job: dict, country: str) -> bool:
     """True when the listing explicitly names the country, one of its regions, or worldwide."""
     loc = job["location"].lower()
@@ -850,6 +858,9 @@ def score(job: dict, keywords: list[str], country: str, remote_only: bool, level
         return no("not remote")
     if not location_fits(job["location"], country, job["remote"]) or not open_to(job, country):
         return no("not open to their country")
+    # "Any country" (no country chosen): only remote jobs open worldwide, never ones tied to one country.
+    if not country and remote_only and not open_worldwide(job):
+        return no("not open worldwide")
     # A word that's part of the title they asked for ("manager" in "product manager") doesn't make a job too senior.
     senior = [w for w in TOO_SENIOR.get(level, []) if w.strip(" .") not in hit]
     if level in TOO_SENIOR and (any(w in f" {title} " for w in senior)
