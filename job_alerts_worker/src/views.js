@@ -1171,7 +1171,7 @@ export function signinPage(ctx) {
 <script>document.getElementById("signin").submit();</script>`);
 }
 
-const SAVED = { cv: "Your CV is saved.", more: "Here are 5 more jobs.", nomore: "That's all for today. New jobs arrive tomorrow morning." };
+const SAVED = { paid: "Payment received 🎉 You're a member. Tap My CV to add your CV for tailored CVs and cover letters.", cv: "Your CV is saved.", more: "Here are 5 more jobs.", nomore: "That's all for today. New jobs arrive tomorrow morning." };
 
 
 const MI = (d) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;

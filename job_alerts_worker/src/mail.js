@@ -106,7 +106,7 @@ export function referralReward(baseUrl, token, months, until) {
 
 // Sent once when a payment is recorded: JobAlert's own receipt.
 export function paymentReceipt(baseUrl, token, { amount, reference, paidOn, until, months, provider, contact }) {
-  const link = `${baseUrl}/manage/${token}`;
+  const link = `${baseUrl}/login/${token}`;  // logs them in to their members' dashboard
   const naira = `₦${Number(amount).toLocaleString("en")}`;
   const row = (k, v) => `<tr><td style="padding:9px 0;color:${MUTED};border-bottom:1px solid #e6e9f0">${esc(k)}</td>` +
     `<td align="right" style="padding:9px 0;font-weight:700;border-bottom:1px solid #e6e9f0">${esc(v)}</td></tr>`;
@@ -116,12 +116,12 @@ export function paymentReceipt(baseUrl, token, { amount, reference, paidOn, unti
     row("Reference", reference) + `</table>` +
     steps([["The 5 best jobs every morning", "From all 5 of your job titles, and 5 more whenever you ask on your dashboard"], ["Tailored CVs and cover letters", "Your CV rewritten for any job in your email, plus a ready letter"],
       ["Telegram alerts", "New matches during the day, so you can apply first"]]) +
-    button(link, "Open my job alerts") +
+    button(link, "Open my dashboard") +
     `<p style="color:${MUTED};font-size:13px;margin:6px 0 0">Paid securely through ${esc(provider || "our payment partner")}. ` +
     `Nothing renews automatically. Not happy? Full refund within 7 days${contact ? `: write to ${esc(contact)}` : ""}.</p>`;
   return [`Payment received: you're a JobAlert member 🎉`,
     `Thank you! Your payment went through.\n\nAmount: ${naira}\nMembership: ${months} months\nActive until: ${until}\n` +
-    `Paid on: ${paidOn}\nReference: ${reference}\n\nOpen your job alerts: ${link}\n\nNothing renews automatically. Full refund within 7 days.`,
+    `Paid on: ${paidOn}\nReference: ${reference}\n\nOpen your dashboard: ${link}\n\nNothing renews automatically. Full refund within 7 days.`,
     layout(baseUrl, `${naira} received. Your membership runs until ${until}.`, hero("Payment received 🎉", "You're now a JobAlert member"), body)];
 }
 
