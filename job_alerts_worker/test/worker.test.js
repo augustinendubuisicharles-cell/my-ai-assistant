@@ -561,6 +561,13 @@ test("members get their CV tailored to a job, counted apart from letters, and ca
 
   const done = await (await call(link, { method: "POST", form: { cv: "Ada Obi. Comms officer at Lagos NGO, 2 years." } })).text();
   assert.match(done, /Download for Word/);
+  // The download is a real .docx (a zip) built in the browser by the page's own copy of cvDocx.
+  const script = done.match(/var cvDocx=([\s\S]*?);\ndocument\.getElementById\("word"\)/)[1];
+  assert.doesNotMatch(script, /<\/(w:|script)/i);
+  const bytes = new Function(`return (${script})`)()("Ada Obi\nSUMMARY\n- Comms & PR");
+  assert.deepEqual([...bytes.slice(0, 4)], [0x50, 0x4b, 0x03, 0x04]);
+  assert.match(new TextDecoder().decode(bytes), /<w:t xml:space="preserve">•\tComms &amp; PR<\/w:t>/);
+  assert.match(done, /\.docx"/);
   assert.match(done, /9 of 10 left today/);
   assert.match(done, /href="\/letter\/[\w-]+\?t=PR\+Associate/); // and a cover letter for the same job
   assert.match(ai[0].system, /Rewrite the applicant's CV/);
