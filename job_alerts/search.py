@@ -1009,16 +1009,17 @@ def _search(keywords: list[str], country: str, remote_only: bool, level: str, ci
     """Every listing that passes the checks for these titles, best first, plus how many listings each board gave.
     any_title (keywords empty): every open job, whatever the title, from the feeds already read."""
     pool = list(remote_feeds()) + ([] if remote_only else list(from_local_pages()))
-    # Sign-up boards' jobs only count for VA and support titles (SIGNUP_ROLES).
-    pool = [j for j in pool if j["source"] not in SIGNUP_BOARDS or any(SIGNUP_ROLES.search(k) for k in keywords)]
+    # Sign-up boards' jobs only count for VA and support titles (SIGNUP_ROLES), and for every part-time search
+    # (owner's call, 19 Oct 2026: a part-time job behind a sign-up beats a full-time one).
+    pool = [j for j in pool if j["source"] not in SIGNUP_BOARDS or hours == "part" or any(SIGNUP_ROLES.search(k) for k in keywords)]
     if any(SIGNUP_ROLES.search(k) for k in keywords):
         pool += from_jobicy_latest()
     for k in keywords:
         pool += from_jooble(k, "" if remote_only else (city or country))
         if SIGNUP_ROLES.search(k):
             pool += from_himalayas(k, country) + from_jobicy(k)
-            if hours == "part":  # Himalayas can be asked for part-time and contract work only
-                pool += from_himalayas(k, country, "Part Time,Contractor")
+        if hours == "part":  # Himalayas can be asked for part-time and contract work only
+            pool += from_himalayas(k, country, "Part Time,Contractor")
         if not remote_only:
             pool += from_adzuna(k, country, city) + (from_reed(k, city) if country == "United Kingdom" else ())
     pool += BACKLOG  # after the live listings, so a job still in today's feeds keeps its fresh copy
@@ -1098,9 +1099,9 @@ def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, ex
                 picked.append(j)
                 added += 1
         return added
-    # VA and support titles only (SIGNUP_ROLES): their own title from a sign-up board beats a similar role,
-    # tagged "sign-up needed to apply".
-    gated_ok = lambda j: signup(j) and SIGNUP_ROLES.search(j["hit"]) and any(SIGNUP_ROLES.search(k) for k in keywords)
+    # VA and support titles (SIGNUP_ROLES), and every part-time search: their own title from a sign-up board
+    # beats a similar role, tagged "sign-up needed to apply".
+    gated_ok = lambda j: signup(j) and (hours == "part" or SIGNUP_ROLES.search(j["hit"]) and any(SIGNUP_ROLES.search(k) for k in keywords))
     gated = fill([j for j in ranked if gated_ok(j)])
     extra = fill([j for j in more if not signup(j)])
     gated += fill([j for j in more if gated_ok(j)])
@@ -1114,6 +1115,7 @@ def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, ex
             for j in pool:
                 j["matched"] = ["similar role"] + j["matched"]
             extra += fill([j for j in pool if not signup(j)])
+            gated += fill([j for j in pool if signup(j)])
     # Still short: nobody gets fewer than the minimum. First their own and similar titles posted in the last
     # 14 days, then the best other open roles at their level, open to their country.
     # Members' "More jobs" spares come from the same places when the first ones run short.
@@ -1124,11 +1126,13 @@ def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, ex
         sum(id(j) not in taken and not signup(j) for j in open_jobs + more + older_pool) < SPARES)
     if short():
         older_pool, _ = _search(keywords + near + far, country, remote_only, level, city, seen, Counter(), hours, max_age=OLDER_AGE)
+        older_gated = [j for j in older_pool if signup(j) and hours == "part"]
         older_pool = [j for j in older_pool if not signup(j)]
-        for j in older_pool:
+        for j in older_pool + older_gated:
             if j["hit"] not in keywords:
                 j["matched"] = ["similar role"] + j["matched"]
         older = fill(older_pool)
+        gated += fill(older_gated)
         taken = {id(j) for j in picked}
     # Part-time and still short after every part-time job with a close title (owner's rule, 18 Oct 2026):
     # their own and similar titles at any hours, marked "full-time", come before other roles.
