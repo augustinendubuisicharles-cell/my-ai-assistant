@@ -88,6 +88,7 @@ SIGNUP_ROLES = re.compile(r"assistant|support|customer|admin|receptionist|data e
 # Specialist tech titles: never used as an "other role" for someone who isn't looking for tech work.
 TECH_TITLE = re.compile(r"engineer|developer|devops|\bsre\b|programmer|architect|data scien|machine learning|python|java|node\.?js|full.?stack|backend|frontend", re.I)
 SIGNUP_PENALTY = 100
+DEFAULT_COUNTRY = "Nigeria"  # for "Any country" accounts (search.score)
 
 
 def _clean(html_text: str) -> str:
@@ -349,18 +350,23 @@ def _rss(url: str, source: str, location: str = "Anywhere") -> tuple:
         r = requests.get(url, headers=HEADERS, timeout=TIMEOUT)
         r.raise_for_status()
         for item in ET.fromstring(r.content).iter("item"):
-            title, company = (item.findtext("title") or "").strip(), ""
+            title, company, where, desc = (item.findtext("title") or "").strip(), "", location, item.findtext("description")
             for el in item:  # namespaced extras some boards add, e.g. <job_listing:company>
                 tag = el.tag.rsplit("}", 1)[-1].lower()
                 if tag in ("company", "company_name", "companyname") and el.text:
                     company = el.text.strip()
                 elif tag in ("location", "region") and el.text:
-                    location = el.text.strip()
+                    where = el.text.strip()
+                elif tag == "creator" and el.text and "⚲" in el.text:  # Jobspresso: "Company<br>⚲&nbsp;United States"
+                    company, _, place = el.text.partition("⚲")
+                    company, where = _clean(company), _clean(place)
+                elif tag == "encoded" and el.text:  # the whole advert, where "must be based in..." usually is
+                    desc = el.text
             if not company and " at " in title:
                 title, _, company = title.rpartition(" at ")
             posted = item.findtext("pubDate")
-            out.append(_raw(title, company, location, item.findtext("link"), source,
-                            parsedate_to_datetime(posted) if posted else None, _clean(item.findtext("description")), True))
+            out.append(_raw(title, company, where, item.findtext("link"), source,
+                            parsedate_to_datetime(posted) if posted else None, _clean(desc), True))
     except Exception as e:
         print(f"[{source}] skipped: {e}")
     return tuple(out)
@@ -822,12 +828,19 @@ _LIMITS = [
     r"\bright to work in {p}\b",
     r"\b{p}[- ](?:based )?(?:candidates|applicants|residents|citizens) only\b",
     r"\bonly (?:open to|accepting|hiring) (?:candidates |applicants )?(?:in|from|based in) {p}\b",
-    r"\bopen to (?:candidates|applicants|residents|people|talent|those) (?:who are )?(?:in|from|based in|located in|living in|residing in) {p}\b",
+    r"\bopen to (?:candidates|applicants|residents|people|talent|those) (?:who are )?(?:in|from|based in|based within|located in|living in|residing in) {p}\b",
     r"\b(?:hiring|recruiting|available|open) (?:only )?(?:in|within) {p}(?: only)?\b",
     r"\bremote (?:role|position|job|opportunity)?\s?(?:in|within|across) {p}(?: only)?\b",
     r"\banywhere (?:in|within) {p}\b",
+    r"\bhiring only (?:in|within|from) {p}\b",
+    r"\b(?:candidates|applicants|someone|people|talent|professionals?|assistants?|representatives?|specialists?|agents?)\s*,?\s*"
+    r"(?:who are |who is |must be |should be )?(?:based|located|living|residing) (?:in|within) {p}\b",
+    r"\bbased (?:in|within) {p} only\b",
 ]
-_LIMIT_RES = [(re.compile(t.format(p=f"(?:{place})")), allowed) for place, allowed in _PLACES.items() for t in _LIMITS]
+_LIMIT_RES = [(re.compile(t.replace("{p}\\b", "{p}(?![a-z])").format(p=f"(?:{place})")), allowed)
+              for place, allowed in _PLACES.items() for t in _LIMITS]
+# North American working hours named in the title ("Support Specialist, Pacific/Mountain Time", "... (EST)").
+_US_HOURS = re.compile(r"\b(?:pacific|mountain|eastern|central)(?:\s*time\b|\s*/)|\b(?:pst|pdt|est|edt|cst|cdt|mst|mdt)\b")
 _CITIZENS = re.compile(r"\b(?:us|u\.s\.) citizen(?:s|ship)?\b|\bsecurity clearance\b|\bw-2\b")
 
 
@@ -838,15 +851,9 @@ def open_to(job: dict, country: str) -> bool:
     text = f"{job['title']} {job['location']} {job['desc']}".lower()
     if country != "United States" and _CITIZENS.search(text):
         return False
+    if country not in ("United States", "Canada") and _US_HOURS.search(job["title"].lower()):
+        return False
     return all(country in allowed for rx, allowed in _LIMIT_RES if rx.search(text))
-
-
-def open_worldwide(job: dict) -> bool:
-    """A remote job anyone can take: the listing says worldwide/anywhere, and the advert names no country it's limited to."""
-    loc = re.sub(r"anywhere in (?!the world)", "in ", job["location"].lower())
-    text = f"{job['title']} {job['location']} {job['desc']}".lower()
-    return (job["remote"] and any(w in loc for w in ANYWHERE) and not _CITIZENS.search(text)
-            and not any(rx.search(text) for rx, _ in _LIMIT_RES))
 
 
 def says_open_to(job: dict, country: str) -> bool:
@@ -889,6 +896,8 @@ def score(job: dict, keywords: list[str], country: str, remote_only: bool, level
             why[reason] += 1
         return None
 
+    # Owner's rule (19 Oct 2026): most members are in Nigeria, so "Any country" accounts only get jobs open to Nigerians.
+    country = country or DEFAULT_COUNTRY
     title, text = job["title"].lower(), f"{job['title']} {job['desc']}".lower()
     hit = "" if any_title else title_hit(title, keywords)
     if not hit and not any_title:
@@ -901,9 +910,6 @@ def score(job: dict, keywords: list[str], country: str, remote_only: bool, level
         return no("not remote")
     if not location_fits(job["location"], country, job["remote"]) or not open_to(job, country):
         return no("not open to their country")
-    # "Any country" (no country chosen): only remote jobs open worldwide, never ones tied to one country.
-    if not country and remote_only and not open_worldwide(job):
-        return no("not open worldwide")
     # A word that's part of the title they asked for ("manager" in "product manager") doesn't make a job too senior.
     senior = [w for w in TOO_SENIOR.get(level, []) if w.strip(" .") not in hit]
     if level in TOO_SENIOR and (any(w in f" {title} " for w in senior)
@@ -1000,7 +1006,10 @@ BACKLOG: list[dict] = []
 def set_backlog(rows: list[dict]) -> None:
     BACKLOG[:] = [{**_raw(r["title"], r["company"], r["location"], r["url"], r["source"] or "Earlier matches",
                           r["posted_at"], r["description"], "remote" in (r["matched"] or "").lower(), pay=r["pay"] or ""),
-                   "backlog": True} for r in rows if r.get("title")]
+                   "backlog": True} for r in rows if r.get("title")
+                  # Jobspresso jobs sent before 20 Oct 2026 were all saved as "Anywhere" (its feed's real location
+                  # wasn't read), so they can't be trusted; its live feed still brings the current ones.
+                  and r.get("source") != "Jobspresso"]
 
 
 def _search(keywords: list[str], country: str, remote_only: bool, level: str, city: str,

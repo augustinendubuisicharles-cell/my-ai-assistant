@@ -72,9 +72,8 @@ def check_rules(problems: list) -> None:
     for r in today:
         job = {"title": r["title"] or "", "location": r["location"] or "", "desc": r["description"] or "",
                "remote": r["remote_only"] or "remote" in f"{r['location']} {r['matched']}".lower(), "job_type": ""}
-        if not r["country"] and r["remote_only"] and not search.open_worldwide(job):
-            wrong_place.append(r)
-        elif r["country"] and not (search.location_fits(job["location"], r["country"], job["remote"]) and search.open_to(job, r["country"])):
+        country = r["country"] or search.DEFAULT_COUNTRY  # "Any country" accounts only get jobs open to Nigerians
+        if not (search.location_fits(job["location"], country, job["remote"]) and search.open_to(job, country)):
             wrong_place.append(r)
     if wrong_place:
         eg = wrong_place[0]
