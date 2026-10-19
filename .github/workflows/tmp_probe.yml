@@ -1,0 +1,14 @@
+name: tmp probe
+on: push
+jobs:
+  p:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install -q -r job_alerts/requirements.txt
+      - run: python -m tmp_probe.probe
+      - uses: actions/upload-artifact@v4
+        with: {name: cc_slugs, path: cc_slugs.json, retention-days: 3}
