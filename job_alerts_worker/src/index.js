@@ -16,6 +16,7 @@ import * as firstSearch from "./firstsearch.js";
 import * as letters from "./letters.js";
 import * as admin from "./admin.js";
 import { FEATURED } from "./featured.js";
+import { cvDocx, cvFileName } from "./docx.js";
 
 const EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
@@ -264,6 +265,20 @@ export async function handle(request, env, q) {
     return msg(number ? "WhatsApp alerts are on" : "WhatsApp alerts are off",
       number ? "New matches will come to WhatsApp during the day, before the morning email." : "Your daily email carries on as normal.",
       { ok: true, link: `/manage/${sub.token}`, linkText: "Back to my alerts" });
+  }
+
+  // The tailored CV as a Word file: the CV page posts its text here and gets a normal file download back.
+  if ((m = path.match(/^\/cv\/([\w-]+)\/docx$/)) && method === "POST") {
+    const sub = await db.byToken(q, m[1]);
+    if (!sub || !(await db.isMember(q, sub))) return notFound();
+    const text = String((await request.formData()).get("text") || "").trim().slice(0, 20000);
+    if (!text) return notFound();
+    const name = cvFileName({ title: String(url.searchParams.get("t") || "Tailored").slice(0, 200), company: String(url.searchParams.get("c") || "").slice(0, 200) });
+    return new Response(cvDocx(text), { headers: {
+      "content-type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "content-disposition": `attachment; filename="${name.replace(/"/g, "")}"; filename*=UTF-8''${encodeURIComponent(name)}`,
+      "cache-control": "no-store",
+    } });
   }
 
   // AI cover letter, tailored CV or interview prep for one job, linked from members' emails and job pages:

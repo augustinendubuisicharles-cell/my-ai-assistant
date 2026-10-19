@@ -1,7 +1,6 @@
 // HTML pages, ported from job_alerts/templates (the Python site). Every value
 // that comes from a user or the database goes through esc().
 import COUNTRIES from "./countries.js";
-import { cvDocx } from "./docx.js";
 
 export const esc = (s) =>
   String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -1073,7 +1072,7 @@ export function letterPage(ctx, { kind = "letter", sub, job, hasCv, cv = "", let
   <textarea id="cv" name="cv" rows="8" maxlength="15000"${hasCv ? "" : " required"} placeholder="Paste your CV here">${esc(cv)}</textarea>`;
   const other = `/${isCv ? "letter" : "cv"}/${sub.token}?${new URLSearchParams({ t: job.title, c: job.company, u: job.url })}`;
   const otherText = isCv ? "Write a cover letter for it too" : isPrep ? "Get your CV tailored to this job" : "Get your CV tailored to this job too";
-  const fileName = `CV - ${job.title}${job.company ? ` - ${job.company}` : ""}`.replace(/[^\w .,&()-]+/g, " ").slice(0, 120);
+  const download = `/cv/${sub.token}/docx?${new URLSearchParams({ t: job.title, c: job.company })}`;
   return page(ctx, `<h1>${isCv ? "📄 Your CV for this job" : isPrep ? "🎤 Interview prep" : "✍️ Cover letter"}</h1>
 <p class="lead">${esc(job.title)}${job.company ? ` at ${esc(job.company)}` : ""}</p>
 ${isCv && !letter ? `<p>We rewrite your CV for this job: a summary aimed at the role, your most relevant experience first,
@@ -1082,7 +1081,8 @@ ${isPrep && !letter ? `<p>The questions this interviewer is likely to ask, with 
 ${error ? `<p class="card status">${esc(error)}</p>` : ""}
 ${letter ? `<div class="card"><textarea id="letter" rows="${isCv || isPrep ? 24 : 16}" readonly>${esc(letter)}</textarea>
 <div class="actions"><button type="button" id="copy" style="margin:0">Copy ${noun}</button>
-${isCv ? `<button type="button" id="word" class="btn ghost" style="margin:0">Download for Word</button>` : ""}
+${isCv ? `<form method="post" action="${esc(download)}" style="display:contents"><textarea name="text" hidden>${esc(letter)}</textarea>
+<button type="submit" class="btn ghost" style="margin:0">Download for Word</button></form>` : ""}
 ${job.url ? `<a class="btn ghost" href="${esc(job.url)}">Open the job and apply</a>` : ""}</div>
 <p class="note">${isCv ? "Check every line is true and your contact details are right before sending."
     : isPrep ? "Say the answers out loud a few times, in your own words. Good luck!"
@@ -1090,10 +1090,7 @@ ${job.url ? `<a class="btn ghost" href="${esc(job.url)}">Open the job and apply<
 <a href="${esc(other)}">${otherText}</a></p></div>
 <script>document.getElementById("copy").onclick=function(){var t=document.getElementById("letter");t.select();
 navigator.clipboard?navigator.clipboard.writeText(t.value):document.execCommand("copy");this.textContent="Copied ✓";};
-${isCv ? `var cvDocx=${cvDocx.toString().replace(/<\//g, "<\\/")};
-document.getElementById("word").onclick=function(){
-var a=document.createElement("a");a.href=URL.createObjectURL(new Blob([cvDocx(document.getElementById("letter").value)],{type:"application/vnd.openxmlformats-officedocument.wordprocessingml.document"}));
-a.download=${JSON.stringify(fileName + ".docx").replace(/</g, "\\u003c")};document.body.appendChild(a);a.click();a.remove();};` : ""}</script>` : ""}
+</script>` : ""}
 <form class="card" method="post" id="write"${letter ? ' style="margin-top:16px"' : ""}>
   ${hasCv ? `<details class="fold more" style="margin-top:0"><summary>Update my CV</summary>${cvField}</details>` : cvField}
   <button type="submit" id="go">${letter ? "Write it again" : isCv ? "Tailor my CV" : isPrep ? "Prepare me" : "Write my cover letter"}</button>
