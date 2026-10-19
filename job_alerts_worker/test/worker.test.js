@@ -563,13 +563,18 @@ test("members get their CV tailored to a job, counted apart from letters, and ca
 
   const done = await (await call(link, { method: "POST", form: { cv: "Ada Obi. Comms officer at Lagos NGO, 2 years." } })).text();
   assert.match(done, /Download for Word/);
-  // The download is a real .docx (a zip) built in the browser by the page's own copy of cvDocx.
-  const script = done.match(/var cvDocx=([\s\S]*?);\ndocument\.getElementById\("word"\)/)[1];
-  assert.doesNotMatch(script, /<\/(w:|script)/i);
-  const bytes = new Function(`return (${script})`)()("Ada Obi\nSUMMARY\n- Comms & PR");
+  // The download is a real .docx (a zip) sent by the Worker as a file, so phone in-app browsers can save it too.
+  const action = done.match(/<form method="post" action="([^"]+)"[^>]*><textarea name="text" hidden>/)[1].replace(/&amp;/g, "&");
+  assert.match(action, /^\/cv\/[\w-]+\/docx\?t=PR\+Associate&c=Acme$/);
+  const file = await call(action, { method: "POST", form: { text: "Ada Obi\nSUMMARY\n- Comms & PR" } });
+  assert.equal(file.headers.get("content-type"), "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+  assert.match(file.headers.get("content-disposition"), /^attachment; filename="CV - PR Associate - Acme\.docx"/);
+  const bytes = new Uint8Array(await file.arrayBuffer());
   assert.deepEqual([...bytes.slice(0, 4)], [0x50, 0x4b, 0x03, 0x04]);
   assert.match(new TextDecoder().decode(bytes), /<w:t xml:space="preserve">•\tComms &amp; PR<\/w:t>/);
-  assert.match(done, /\.docx"/);
+  // Only members can turn text into a file.
+  assert.equal((await call(action.replace(token, "nope"), { method: "POST", form: { text: "x" } })).status, 404);
+  assert.doesNotMatch(done, /createObjectURL/);
   assert.match(done, /9 of 10 left today/);
   assert.match(done, /href="\/letter\/[\w-]+\?t=PR\+Associate/); // and a cover letter for the same job
   assert.match(ai[0].system, /Rewrite the applicant's CV/);

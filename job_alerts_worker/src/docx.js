@@ -1,7 +1,12 @@
-// A tailored CV as a real Word file (.docx), built in the member's browser from the CV text.
-// The page includes this function's source (cvDocx.toString()), so it must not use anything from outside it.
+// A tailored CV as a real Word file (.docx), built by the Worker from the CV text (POST /cv/<token>/docx).
+// It used to be built in the browser, but phone in-app browsers (the Google app, Chrome on iPhone) silently
+// ignore those downloads; a normal file response downloads everywhere.
 // First line = name (big, bold); short ALL-CAPS lines = section headings; "- " lines = bullets; the rest = paragraphs.
-// No "</" anywhere in the code itself (only in strings): the page escapes it so the script tag stays closed.
+
+// The download's file name, e.g. "CV - PR Associate - Acme.docx".
+export const cvFileName = (job) =>
+  `CV - ${job.title}${job.company ? ` - ${job.company}` : ""}`.replace(/[^\w .,&()-]+/g, " ").replace(/\s+/g, " ").trim().slice(0, 120) + ".docx";
+
 export function cvDocx(text) {
   var esc = function (s) { return s.replace(/&/g, "&amp;").replace(/[<]/g, "&lt;").replace(/>/g, "&gt;"); };
   var run = function (t, props) {
