@@ -8,7 +8,8 @@ import { createHash, createHmac } from "node:crypto";
 import { PGlite } from "@electric-sql/pglite";
 import * as admin from "../src/admin.js";
 import * as views from "../src/views.js";
-import worker, { handle, catchUpPayments, retryFirstSearches } from "../src/index.js";
+import worker, { handle, catchUpPayments, retryFirstSearches, isCheckupTick } from "../src/index.js";
+import * as firstSearch from "../src/firstsearch.js";
 import COUNTRIES from "../src/countries.js";
 
 const repo = new URL("../../", import.meta.url).pathname;
@@ -74,9 +75,10 @@ async function fakeFetch(url, init = {}) {
     tg.push({ method: m[1], ...body });
     return Response.json({ ok: true, result: m[1] === "getMe" ? { username: "JobAlertTestBot" } : {} });
   }
-  if (u === "https://api.github.com/repos/owner/repo/actions/workflows/job_alerts_daily.yml/dispatches") {
+  m = u.match(/^https:\/\/api\.github\.com\/repos\/owner\/repo\/actions\/workflows\/(job_alerts_daily|job_alerts_health)\.yml\/dispatches$/);
+  if (m) {
     assert.equal(init.headers.authorization, "Bearer GHTOKEN");
-    gh.push(body);
+    gh.push(m[1] === "job_alerts_daily" ? body : { workflow: m[1], ...body });
     return new Response(null, { status: 204 });
   }
   if (u.startsWith("https://api.github.com/repos/owner/repo/actions/workflows/job_alerts_daily.yml/runs")) {
@@ -622,6 +624,15 @@ test("the 06:00 cron trigger starts the morning run for everyone", async () => {
   await worker.scheduled({ cron: "0 6 * * *" }, env, { waitUntil: (p) => waits.push(p) });
   await Promise.all(waits);
   assert.deepEqual(gh.at(-1), { ref: "main", inputs: { first: "0" } });
+});
+
+test("the 06:30 tick starts the owner's daily check-up, once", async () => {
+  env.GH_TOKEN = "GHTOKEN";
+  env.GITHUB_REPO = "owner/repo";
+  const ticks = ["06:00", "06:15", "06:30", "06:45", "07:30", "18:30"].map((t) => new Date(`2026-10-18T${t}:00Z`));
+  assert.deepEqual(ticks.filter(isCheckupTick).map((d) => d.toISOString().slice(11, 16)), ["06:30"]);
+  assert.equal(await firstSearch.checkup(env), true);
+  assert.deepEqual(gh.filter((b) => b.workflow === "job_alerts_health"), [{ workflow: "job_alerts_health", ref: "main", inputs: {} }]);
 });
 
 test("the owner's dashboard needs the secret key and shows who got this morning's jobs", async () => {

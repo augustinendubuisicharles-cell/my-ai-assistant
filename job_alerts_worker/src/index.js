@@ -594,15 +594,21 @@ export default {
     }
   },
   // Cron triggers (wrangler.toml): 06:00 starts the morning job emails on time;
-  // every 15 minutes, payments Paystack has but we never heard about are recorded.
+  // every 15 minutes, payments Paystack has but we never heard about are recorded; the 06:30 tick starts the
+  // owner's daily check-up (7:30am Lagos, once everyone has their emails).
   async scheduled(event, env, ctx) {
     if (event.cron === "0 6 * * *") return ctx.waitUntil(firstSearch.daily(env));
     ctx.waitUntil(catchUpPayments(env, makeQuery(env)).catch((e) => console.log(`[catch-up] ${e}`)));
-    if (new Date(event.scheduledTime || Date.now()).getUTCMinutes() < 15) {
+    const at = new Date(event.scheduledTime || Date.now());
+    if (isCheckupTick(at)) ctx.waitUntil(firstSearch.checkup(env));
+    if (at.getUTCMinutes() < 15) {
       ctx.waitUntil(retryFirstSearches(env, makeQuery(env)).catch((e) => console.log(`[first search retry] ${e}`)));
     }
   },
 };
+
+// The one 15-minute tick a day that starts the check-up: 06:30 UTC (7:30am Lagos).
+export const isCheckupTick = (at) => at.getUTCHours() === 6 && at.getUTCMinutes() >= 30 && at.getUTCMinutes() < 45;
 
 // "+234 803 123 4567" or a Nigerian "0803 123 4567" -> "2348031234567" (WhatsApp wants digits, country code first).
 export function whatsappNumber(raw, country = "") {

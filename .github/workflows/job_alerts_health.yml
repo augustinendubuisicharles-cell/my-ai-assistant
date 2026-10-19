@@ -1,0 +1,26 @@
+name: Job alerts -- daily check-up
+
+# The check-up robot (job_alerts/health_check.py): after the morning emails, looks for problems and emails the
+# owner a short report (to the JOB_ALERTS_OWNER_EMAIL secret). It only reads; it never changes accounts or
+# emails subscribers. The log shows subscriber numbers, never addresses.
+on:
+  workflow_dispatch:  # started by the website's 06:30 UTC cron tick (7:30am Lagos), once the morning emails are out
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -q -r job_alerts/requirements.txt
+      - run: python -m job_alerts.health_check
+        env:
+          DATABASE_URL: ${{ secrets.JOB_ALERTS_DATABASE_URL }}
+          BASE_URL: ${{ secrets.JOB_ALERTS_BASE_URL }}
+          PAYSTACK_SECRET_KEY: ${{ secrets.PAYSTACK_SECRET_KEY }}
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+          FROM_EMAIL: ${{ secrets.FROM_EMAIL }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          OWNER_EMAIL: ${{ secrets.JOB_ALERTS_OWNER_EMAIL }}
