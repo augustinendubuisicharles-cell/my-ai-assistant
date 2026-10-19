@@ -1,13 +1,14 @@
 name: Job alerts -- refresh company job boards
 on:
   schedule:
-    - cron: "0 3 1 * *"  # 1st of each month, 03:00 UTC
+    - cron: "0 1 * * 1"  # every Monday, 01:00 UTC (Common Crawl is often overloaded, so weekly runs add up)
   workflow_dispatch:
 permissions:
   contents: write
 jobs:
   refresh:
     runs-on: ubuntu-latest
+    timeout-minutes: 300
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
