@@ -1,15 +1,19 @@
-"""Keeps job_alerts/career_pages.json fresh (run monthly by job_alerts_refresh_boards.yml).
+"""Keeps job_alerts/career_pages.json fresh (run weekly by job_alerts_refresh_boards.yml).
 
-Re-checks every saved company job board, drops the ones that no longer exist, and adds new ones linked from
-Hacker News "Who is hiring" posts and comments. Run:  python -m job_alerts.discover_boards
+Re-checks every saved company job board, drops the ones that no longer exist, and adds new ones: those linked
+from Hacker News "Who is hiring" posts and comments, and those in Common Crawl's index of the web that have a
+remote job open to Nigerians right now (the owner's call, 19 Oct 2026: only companies hiring worldwide, EMEA
+or Africa). Run:  python -m job_alerts.discover_boards
 """
 import json
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor
 from html import unescape
 
 import requests
 
+from job_alerts import search
 from job_alerts.search import CAREER_PAGES, CAREER_PAGES_FILE
 
 HEADERS = {"User-Agent": "Mozilla/5.0 JobAlert"}
@@ -55,6 +59,71 @@ def links_from_hn() -> set[tuple[str, str]]:
     return found
 
 
+# Common Crawl's index of every page it saved, per job board site. Its servers are often overloaded (502/503/504),
+# so each request is retried patiently, and whatever the last few crawls give is used.
+CC_QUERIES = {"greenhouse": ["boards.greenhouse.io/*", "job-boards.greenhouse.io/*", "job-boards.eu.greenhouse.io/*"],
+              "lever": ["jobs.lever.co/*"], "ashby": ["jobs.ashbyhq.com/*"], "workable": ["apply.workable.com/*"],
+              "recruitee": ["*.recruitee.com"]}
+CC_CRAWLS = 3  # the latest crawls (about one a month)
+
+
+def _cc_get(api: str, tries: int = 6, **params) -> str:
+    for attempt in range(tries):
+        try:
+            r = requests.get(api, params=params, headers=HEADERS, timeout=180)
+            if r.status_code == 200:
+                return r.text
+        except requests.RequestException:
+            pass
+        time.sleep(min(20 * (attempt + 1), 90))
+    return ""
+
+
+def links_from_common_crawl() -> set[tuple[str, str]]:
+    """Company job boards on Greenhouse, Lever, Ashby, Workable and Recruitee that Common Crawl has saved pages of."""
+    try:
+        crawls = [c["cdx-api"] for c in _get("https://index.commoncrawl.org/collinfo.json").json()[:CC_CRAWLS]]
+    except Exception as e:
+        print(f"Common Crawl skipped: {e}")
+        return set()
+    found = set()
+    for api in crawls:
+        for ats, queries in CC_QUERIES.items():
+            for q in queries:
+                try:
+                    pages = json.loads(_cc_get(api, url=q, output="json", showNumPages="true") or "{}").get("pages", 0)
+                except ValueError:
+                    pages = 0
+                for page in range(pages):
+                    for line in _cc_get(api, url=q, output="json", fl="url", page=page).splitlines():
+                        try:
+                            url = json.loads(line)["url"].lower()
+                        except (ValueError, KeyError):
+                            continue
+                        for slug in re.findall(PATTERNS[ats], url):
+                            slug = slug.strip(".-_").split("?")[0]
+                            if slug and slug not in NOT_SLUGS:
+                                found.add((ats, slug))
+        print(f"Common Crawl: {len(found)} boards after {api.rsplit('/', 1)[-1]}")
+    return found
+
+
+def hires_in_nigeria(board: tuple[str, str]) -> bool:
+    """True when the company has a remote job open to Nigerians right now (search's usual country checks)."""
+    try:
+        jobs = search._career_page(*board)
+    except Exception:
+        return False
+    country = search.DEFAULT_COUNTRY
+    for j in jobs:
+        loc = j["location"] or ""
+        remote = j["remote"] if j["remote"] is not None else any(w in loc.lower() for w in search.REMOTE_WORDS)
+        job = {"title": j["title"] or "", "location": loc, "desc": j["desc"] or "", "remote": True, "job_type": ""}
+        if remote and search.location_fits(loc, country, True) and search.open_to(job, country):
+            return True
+    return False
+
+
 def check(board: tuple[str, str]):
     """Number of open jobs, or GONE if the board no longer exists (None if we couldn't tell)."""
     ats, slug = board
@@ -89,6 +158,11 @@ def main() -> None:
         results = dict(zip(boards, pool.map(check, boards)))
     keep = {b for b in saved if results[b] != GONE}
     added = {b for b in new if isinstance(results[b], int) and results[b] > 0}  # new ones only with open jobs
+    crawled = sorted(links_from_common_crawl() - saved - hand_picked - new)
+    with ThreadPoolExecutor(32) as pool:
+        hiring = [b for b, ok in zip(crawled, pool.map(hires_in_nigeria, crawled)) if ok]
+    print(f"Common Crawl: {len(crawled)} new boards, {len(hiring)} with a remote job open to Nigerians")
+    added |= set(hiring)
     print(f"dropped {len(saved - keep)} gone, added {len(added)}, now {len(keep | added)} boards")
     out: dict[str, list[str]] = {}
     for ats, slug in sorted(keep | added):
