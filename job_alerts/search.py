@@ -1051,6 +1051,18 @@ def _search(keywords: list[str], country: str, remote_only: bool, level: str, ci
     return ranked, Counter("Earlier matches" if j.get("backlog") else j["source"].split(" (")[0] for j in pool)
 
 
+def _copy_of(job: dict, others: list[dict]) -> bool:
+    """The same advert under another title: one company posting it once per county or city
+    ("Gloucestershire Customer Support Agent", "Oxfordshire Customer Support Agent", ...)."""
+    co, words = _words(job["company"]), set(_words(job["title"]).split())
+    for o in others:
+        if co and _words(o["company"]) == co:
+            theirs = set(_words(o["title"]).split())
+            if len(words & theirs) >= 0.6 * max(len(words), len(theirs), 1):
+                return True
+    return False
+
+
 def _pick(ranked: list[dict], keywords: list[str], n: int) -> list[dict]:
     """Up to n working jobs, taking turns between the titles so one busy title doesn't fill every email."""
     picked, used = [], {k: 0 for k in keywords}
@@ -1058,7 +1070,7 @@ def _pick(ranked: list[dict], keywords: list[str], n: int) -> list[dict]:
         fewest = min(used[j["hit"]] for j in ranked)
         job = next(j for j in ranked if used[j["hit"]] == fewest)
         ranked.remove(job)
-        if _link_ok(job["url"]):
+        if not _copy_of(job, picked) and _link_ok(job["url"]):
             picked.append(job)
             used[job["hit"]] += 1
     return picked
@@ -1104,7 +1116,7 @@ def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, ex
         for j in pool:
             if len(picked) >= minimum:
                 break
-            if _link_ok(j["url"]):
+            if not _copy_of(j, picked) and _link_ok(j["url"]):
                 picked.append(j)
                 added += 1
         return added
@@ -1167,7 +1179,11 @@ def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, ex
         other += fill(pool)
     if spares is not None:
         taken = {id(j) for j in picked}
-        rest = [j for j in open_jobs + more + older_pool + other_pool if id(j) not in taken and not signup(j)][:SPARES * 2]
+        rest = []
+        for j in open_jobs + more + older_pool + other_pool:
+            if id(j) not in taken and not signup(j) and not _copy_of(j, picked + rest):
+                rest.append(j)
+        rest = rest[:SPARES * 2]
         with ThreadPoolExecutor(max_workers=8) as pool:
             ok = list(pool.map(lambda j: _link_ok(j["url"]), rest))
         spares.extend([j for j, good in zip(rest, ok) if good][:SPARES])
