@@ -29,9 +29,22 @@ skills, tools and duties, and the words it uses for them. Then write the CV so t
 Use only facts from the CV: never invent experience, employers, dates, numbers, tools or qualifications, and never
 add a skill the CV doesn't show just because the advert wants it, or a reason or quality to a fact ("through a
   personable approach") that the CV doesn't state. Keep every real employer, job title, date and qualification.
+For the advert's must-haves the CV doesn't show: where the CV has related experience, name the bridge in the advert's
+words ("backend APIs in C# and ASP.NET Core, now learning Ruby on Rails"), and add each one to KEY SKILLS as its own
+line marked "(learning)", for example "- Ruby on Rails (learning)", so the applicant can study it before an interview.
 Plain text, no markdown: the applicant's name and contact details on the first lines, then sections with headings
 in CAPITALS (PROFESSIONAL SUMMARY, KEY SKILLS, EXPERIENCE, EDUCATION, and any others the CV has),
-bullet points starting with "- ". At most about 700 words. Reply with the CV only.`;
+bullet points starting with "- ". At most about 700 words. Reply with the CV only, then one last line:
+"GAPS: " and up to 5 of the advert's must-have skills, tools or qualifications that the CV doesn't show,
+separated by "; " (for example "GAPS: Ruby on Rails; GraphQL"), or "GAPS: none".`;
+
+// Splits the CV writer's reply into the CV and the advert's must-haves it doesn't show (CV_SYSTEM's last line).
+export function splitGaps(text) {
+  const m = text.match(/\n\s*GAPS:\s*(.*)\s*$/i);
+  if (!m) return { text: text.trim(), gaps: [] };
+  const gaps = m[1].split(";").map((g) => g.trim().replace(/\.$/, "")).filter((g) => g && !/^none$/i.test(g)).slice(0, 5);
+  return { text: text.slice(0, m.index).trim(), gaps };
+}
 
 const PREP_SYSTEM = `You help job seekers prepare for interviews, most of them in Nigeria interviewing for remote jobs abroad.
 From the job advert and the applicant's CV, write an interview prep sheet for this job. Plain text, no markdown:
@@ -41,9 +54,13 @@ LIKELY QUESTIONS: 8 questions this interviewer is likely to ask (a mix of role-s
 in the applicant's own voice, built only on facts from their CV (use the STAR shape for behavioural ones).
 Never invent experience, employers, numbers or qualifications: where the CV has nothing to draw on, say
 what to stress instead and mark it "(prepare this one)".
+SKILLS TO LEARN BEFORE YOUR INTERVIEW: for each must-have skill, tool or qualification in the advert that the CV
+doesn't show (at most 5), one numbered line: the skill, the 2 or 3 things to focus on in the days before the interview,
+and a well-known free place to learn it (its official documentation or tutorial, freeCodeCamp, or a YouTube crash
+course). If the CV covers everything, write "None: your CV already covers what they ask for."
 QUESTIONS TO ASK THEM: 3 good questions for the end of the interview.
 ON THE DAY: 4 short practical tips for a video interview from Nigeria (internet backup, time zones, quiet room, follow-up email).
-Number the questions. At most about 1,000 words. Reply with the sheet only.`;
+Number the questions. At most about 1,200 words. Reply with the sheet only.`;
 
 const SYSTEMS = { letter: SYSTEM, cv: CV_SYSTEM, prep: PREP_SYSTEM };
 
