@@ -901,6 +901,7 @@ test("members log in with an emailed link: once, scanner-safe, 30-day cookie, an
   assert.equal((mine.match(/class="card mjob"/g) || []).length, 10);
   assert.doesNotMatch(mine, /Morning 1<|Spare 0|Spare 6/);
   assert.match(mine, /action="\/me\/more"/); // one spare left
+  await q("UPDATE sent_jobs SET sent_at = sent_at - interval '1 minute' WHERE subscriber_id = $1 AND title LIKE 'Spare%'", [sub0.id]); // a later tap
   await call("/me/more", { method: "POST", headers });
   mine = await (await call("/me", { headers })).text();
   assert.match(mine, /Spare 6[\s\S]*Spare 1[\s\S]*Spare 5[\s\S]*Morning 2[\s\S]*Morning 6/); // her morning jobs never vanish

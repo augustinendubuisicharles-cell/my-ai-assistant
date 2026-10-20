@@ -220,7 +220,7 @@ export const BOARD_SIZE = 5;
 // Jobs sent before the dashboard kept its own 5: their latest email's, best first.
 export async function latestJobs(q, subscriberId) {
   const board = await q(`SELECT id, title, company, url, source, status, sent_at FROM sent_jobs
-     WHERE subscriber_id = $1 AND on_board ORDER BY date_trunc('minute', sent_at) DESC, id`, [subscriberId]);
+     WHERE subscriber_id = $1 AND on_board ORDER BY date_trunc('second', sent_at) DESC, id`, [subscriberId]);
   if (board.length) return board;
   return q(`SELECT id, title, company, url, source, status, sent_at FROM sent_jobs
      WHERE subscriber_id = $1 AND title IS NOT NULL

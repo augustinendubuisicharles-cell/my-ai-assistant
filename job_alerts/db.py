@@ -361,13 +361,13 @@ def _job_row(j: dict) -> dict:
 def record_sent(subscriber_id: int, jobs: list[dict], board: bool = False) -> list[int]:
     """Stores today's jobs (each needs "key") and returns their row ids, used in the tracker links.
     board: the morning email's jobs, which replace the ones on their dashboard."""
-    ids = []
+    ids, sent = [], now()  # one time for the batch, so the dashboard keeps it in order
     with engine.begin() as conn:
         if board:
             conn.execute(update(sent_jobs).where(sent_jobs.c.subscriber_id == subscriber_id, sent_jobs.c.on_board)
                          .values(on_board=False))
         for j in jobs:
-            ids.append(conn.execute(insert(sent_jobs).values(subscriber_id=subscriber_id, sent_at=now(), on_board=board,
+            ids.append(conn.execute(insert(sent_jobs).values(subscriber_id=subscriber_id, sent_at=sent, on_board=board,
                                                              **_job_row(j)).returning(sent_jobs.c.id)).scalar())
         conn.execute(update(subscribers).where(subscribers.c.id == subscriber_id).values(last_sent_at=now()))
     return ids
