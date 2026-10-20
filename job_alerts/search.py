@@ -1009,7 +1009,9 @@ def set_backlog(rows: list[dict]) -> None:
                    "backlog": True} for r in rows if r.get("title")
                   # Jobspresso jobs sent before 20 Oct 2026 were all saved as "Anywhere" (its feed's real location
                   # wasn't read), so they can't be trusted; its live feed still brings the current ones.
-                  and r.get("source") != "Jobspresso"]
+                  and r.get("source") != "Jobspresso"
+                  # Remotive (dropped from the live boards) hides its Apply link under "Unlock all jobs" adverts.
+                  and "remotive.com/" not in (r.get("url") or "")]
 
 
 def _search(keywords: list[str], country: str, remote_only: bool, level: str, city: str,
