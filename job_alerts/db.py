@@ -358,6 +358,15 @@ def _job_row(j: dict) -> dict:
                 matched=" · ".join(j.get("matched") or [])[:500], description=(j.get("desc") or "")[:DESCRIPTION_MAX] or None)
 
 
+def share_counts(days: int = 14) -> dict[str, int]:
+    """How many people each job was sent to in the last `days` days (search.SHARED, for fair rotation)."""
+    since = now() - timedelta(days=days)
+    q = (select(sent_jobs.c.job_key, func.count(func.distinct(sent_jobs.c.subscriber_id)))
+         .where(sent_jobs.c.sent_at >= since).group_by(sent_jobs.c.job_key))
+    with engine.connect() as conn:
+        return {k: n for k, n in conn.execute(q)}
+
+
 def record_sent(subscriber_id: int, jobs: list[dict], board: bool = False) -> list[int]:
     """Stores today's jobs (each needs "key") and returns their row ids, used in the tracker links.
     board: the morning email's jobs, which replace the ones on their dashboard."""

@@ -1053,6 +1053,28 @@ def _search(keywords: list[str], country: str, remote_only: bool, level: str, ci
     return ranked, Counter("Earlier matches" if j.get("backlog") else j["source"].split(" (")[0] for j in pool)
 
 
+# Fair rotation: how many people have had each job (job_key) in the last 14 days, kept up to date during the run.
+# A job already sent to SHARE_CAP people steps back behind every other fitting job (own titles, similar roles,
+# 8-14 days old), so one advert doesn't go to everyone; it still comes before part-time users' full-time top-ups
+# and unrelated roles, so nobody gets fewer jobs because of it. Set JOB_SHARE_CAP=0 to switch it off.
+SHARE_CAP = int(os.environ.get("JOB_SHARE_CAP") or 25)
+SHARED: Counter = Counter()
+
+
+def set_shared(counts: dict) -> None:
+    SHARED.clear()
+    SHARED.update(counts)
+
+
+def note_shared(jobs: list[dict]) -> None:
+    for j in jobs:
+        SHARED[job_key(j)] += 1
+
+
+def crowded(job: dict) -> bool:
+    return SHARE_CAP > 0 and SHARED[job_key(job)] >= SHARE_CAP
+
+
 def _copy_of(job: dict, others: list[dict]) -> bool:
     """The same advert under another title: one company posting it once per county or city
     ("Gloucestershire Customer Support Agent", "Oxfordshire Customer Support Agent", ...)."""
@@ -1065,8 +1087,11 @@ def _copy_of(job: dict, others: list[dict]) -> bool:
     return False
 
 
-def _pick(ranked: list[dict], keywords: list[str], n: int) -> list[dict]:
-    """Up to n working jobs, taking turns between the titles so one busy title doesn't fill every email."""
+def _pick(ranked: list[dict], keywords: list[str], n: int, held: list[dict]) -> list[dict]:
+    """Up to n working jobs, taking turns between the titles so one busy title doesn't fill every email.
+    Jobs already shared with SHARE_CAP people go to `held` instead (see crowded)."""
+    held.extend(j for j in ranked if crowded(j))
+    ranked = [j for j in ranked if not crowded(j)]
     picked, used = [], {k: 0 for k in keywords}
     while len(picked) < n and ranked:
         fewest = min(used[j["hit"]] for j in ranked)
@@ -1106,18 +1131,22 @@ def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, ex
     open_jobs = [j for j in ranked if not signup(j)]
     if cv is not None:
         open_jobs = ai_match.rerank(open_jobs, keywords, level, country, cv)
-    picked = _pick(open_jobs, keywords, n)
+    held = []  # fitting jobs already sent to SHARE_CAP people, used only when nothing else fits
+    picked = _pick(open_jobs, keywords, n, held)
     more, near = [], neighbours(keywords)
     if len(picked) < minimum and near:
         more, _ = _search(near, country, remote_only, level, city, seen, Counter(), hours)
         for j in more:
             j["matched"] = ["similar role"] + j["matched"]
         more.sort(key=lambda j: (near.index(j["hit"]), -j["score"]))  # closest roles first
-    def fill(pool: list[dict]) -> int:
+    def fill(pool: list[dict], busy: bool = False) -> int:
         added = 0
         for j in pool:
             if len(picked) >= minimum:
                 break
+            if not busy and crowded(j):
+                held.append(j)
+                continue
             if not _copy_of(j, picked) and _link_ok(j["url"]):
                 picked.append(j)
                 added += 1
@@ -1157,6 +1186,9 @@ def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, ex
         older = fill(older_pool)
         gated += fill(older_gated)
         taken = {id(j) for j in picked}
+    # Still short: the fitting jobs held back because many people already have them, before anything less close.
+    shared = fill([j for j in dict((id(j), j) for j in held).values() if id(j) not in taken], busy=True)
+    taken = {id(j) for j in picked}
     # Part-time and still short after every part-time job with a close title (owner's rule, 18 Oct 2026):
     # their own and similar titles at any hours, marked "full-time", come before other roles.
     relaxed = 0
@@ -1185,6 +1217,7 @@ def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, ex
         for j in open_jobs + more + older_pool + other_pool:
             if id(j) not in taken and not signup(j) and not _copy_of(j, picked + rest):
                 rest.append(j)
+        rest.sort(key=crowded)  # widely shared jobs last (stable sort keeps the best-first order)
         rest = rest[:SPARES * 2]
         with ThreadPoolExecutor(max_workers=8) as pool:
             ok = list(pool.map(lambda j: _link_ok(j["url"]), rest))
@@ -1193,7 +1226,8 @@ def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, ex
           f"{matched} matched, picked {len(picked)}{f' ({extra} from similar roles to reach the daily minimum)' if extra else ''}"
           f"{f', {gated} from sign-up boards to fill the gap' if gated else ''}"
           f"{f', {relaxed} full-time for a part-time search' if relaxed else ''}"
-          f"{f', {older} posted 8-14 days ago' if older else ''}{f', {other} from other roles' if other else ''}"
+          f"{f', {older} posted 8-14 days ago' if older else ''}"
+          f"{f', {shared} already sent to {SHARE_CAP}+ people' if shared else ''}{f', {other} from other roles' if other else ''}"
           f"{f', {len(spares)} spare for More jobs' if spares is not None else ''}; "
           f"left out: {', '.join(f'{c} {r}' for r, c in why.most_common()) or 'none'}")
     return picked

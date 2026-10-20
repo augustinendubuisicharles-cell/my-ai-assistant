@@ -657,6 +657,14 @@ test("the owner's dashboard needs the secret key and shows who got this morning'
   await signUp({ email: "<b>cy</b>@example.com" }); // never confirmed
   await q(`UPDATE subscribers SET last_run_at = now(), last_run_result = 'sent 5 jobs' WHERE email = 'ada@example.com'`);
   await q(`UPDATE subscribers SET last_run_at = now() - interval '3 days', last_run_result = 'no new matches' WHERE email = 'bo@example.com'`);
+  // Ada and Bo both got the Acme job this morning; Ada applied and has an interview.
+  for (const email of ["ada@example.com", "bo@example.com"]) {
+    await q(`INSERT INTO sent_jobs (subscriber_id, job_key, sent_at, title, company, url, clicked_at, status)
+             SELECT id, 'acme-support', now(), 'Support Agent', 'Acme', 'https://acme.example/1', now(), $2 FROM subscribers WHERE email = $1`,
+      [email, email.startsWith("ada") ? "interview" : null]);
+  }
+  await q(`INSERT INTO sent_jobs (subscriber_id, job_key, sent_at, title, company, url)
+           SELECT id, 'beta-va', now(), 'Virtual Assistant', 'Beta', 'https://beta.example/1' FROM subscribers WHERE email = 'ada@example.com'`);
 
   assert.equal((await call("/admin/" + "k".repeat(31) + "x")).status, 404);
   assert.match(await (await call("/admin/")).text(), /type="password"/); // bare /admin/ asks for the password
@@ -672,6 +680,10 @@ test("the owner's dashboard needs the secret key and shows who got this morning'
   assert.ok(!page.includes("<b>cy</b>"), "emails are escaped");
   assert.match(page, /noindex/);
   assert.match(page, /passed/);
+  assert.match(page, /2 <span class="muted">different jobs across 3 sends to 2 people/);
+  assert.match(page, /Support Agent <span class="muted">· Acme<\/span><\/td><td class="num">2/);
+  assert.match(page, /<span>Applied<\/span><i[^>]*><\/i><b>1<\/b><em>50%/);
+  assert.match(page, /<span>Interview<\/span><i[^>]*><\/i><b>1<\/b>/);
   assert.ok(!page.includes("pr-check"), "code checks on pull requests aren't listed as job runs");
 
   // The login page: wrong password refused, right one (with stray spaces) opens it and is remembered.

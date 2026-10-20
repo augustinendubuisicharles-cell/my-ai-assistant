@@ -8,7 +8,8 @@ import * as telegram from "./telegram.js";
 import * as firstSearch from "./firstsearch.js";
 import * as letters from "./letters.js";
 
-const MIN_KEY = 12; // shorter keys leave the dashboard off
+const MIN_KEY = 12;
+const SHARE_CAP = 25; // job_alerts/search.py SHARE_CAP: a job sent to this many people steps back for others // shorter keys leave the dashboard off
 
 const COOKIE = "ja_admin";
 const adminKey = (env) => (env.ADMIN_KEY || "").trim();
@@ -97,7 +98,9 @@ async function recentRuns(env) {
 
 export async function load(env, q, now = new Date()) {
   const since = runWindow(now);
-  const [users, money, runs] = await Promise.all([
+  const inStatus = (status) => `status IN (${status.map((x) => `'${x}'`).join(", ")})`;
+  const APPLIED = ["applied", "interview", "offer", "no_reply"];
+  const [users, money, runs, variety, top, funnel] = await Promise.all([
     q(`SELECT s.id, s.email, s.keywords, s.country, s.remote_only, s.city, s.confirmed, s.created_at, s.paid_until,
               s.last_run_at, s.last_run_result, s.telegram_chat_id IS NOT NULL AS telegram, s.heard,
               (SELECT count(*) FROM sent_jobs j WHERE j.subscriber_id = s.id)::int AS jobs_sent,
@@ -109,6 +112,20 @@ export async function load(env, q, now = new Date()) {
               count(*) FILTER (WHERE amount_ngn > 0)::int AS paid_count
          FROM payments`),
     recentRuns(env),
+    // Job variety this morning: how many different adverts the sends covered, and which went to the most people.
+    q(`SELECT count(*)::int AS sends, count(DISTINCT job_key)::int AS jobs, count(DISTINCT subscriber_id)::int AS people,
+              (SELECT count(*) FROM (SELECT 1 FROM sent_jobs WHERE sent_at > now() - interval '14 days'
+                 GROUP BY job_key HAVING count(DISTINCT subscriber_id) >= ${SHARE_CAP}) x)::int AS crowded
+         FROM sent_jobs WHERE sent_at >= $1`, [since.toISOString()]),
+    q(`SELECT min(title) AS title, min(company) AS company, count(DISTINCT subscriber_id)::int AS n
+         FROM sent_jobs WHERE sent_at >= $1 GROUP BY job_key ORDER BY n DESC, title LIMIT 3`, [since.toISOString()]),
+    // What happened to the last 30 days' jobs, as members report it in the application tracker.
+    q(`SELECT count(*)::int AS sent, count(clicked_at)::int AS clicked,
+              count(*) FILTER (WHERE ${inStatus(APPLIED)})::int AS applied,
+              count(*) FILTER (WHERE ${inStatus(["interview", "offer"])})::int AS interview,
+              count(*) FILTER (WHERE status = 'offer')::int AS offer,
+              count(DISTINCT subscriber_id) FILTER (WHERE ${inStatus(APPLIED)})::int AS appliers
+         FROM sent_jobs WHERE sent_at > now() - interval '30 days'`),
   ]);
   for (const u of users) {
     const active = u.paid_until && new Date(u.paid_until) > now;
@@ -140,7 +157,7 @@ export async function load(env, q, now = new Date()) {
     failed: today.filter((u) => u.failed).length,
     missed: active.filter((u) => !u.ranToday && !u.newToday).length, due: active.filter((u) => !u.newToday).length,
     neverSearched: active.filter((u) => u.neverSearched).length,
-    revenue: money[0], runs, lastRun, services,
+    revenue: money[0], runs, lastRun, services, variety: { ...variety[0], top }, funnel: funnel[0],
   };
   stats.health = health(stats);
   return { users, stats };
@@ -199,6 +216,11 @@ const STYLE = `
   .health ul { margin:10px 0 0; padding-left:18px; } .health li { margin:4px 0; }
   .bar { display:flex; height:12px; border-radius:99px; overflow:hidden; background:var(--card2); margin:16px 0 10px; }
   .bar i { display:block; height:100%; }
+  .cols.two { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
+  .card .big { font-size:24px; font-weight:700; margin:0 0 4px; } .card .big span { font-size:14px; font-weight:500; }
+  .funnel div { display:grid; grid-template-columns:76px 1fr 52px 40px; align-items:center; gap:10px; padding:6px 0; }
+  .funnel span { color:var(--muted); font-size:12.5px; } .funnel i { display:block; height:14px; border-radius:6px; background:var(--accent); }
+  .funnel b { text-align:right; font-variant-numeric:tabular-nums; } .funnel em { font-style:normal; color:var(--muted); font-size:12px; text-align:right; }
   .legend { display:flex; flex-wrap:wrap; gap:6px 16px; font-size:12.5px; color:var(--muted); }
   .mini { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-top:18px; }
   .mini div { background:var(--card2); border-radius:10px; padding:10px 12px; } .mini b { display:block; font-size:18px; } .mini span { font-size:12px; color:var(--muted); }
@@ -272,6 +294,27 @@ const SCRIPT = `
 })();
 `;
 
+function varietyCard(v) {
+  const share = v.sends ? Math.round((v.jobs / v.sends) * 100) : 0;
+  return `<div class="card"><h2>Job variety this morning</h2>
+<p class="big">${v.jobs} <span class="muted">different jobs across ${v.sends} sends to ${v.people} people</span></p>
+<div class="mini"><div><b class="${share && share < 20 ? "warn" : ""}">${share}%</b><span>of sends were a different job</span></div>
+<div><b>${v.people ? (v.sends / v.people).toFixed(1) : 0}</b><span>jobs per person</span></div>
+<div><b>${v.top[0]?.n || 0}</b><span>most people given one job</span></div>
+<div><b>${v.crowded}</b><span>jobs sent to ${SHARE_CAP}+ people (14 days)</span></div></div>
+${v.top.length ? `<table class="services" style="margin-top:14px"><thead><tr><th>Most shared today</th><th class="num">People</th></tr></thead><tbody>${v.top
+    .map((t) => `<tr><td>${esc(t.title)} <span class="muted">· ${esc(t.company)}</span></td><td class="num">${t.n}</td></tr>`).join("")}</tbody></table>` : ""}
+<p class="muted small">A job already sent to ${SHARE_CAP} people steps back so others get different ones.</p></div>`;
+}
+
+function funnelCard(f) {
+  const steps = [["Sent", f.sent], ["Opened", f.clicked], ["Applied", f.applied], ["Interview", f.interview], ["Offer", f.offer]];
+  const top = Math.max(f.sent, 1);
+  return `<div class="card"><h2>Results, last 30 days</h2>
+<div class="funnel">${steps.map(([label, n], i) => `<div><span>${label}</span><i style="width:${Math.max((n / top) * 100, n ? 1.5 : 0)}%"></i><b>${n}</b>${i ? `<em>${steps[i - 1][1] ? Math.round((n / steps[i - 1][1]) * 100) : 0}%</em>` : "<em></em>"}</div>`).join("")}</div>
+<p class="muted small">${f.appliers} ${f.appliers === 1 ? "person" : "people"} said they applied. Applied, interview and offer come from members' tracker answers, not from employers.</p></div>`;
+}
+
 // Sign-ups and paying members per "How did you hear about us?" answer, most sign-ups first.
 function heardTable(users) {
   const rows = {};
@@ -329,6 +372,8 @@ ${h.notes.length ? `<ul>${h.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul
 <div class="card"><h2>Services</h2><table class="services"><tbody>${s.services.map(([name, on]) => `<tr><td>${esc(name)}</td><td class="num"><span class="pill" style="--c:var(${on ? "--green" : "--gray"})">${on ? "On" : "Off"}</span></td></tr>`).join("")}</tbody></table>
 </div>
 </section>
+
+<section class="cols two">${varietyCard(s.variety)}${funnelCard(s.funnel)}</section>
 
 <section class="card">
 <div class="toolbar"><div class="tabs">${tab("all", "All users", users.length, true)}${tab("active", "Active", s.active)}${tab("attention", "Needs attention", attention)}${tab("member", "Members", s.member)}${tab("trial", "Trial", s.trial)}${tab("unconfirmed", "Unconfirmed", s.unconfirmed)}${tab("expired", "Expired", s.expired)}</div>

@@ -13,7 +13,7 @@ import requests
 from sqlalchemy.exc import IntegrityError
 
 from . import db, emails, mailer, payments
-from .search import clean_keywords, find_jobs, job_key, set_backlog
+from .search import clean_keywords, find_jobs, job_key, note_shared, set_backlog, set_shared
 
 
 def main() -> None:
@@ -26,6 +26,10 @@ def main() -> None:
         set_backlog(db.recent_jobs())  # jobs sent to anyone in the last 14 days, for quiet titles (search.BACKLOG)
     except Exception as e:
         print(f"Earlier matches not loaded: {e}")
+    try:
+        set_shared(db.share_counts())  # how many people already have each job, so popular ones rotate
+    except Exception as e:
+        print(f"Job share counts not loaded: {e}")
     subs = db.confirmed_subscribers()
     only = os.environ.get("ONLY_EMAIL", "").strip().lower()
     if only:  # test run for one subscriber
@@ -95,6 +99,7 @@ def main() -> None:
             except Exception:
                 db.unsend(ids)
                 raise
+            note_shared(jobs)
             db.save_spares(sub["id"], [{**j, "key": job_key(j)} for j in spares])
             db.mark_asked([a["id"] for a in ask])
             sent += 1
