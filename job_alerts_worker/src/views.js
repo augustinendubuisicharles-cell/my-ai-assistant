@@ -1080,7 +1080,8 @@ and the advert's own words where they're true of you. Nothing is made up.</p>` :
 ${isPrep && !letter ? `<p>The questions this interviewer is likely to ask, with answers built from your CV, plus questions to ask them.</p>` : ""}
 ${error ? `<p class="card status">${esc(error)}</p>` : ""}
 ${letter && gaps.length ? `<form class="card" method="post"><p style="margin-top:0">This job asks for things your CV doesn't show.
-Tick the ones you have and we'll add them. The rest are listed as "Currently learning", so study them before an interview.</p>
+Tick the ones you have and we'll add them. The rest are listed as "(learning)" in your skills, so study them before an interview:
+your <a href="/prep/${esc(sub.token)}?${new URLSearchParams({ t: job.title, c: job.company, u: job.url })}">interview prep</a> for this job says what to learn.</p>
 ${gaps.map((g) => `<label style="display:flex;gap:8px;align-items:center;margin:6px 0"><input type="checkbox" name="have" value="${esc(g)}"> ${esc(g)}
 <a href="https://www.youtube.com/results?search_query=${encodeURIComponent(`${g} crash course for beginners`)}" style="margin-left:auto;font-size:14px">Learn it</a></label>`).join("")}
 <button type="submit">Add ticked skills and rewrite</button></form>` : ""}

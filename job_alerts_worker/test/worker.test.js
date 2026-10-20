@@ -608,6 +608,7 @@ test("members get interview prep for a job, built from their CV", async () => {
   assert.match(done, /Interview prep/);
   assert.match(done, /9 of 10 left today/);
   assert.match(ai[0].system, /LIKELY QUESTIONS/);
+  assert.match(ai[0].system, /SKILLS TO LEARN BEFORE YOUR INTERVIEW/); // the CV's "(learning)" skills, with what to study
   assert.match(ai[0].messages[0].content, /Comms officer at Lagos NGO/);
   assert.deepEqual((await q("SELECT kind FROM letters ORDER BY id")).map((r) => r.kind), ["prep"]);
 });
@@ -768,7 +769,8 @@ test("tailored CVs use the advert saved with the emailed job when its page block
   assert.match(done, /This job asks for things your CV doesn't show/);
   assert.match(done, /<input type="checkbox" name="have" value="Zendesk Explore"> Zendesk Explore/);
   assert.match(done, /search_query=French%20crash%20course/);
-  assert.match(sent.system, /Currently learning: /);
+  assert.match(sent.system, /"- Ruby on Rails \(learning\)"/);
+  assert.match(done, /href="\/prep\/[\w-]+\?t=Customer\+Support\+Specialist/);
   assert.doesNotMatch(done, /GAPS:/);
   // Ticking a skill adds it to their saved CV and to the next CV written.
   await call(link, { method: "POST", form: { have: "French" } });
