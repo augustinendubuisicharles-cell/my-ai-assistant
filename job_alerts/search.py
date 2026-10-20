@@ -567,8 +567,9 @@ FREELANCE_MAX_BIDS = 60  # projects with more bids than this are already crowded
 
 @lru_cache(maxsize=64)
 def from_freelancer(keyword: str) -> tuple:
-    """Freelance projects on Freelancer.com, open to freelancers in any country (Nigerians included), for
-    part-time searches. Bidding needs a Freelancer.com account, so they count as a sign-up board."""
+    """Freelance projects on Freelancer.com, open to freelancers in any country (Nigerians included).
+    Bidding needs a Freelancer.com account, so they count as a sign-up board. Off: the owner chose (20 Oct 2026)
+    to keep topping up part-time users with full-time jobs instead."""
     try:
         data = _get("https://www.freelancer.com/api/projects/0.1/projects/active/", query=keyword, limit=50,
                     full_description="true", job_details="true", sort_field="time_updated")
@@ -1124,8 +1125,8 @@ def _search(keywords: list[str], country: str, remote_only: bool, level: str, ci
         pool += from_jooble(k, "" if remote_only else (city or country))
         if SIGNUP_ROLES.search(k):
             pool += from_himalayas(k, country) + from_jobicy(k)
-        if hours == "part":  # Himalayas can be asked for part-time and contract work only; Freelancer.com for projects
-            pool += from_himalayas(k, country, "Part Time,Contractor") + from_freelancer(k)
+        if hours == "part":  # Himalayas can be asked for part-time and contract work only
+            pool += from_himalayas(k, country, "Part Time,Contractor")
         if not remote_only:
             pool += from_adzuna(k, country, city) + (from_reed(k, city) if country == "United Kingdom" else ())
     pool += BACKLOG  # after the live listings, so a job still in today's feeds keeps its fresh copy
