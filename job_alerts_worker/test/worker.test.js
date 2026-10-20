@@ -879,11 +879,11 @@ test("members log in with an emailed link: once, scanner-safe, 30-day cookie, an
   assert.match(home, /class="more" href="[^"]+" data-unlock="more"/);
   assert.equal((await call("/me/more", { method: "POST", headers })).headers.get("location"), "/me");
 
-  // Members: the dashboard keeps 5 jobs; "More jobs" swaps in the next 5 of the morning's spares, best first.
+  // Members: "More jobs" adds the next 5 of the morning's spares above the morning's 5, which stay.
   await q("UPDATE subscribers SET paid_until = now() + interval '30 days' WHERE id = $1", [sub0.id]);
   await q("INSERT INTO payments (reference, subscriber_id, amount_ngn, paid_at) VALUES ('m1', $1, 3500, now())", [sub0.id]);
   for (let i = 1; i <= 6; i++) {
-    await q(`INSERT INTO sent_jobs (subscriber_id, job_key, sent_at, title, on_board) VALUES ($1, $2, now(), $3, $4)`, [sub0.id, `a${i}`, `Morning ${i}`, i > 1]);
+    await q(`INSERT INTO sent_jobs (subscriber_id, job_key, sent_at, title, on_board) VALUES ($1, $2, date_trunc('hour', now()) - interval '3 hours', $3, $4)`, [sub0.id, `a${i}`, `Morning ${i}`, i > 1]);
   }
   for (let i = 0; i < 7; i++) {
     await q(`INSERT INTO spare_jobs (subscriber_id, rank, job_key, title, company, url) VALUES ($1, $2, $3, $4, 'Co', 'https://jobs.example/s')`,
@@ -896,14 +896,15 @@ test("members log in with an emailed link: once, scanner-safe, 30-day cookie, an
   assert.match(mine, /action="\/me\/more"/);
   assert.equal((await call("/me/more", { method: "POST", headers })).headers.get("location"), "/me?saved=more#jobs");
   mine = await (await call("/me?saved=more", { headers })).text();
-  assert.match(mine, /Here are 5 more jobs/);
-  assert.match(mine, /Spare 1[\s\S]*Spare 5/);
-  assert.doesNotMatch(mine, /Morning|Spare 0|Spare 6/);
+  assert.match(mine, /New jobs added at the top/);
+  assert.match(mine, /Spare 1[\s\S]*Spare 5[\s\S]*Morning 2[\s\S]*Morning 6/);
+  assert.equal((mine.match(/class="card mjob"/g) || []).length, 10);
+  assert.doesNotMatch(mine, /Morning 1<|Spare 0|Spare 6/);
   assert.match(mine, /action="\/me\/more"/); // one spare left
   await call("/me/more", { method: "POST", headers });
   mine = await (await call("/me", { headers })).text();
-  assert.match(mine, /Spare 6/);
-  assert.equal((mine.match(/class="card mjob"/g) || []).length, 1);
+  assert.match(mine, /Spare 6[\s\S]*Spare 1[\s\S]*Spare 5[\s\S]*Morning 2[\s\S]*Morning 6/); // her morning jobs never vanish
+  assert.equal((mine.match(/class="card mjob"/g) || []).length, 11);
   assert.doesNotMatch(mine, /action="\/me\/more"/);
   assert.equal((await call("/me/more", { method: "POST", headers })).headers.get("location"), "/me?saved=nomore#jobs");
   assert.equal((await q("SELECT count(*)::int AS n FROM sent_jobs WHERE subscriber_id = $1", [sub0.id]))[0].n, 13);

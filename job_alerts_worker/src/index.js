@@ -412,7 +412,7 @@ export async function handle(request, env, q) {
       hasCv: Boolean(await db.getCv(q, sub.id)), letters: member && letters.enabled(env), saved: url.searchParams.get("saved"), spares }));
   }
 
-  // Members' "More jobs": the next 5 of this morning's best replace the 5 on their dashboard.
+  // Members' "More jobs": the next 5 of this morning's best join the top of their dashboard.
   if (path === "/me/more" && method === "POST") {
     const sub = await me();
     if (!sub) return redirect("/login");

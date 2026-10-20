@@ -216,11 +216,11 @@ export const endSession = async (q, session) => q("DELETE FROM logins WHERE sess
 
 export const BOARD_SIZE = 5;
 
-// The jobs on their dashboard: this morning's email, or the last 5 they asked for with "More jobs".
+// The jobs on their dashboard: this morning's email plus any "More jobs" since, newest taps first, best first within each.
 // Jobs sent before the dashboard kept its own 5: their latest email's, best first.
 export async function latestJobs(q, subscriberId) {
   const board = await q(`SELECT id, title, company, url, source, status, sent_at FROM sent_jobs
-     WHERE subscriber_id = $1 AND on_board ORDER BY id LIMIT ${BOARD_SIZE}`, [subscriberId]);
+     WHERE subscriber_id = $1 AND on_board ORDER BY date_trunc('minute', sent_at) DESC, id`, [subscriberId]);
   if (board.length) return board;
   return q(`SELECT id, title, company, url, source, status, sent_at FROM sent_jobs
      WHERE subscriber_id = $1 AND title IS NOT NULL
@@ -233,14 +233,13 @@ export const sparesLeft = async (q, subscriberId) => Number((await one(q, `SELEC
   WHERE p.subscriber_id = $1 AND NOT EXISTS (SELECT 1 FROM sent_jobs s WHERE s.subscriber_id = $1 AND s.job_key = p.job_key)`,
   [subscriberId])).n);
 
-// "More jobs": the next 5 waiting jobs replace the ones on their dashboard. Returns how many came.
+// "More jobs": the next 5 waiting jobs join the top of their dashboard. Returns how many came.
 export async function moreJobs(q, subscriberId) {
   const next = await q(`SELECT id FROM spare_jobs p WHERE p.subscriber_id = $1
       AND NOT EXISTS (SELECT 1 FROM sent_jobs s WHERE s.subscriber_id = $1 AND s.job_key = p.job_key)
     ORDER BY rank LIMIT ${BOARD_SIZE}`, [subscriberId]);
   if (!next.length) return 0;
   const ids = next.map((r) => r.id);
-  await q("UPDATE sent_jobs SET on_board = false WHERE subscriber_id = $1 AND on_board", [subscriberId]);
   await q(`INSERT INTO sent_jobs (subscriber_id, job_key, sent_at, title, company, url, source, posted_at, location, pay, matched, description, on_board)
     SELECT subscriber_id, job_key, now(), title, company, url, source, posted_at, location, pay, matched, description, true
     FROM spare_jobs WHERE id = ANY($1) ORDER BY rank ON CONFLICT (subscriber_id, job_key) DO NOTHING`, [ids]);
