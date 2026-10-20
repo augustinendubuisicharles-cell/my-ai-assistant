@@ -546,6 +546,9 @@ test("members get an AI cover letter from their CV; trial users are asked to joi
   assert.match(ai[0].messages[0].content, /Write press releases\./);
   assert.doesNotMatch(ai[0].messages[0].content, /x\(\)/);
 
+  assert.deepEqual(await q("SELECT kind, model, input_tokens, output_tokens FROM ai_usage"),
+    [{ kind: "letter", model: "claude-opus-5-5", input_tokens: 10, output_tokens: 10 }]);
+
   // The CV is remembered: writing again needs no paste.
   assert.match(await (await call(link, { method: "POST", form: {} })).text(), /8 of 10 left today/);
   assert.equal(ai.length, 2);
@@ -659,12 +662,17 @@ test("the owner's dashboard needs the secret key and shows who got this morning'
   await q(`UPDATE subscribers SET last_run_at = now() - interval '3 days', last_run_result = 'no new matches' WHERE email = 'bo@example.com'`);
   // Ada and Bo both got the Acme job this morning; Ada applied and has an interview.
   for (const email of ["ada@example.com", "bo@example.com"]) {
-    await q(`INSERT INTO sent_jobs (subscriber_id, job_key, sent_at, title, company, url, clicked_at, status)
-             SELECT id, 'acme-support', now(), 'Support Agent', 'Acme', 'https://acme.example/1', now(), $2 FROM subscribers WHERE email = $1`,
+    await q(`INSERT INTO sent_jobs (subscriber_id, job_key, sent_at, title, company, url, clicked_at, status, status_at)
+             SELECT id, 'acme-support', now(), 'Support Agent', 'Acme', 'https://acme.example/1', now(), $2::text, CASE WHEN $2::text IS NULL THEN NULL ELSE now() END
+             FROM subscribers WHERE email = $1`,
       [email, email.startsWith("ada") ? "interview" : null]);
   }
   await q(`INSERT INTO sent_jobs (subscriber_id, job_key, sent_at, title, company, url)
            SELECT id, 'beta-va', now(), 'Virtual Assistant', 'Beta', 'https://beta.example/1' FROM subscribers WHERE email = 'ada@example.com'`);
+  await q(`INSERT INTO employers (name_key, company, evidence, url, source, first_seen, last_seen)
+           VALUES ('acme', 'Acme', 'Support Agent: The advert lists Nigeria: "Lagos, Nigeria"', 'https://acme.example/1', 'Company careers page', now(), now())`);
+  await q(`INSERT INTO ai_usage (created_at, kind, model, input_tokens, output_tokens) VALUES (now(), 'cv', 'claude-opus-5-5', 5000, 3000),
+           (now(), 'cv', 'claude-opus-5-5', 5000, 3000), (now(), 'rerank', 'claude-haiku-5-5', 20000, 2000)`);
 
   assert.equal((await call("/admin/" + "k".repeat(31) + "x")).status, 404);
   assert.match(await (await call("/admin/")).text(), /type="password"/); // bare /admin/ asks for the password
@@ -684,6 +692,12 @@ test("the owner's dashboard needs the secret key and shows who got this morning'
   assert.match(page, /Support Agent <span class="muted">· Acme<\/span><\/td><td class="num">2/);
   assert.match(page, /<span>Applied<\/span><i[^>]*><\/i><b>1<\/b><em>50%/);
   assert.match(page, /<span>Interview<\/span><i[^>]*><\/i><b>1<\/b>/);
+  assert.match(page, /<b>1<\/b><span>people applied this week/);
+  assert.match(page, /<td>Customer support<\/td><td class="num">2<\/td><td class="num">2 <span class="muted small">100%<\/span><\/td><td class="num">1<\/td>/);
+  assert.match(page, /1 <span class="muted">verified from their own adverts, 1 new this week/);
+  assert.match(page, /<b>Acme<\/b><div class="small muted">Support Agent: The advert lists Nigeria/);
+  assert.match(page, /\$0\.16 <span class="muted">≈ \$0\.08 per active user/); // 2 CVs at 5k in/3k out on Opus ($0.08 each) + one Haiku match ($0.003)
+  assert.match(page, /<td>Tailored CVs<\/td><td class="num">2<\/td><td class="num">\$0\.16/);
   assert.ok(!page.includes("pr-check"), "code checks on pull requests aren't listed as job runs");
 
   // The login page: wrong password refused, right one (with stray spaces) opens it and is remembered.
@@ -730,9 +744,10 @@ test("each job has its own page: the advert, how to apply, then one button to th
   const sub0 = await subscriber();
   await call(`/confirm/${sub0.token}`);
   const { token } = sub0;
-  const [{ id }] = await q(`INSERT INTO sent_jobs (subscriber_id, job_key, sent_at, title, company, url, source, location, pay, matched, description, posted_at)
+  const [{ id }] = await q(`INSERT INTO sent_jobs (subscriber_id, job_key, sent_at, title, company, url, source, location, pay, matched, description, posted_at, eligibility, eligibility_note)
     VALUES ($1, 'k1', now(), 'Support Agent', 'Supabase', 'https://jobs.ashbyhq.com/supabase/1', 'Company careers page', 'Remote, Global',
-            '$2,000 a month', 'open to Nigeria · matches "customer support" · posted 15 Oct', 'We help developers.\nWhat you will do:\n• Answer tickets\n• Write <docs>', now())
+            '$2,000 a month', 'open to Nigeria · matches "customer support" · posted 15 Oct', 'We help developers.\nWhat you will do:\n• Answer tickets\n• Write <docs>', now(),
+            'medium', 'Location "Remote, Global", and the advert names no country limit')
     RETURNING id`, [sub0.id]);
   const [{ id: wwr }] = await q(`INSERT INTO sent_jobs (subscriber_id, job_key, sent_at, title, company, url, source)
     VALUES ($1, 'k2', now(), 'Assistant', 'Beta', 'https://weworkremotely.com/x', 'We Work Remotely') RETURNING id`, [sub0.id]);
@@ -741,6 +756,7 @@ test("each job has its own page: the advert, how to apply, then one button to th
   assert.match(page, /<h1>Support Agent<\/h1>/);
   assert.match(page, /Remote, Global[\s\S]*\$2,000 a month[\s\S]*open to Nigeria/);
   assert.match(page, /How to apply[\s\S]*No account needed/);
+  assert.match(page, /class="jelig likely"><b>Likely open to you<\/b><span>Location &quot;Remote, Global&quot;, and the advert names no country limit/);
   assert.match(page, /<li>Answer tickets<\/li><li>Write &lt;docs&gt;<\/li>/);
   assert.match(page, new RegExp(`href="/go/${token}/${id}"[^>]*>Apply on Supabase's site`));
   assert.match(page, /data-unlock="cv"/, "trial users see the CV tools, and tapping them offers membership");
@@ -748,6 +764,7 @@ test("each job has its own page: the advert, how to apply, then one button to th
 
   page = await (await call(`/j/${token}/${wwr}`)).text();
   assert.match(page, /Sign-up needed to apply/);
+  assert.doesNotMatch(page, /class="jelig/, "jobs sent before eligibility was saved show no verdict");
   assert.match(page, /Go to the advert on We Work Remotely/);
   assert.match(page, /The full advert is on We Work Remotely/);
 

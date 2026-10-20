@@ -100,6 +100,10 @@ export const savedAdvert = async (q, url) =>
 export const lettersToday = async (q, id, kind = "letter") =>
   (await one(q, "SELECT count(*)::int AS n FROM letters WHERE subscriber_id = $1 AND kind = $2 AND created_at > now() - interval '1 day'", [id, kind]))?.n || 0;
 export const addLetter = (q, id, kind = "letter") => q("INSERT INTO letters (subscriber_id, created_at, kind) VALUES ($1, now(), $2)", [id, kind]);
+// One Claude call's real token use, for the owner's AI spend (ai_usage in job_alerts/db.py).
+export const logAi = (q, id, kind, model, usage) =>
+  q("INSERT INTO ai_usage (created_at, kind, model, input_tokens, output_tokens, subscriber_id) VALUES (now(), $1, $2, $3, $4, $5)",
+    [kind, model, usage?.input_tokens || 0, usage?.output_tokens || 0, id]);
 
 // --- referrals: every 2 invited friends who become paying members = 1 free month ---
 
@@ -147,7 +151,7 @@ export async function rewardReferrer(q, referrerId) {
 export const ANSWERS = ["applied", "not_yet", "skip", "interview", "offer", "no_reply"];
 
 export const sentJob = (q, subscriberId, id) =>
-  one(q, "SELECT id, title, company, url, source, status, posted_at, location, pay, matched, description FROM sent_jobs WHERE id = $1 AND subscriber_id = $2", [id, subscriberId]);
+  one(q, "SELECT id, title, company, url, source, status, posted_at, location, pay, matched, description, eligibility, eligibility_note FROM sent_jobs WHERE id = $1 AND subscriber_id = $2", [id, subscriberId]);
 
 // They opened the job (the first time counts), or made a CV or letter for it: the next email asks "Did you apply?".
 export const markClicked = (q, subscriberId, id) =>
@@ -240,8 +244,8 @@ export async function moreJobs(q, subscriberId) {
     ORDER BY rank LIMIT ${BOARD_SIZE}`, [subscriberId]);
   if (!next.length) return 0;
   const ids = next.map((r) => r.id);
-  await q(`INSERT INTO sent_jobs (subscriber_id, job_key, sent_at, title, company, url, source, posted_at, location, pay, matched, description, on_board)
-    SELECT subscriber_id, job_key, now(), title, company, url, source, posted_at, location, pay, matched, description, true
+  await q(`INSERT INTO sent_jobs (subscriber_id, job_key, sent_at, title, company, url, source, posted_at, location, pay, matched, description, eligibility, eligibility_note, on_board)
+    SELECT subscriber_id, job_key, now(), title, company, url, source, posted_at, location, pay, matched, description, eligibility, eligibility_note, true
     FROM spare_jobs WHERE id = ANY($1) ORDER BY rank ON CONFLICT (subscriber_id, job_key) DO NOTHING`, [ids]);
   await q("DELETE FROM spare_jobs WHERE id = ANY($1)", [ids]);
   return ids.length;

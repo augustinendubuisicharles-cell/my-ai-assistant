@@ -208,6 +208,9 @@ const STYLE = `
   .jchips span.pay { color:var(--ok); border-color:color-mix(in srgb, var(--ok) 35%, var(--border)); background:color-mix(in srgb, var(--ok) 8%, var(--card)); }
   .jchips span.warn { color:#b54708; border-color:#f7c99a; background:#fff6ed; }
   .jsteps { padding:18px 18px 8px; margin:0 0 14px; }
+  .jelig { margin-top:8px; padding:9px 12px; border-radius:10px; font-size:.86rem; --c:#13804a; background:color-mix(in srgb, var(--c) 10%, transparent); border:1px solid color-mix(in srgb, var(--c) 28%, transparent); }
+  .jelig b { display:block; color:var(--c); } .jelig span { color:var(--muted); overflow-wrap:anywhere; }
+  .jelig.likely { --c:#2457d6; } .jelig.check { --c:#a35f00; }
   .jsteps h2, .jdesc h2 { font-size:.8rem; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:0 0 12px; }
   .jsteps ol { list-style:none; margin:0; padding:0; counter-reset:s; }
   .jsteps li { counter-increment:s; position:relative; padding:0 0 14px 40px; }
@@ -1239,7 +1242,9 @@ ${member ? "" : unlockSheet(ctx, join)}`);
 
 const ATS_HOSTS = /(greenhouse\.io|lever\.co|ashbyhq\.com|workable\.com|smartrecruiters\.com|bamboohr\.com|recruitee\.com|teamtailor\.com|breezy\.hr|jobvite\.com|myworkdayjobs\.com|personio\.)/i;
 // Same boards as SIGNUP_BOARDS in job_alerts/search.py, by name and by web address (older jobs have no source saved).
-const SIGNUP_SOURCES = ["We Work Remotely", "Himalayas", "Jobicy", "RemoteOK"];
+const SIGNUP_SOURCES = ["We Work Remotely", "Himalayas", "Jobicy", "RemoteOK", "Freelancer.com"];
+// search.eligibility's verdict on who can apply, in a few words, and the advert's own words under it.
+const ELIGIBILITY = { high: ["ok", "✓ Open to you"], medium: ["likely", "Likely open to you"], low: ["check", "Check where they hire"] };
 const SIGNUP_HOSTS = /(^|\.)(weworkremotely\.com|himalayas\.app|jobicy\.com|remoteok\.com)$/i;
 
 // Plain-text advert (paragraph breaks and "• " bullets kept) -> paragraphs and lists.
@@ -1285,7 +1290,7 @@ export function jobPage(ctx, { sub, job, member, letters = false }) {
 <div class="co">${esc([job.company, via && `via ${via}`].filter(Boolean).join(" · "))}</div></div></div>
 <div class="jchips">${chips}</div>
 <div class="card jsteps"><h2>How to apply</h2><ol>
-  <li><b>Check it fits you</b><span>Read the advert below: what they need and where they hire.</span></li>
+  <li><b>Check it fits you</b><span>Read the advert below: what they need and where they hire.</span>${eligibility(job)}</li>
   <li><b>Get your CV ready</b><span>${letters || !member ? "One tap makes a CV and cover letter for this exact job." : "Have it ready as a PDF."}</span>${tools}</li>
   <li><b>Apply</b><span>${how}</span></li>
 </ol></div>
@@ -1295,6 +1300,11 @@ ${tracker}
 <p>Apply early: new adverts get the most attention.</p></div>
 <p class="small" style="text-align:center"><a href="/me">My dashboard</a></p>
 ${member ? "" : unlockSheet(ctx, join)}`);
+}
+
+function eligibility(job) {
+  const [cls, label] = ELIGIBILITY[job.eligibility] || [];
+  return cls ? `<div class="jelig ${cls}"><b>${label}</b><span>${esc(job.eligibility_note || "")}</span></div>` : "";
 }
 
 export function cvPage(ctx, { cv, member }) {

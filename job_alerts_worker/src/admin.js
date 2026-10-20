@@ -100,7 +100,7 @@ export async function load(env, q, now = new Date()) {
   const since = runWindow(now);
   const inStatus = (status) => `status IN (${status.map((x) => `'${x}'`).join(", ")})`;
   const APPLIED = ["applied", "interview", "offer", "no_reply"];
-  const [users, money, runs, variety, top, funnel] = await Promise.all([
+  const [users, money, runs, variety, top, funnel, groups, employers, ai] = await Promise.all([
     q(`SELECT s.id, s.email, s.keywords, s.country, s.remote_only, s.city, s.confirmed, s.created_at, s.paid_until,
               s.last_run_at, s.last_run_result, s.telegram_chat_id IS NOT NULL AS telegram, s.heard,
               (SELECT count(*) FROM sent_jobs j WHERE j.subscriber_id = s.id)::int AS jobs_sent,
@@ -126,6 +126,14 @@ export async function load(env, q, now = new Date()) {
               count(*) FILTER (WHERE status = 'offer')::int AS offer,
               count(DISTINCT subscriber_id) FILTER (WHERE ${inStatus(APPLIED)})::int AS appliers
          FROM sent_jobs WHERE sent_at > now() - interval '30 days'`),
+    // Opens and applications by kind of job and by plan, last 30 days; and who applied this week.
+    q(`SELECT j.title, j.clicked_at IS NOT NULL AS opened, ${inStatus(APPLIED)} AS applied,
+              j.status_at > now() - interval '7 days' AND ${inStatus(APPLIED)} AS this_week, j.subscriber_id,
+              EXISTS (SELECT 1 FROM payments p WHERE p.subscriber_id = j.subscriber_id) AS member
+         FROM sent_jobs j WHERE j.sent_at > now() - interval '30 days'`),
+    q(`SELECT company, evidence, url, first_seen FROM employers WHERE last_seen > now() - interval '90 days' ORDER BY first_seen DESC, company`),
+    q(`SELECT kind, model, count(*)::int AS calls, coalesce(sum(input_tokens), 0)::int AS input, coalesce(sum(output_tokens), 0)::int AS output
+         FROM ai_usage WHERE created_at > now() - interval '30 days' GROUP BY kind, model ORDER BY kind`),
   ]);
   for (const u of users) {
     const active = u.paid_until && new Date(u.paid_until) > now;
@@ -158,6 +166,7 @@ export async function load(env, q, now = new Date()) {
     missed: active.filter((u) => !u.ranToday && !u.newToday).length, due: active.filter((u) => !u.newToday).length,
     neverSearched: active.filter((u) => u.neverSearched).length,
     revenue: money[0], runs, lastRun, services, variety: { ...variety[0], top }, funnel: funnel[0],
+    outcomes: outcomes(groups), employers, ai: aiSpend(ai),
   };
   stats.health = health(stats);
   return { users, stats };
@@ -315,6 +324,73 @@ function funnelCard(f) {
 <p class="muted small">${f.appliers} ${f.appliers === 1 ? "person" : "people"} said they applied. Applied, interview and offer come from members' tracker answers, not from employers.</p></div>`;
 }
 
+// Kinds of job, from the title. The first match wins.
+const KINDS = [["Customer support", /support|customer|service|success|help ?desk|call cent|client/i],
+  ["Virtual assistant and admin", /assistant|admin|secretar|receptionist|office|operations|coordinator/i],
+  ["Data entry", /data entry|data|transcri|typist|annotat/i],
+  ["Sales and marketing", /sales|marketing|social media|seo|growth|account (?:exec|manager)|business develop/i],
+  ["Writing and content", /writer|writing|content|copy|editor/i],
+  ["Tech", /engineer|developer|software|devops|data scien|analyst|product|design/i]];
+const kindOf = (title) => (KINDS.find(([, re]) => re.test(title || "")) || ["Other"])[0];
+
+function outcomes(rows) {
+  const kinds = {}, plan = { member: { sent: 0, opened: 0 }, trial: { sent: 0, opened: 0 } }, week = new Set();
+  for (const r of rows) {
+    const k = (kinds[kindOf(r.title)] ||= { sent: 0, opened: 0, applied: 0 });
+    k.sent++; k.opened += r.opened; k.applied += r.applied;
+    const p = plan[r.member ? "member" : "trial"];
+    p.sent++; p.opened += r.opened;
+    if (r.this_week) week.add(r.subscriber_id);
+  }
+  return { kinds: Object.entries(kinds).sort((a, b) => b[1].opened - a[1].opened), plan, appliedThisWeek: week.size };
+}
+
+const pctOf = (n, d) => (d ? `${Math.round((n / d) * 100)}%` : "–");
+
+function outcomesCard(o) {
+  return `<div class="card"><h2>What people act on, last 30 days</h2>
+<div class="mini" style="margin-top:0;grid-template-columns:repeat(3,minmax(0,1fr))"><div><b>${o.appliedThisWeek}</b><span>people applied this week</span></div>
+<div><b>${pctOf(o.plan.member.opened, o.plan.member.sent)}</b><span>of members' jobs opened</span></div>
+<div><b>${pctOf(o.plan.trial.opened, o.plan.trial.sent)}</b><span>of trial users' jobs opened</span></div></div>
+<table class="services" style="margin-top:14px"><thead><tr><th>Kind of job</th><th class="num">Sent</th><th class="num">Opened</th><th class="num">Applied</th></tr></thead><tbody>${o.kinds
+    .map(([k, r]) => `<tr><td>${esc(k)}</td><td class="num">${r.sent}</td><td class="num">${r.opened} <span class="muted small">${pctOf(r.opened, r.sent)}</span></td><td class="num">${r.applied}</td></tr>`).join("")}</tbody></table></div>`;
+}
+
+function employersCard(list) {
+  const week = list.filter((e) => Date.now() - new Date(e.first_seen) < 7 * 864e5).length;
+  return `<div class="card"><h2>Employers hiring in Nigeria</h2>
+<p class="big">${list.length} <span class="muted">verified from their own adverts${week ? `, ${week} new this week` : ""}</span></p>
+${list.length ? `<table class="services"><tbody>${list.slice(0, 6).map((e) => `<tr><td><b>${esc(e.company)}</b><div class="small muted">${esc(e.evidence || "")}</div></td></tr>`).join("")}</tbody></table>`
+    : `<p class="muted small">Filled in by the next morning run.</p>`}
+<p class="muted small">Their other remote jobs rank a little higher. Each job is still checked on its own.</p></div>`;
+}
+
+// Dollars per million tokens (input, output). Unknown models are priced as Opus, the dearest.
+const PRICES = { "claude-opus-5-5": [4, 20], "claude-haiku-5-5": [0.1, 0.5] };
+const KIND_WORDS = { cv: "Tailored CVs", letter: "Cover letters", prep: "Interview preps", rerank: "Job matching" };
+
+function aiSpend(rows) {
+  const kinds = {};
+  for (const r of rows) {
+    const [i, o] = PRICES[Object.keys(PRICES).find((m) => r.model.startsWith(m))] || PRICES["claude-opus-5-5"];
+    const k = (kinds[r.kind] ||= { calls: 0, usd: 0 });
+    k.calls += r.calls;
+    k.usd += (r.input * i + r.output * o) / 1e6;
+  }
+  return { kinds: Object.entries(kinds), usd: Object.values(kinds).reduce((n, k) => n + k.usd, 0) };
+}
+
+const usd = (n) => `$${n < 10 ? n.toFixed(2) : Math.round(n)}`;
+
+function aiCard(a, active) {
+  return `<div class="card"><h2>AI spend, last 30 days</h2>
+<p class="big">${usd(a.usd)} <span class="muted">${active ? `≈ ${usd(a.usd / active)} per active user` : ""}</span></p>
+${a.kinds.length ? `<table class="services"><thead><tr><th>Used for</th><th class="num">Times</th><th class="num">Cost</th><th class="num">Each</th></tr></thead><tbody>${a.kinds
+    .map(([k, r]) => `<tr><td>${esc(KIND_WORDS[k] || k)}</td><td class="num">${r.calls}</td><td class="num">${usd(r.usd)}</td><td class="num">${usd(r.usd / r.calls)}</td></tr>`).join("")}</tbody></table>`
+    : `<p class="muted small">Counting starts now: each CV, letter, prep and job match is logged with its real token use.</p>`}
+<p class="muted small">From Claude's own token counts, at list prices.</p></div>`;
+}
+
 // Sign-ups and paying members per "How did you hear about us?" answer, most sign-ups first.
 function heardTable(users) {
   const rows = {};
@@ -374,6 +450,8 @@ ${h.notes.length ? `<ul>${h.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul
 </section>
 
 <section class="cols two">${varietyCard(s.variety)}${funnelCard(s.funnel)}</section>
+
+<section class="cols">${outcomesCard(s.outcomes)}${employersCard(s.employers)}${aiCard(s.ai, s.active)}</section>
 
 <section class="card">
 <div class="toolbar"><div class="tabs">${tab("all", "All users", users.length, true)}${tab("active", "Active", s.active)}${tab("attention", "Needs attention", attention)}${tab("member", "Members", s.member)}${tab("trial", "Trial", s.trial)}${tab("unconfirmed", "Unconfirmed", s.unconfirmed)}${tab("expired", "Expired", s.expired)}</div>
