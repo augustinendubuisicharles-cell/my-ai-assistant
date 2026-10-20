@@ -765,8 +765,15 @@ test("tailored CVs use the advert saved with the emailed job when its page block
   assert.match(sent.system, /A CV that would suit any job is a failure/);
   assert.equal(sent.output_config.effort, "medium");
   // The advert's must-haves the CV doesn't show are named on the page, not slipped into the CV.
-  assert.match(done, /This job asks for <b>Zendesk Explore, French<\/b>, which your CV doesn't show/);
+  assert.match(done, /This job asks for things your CV doesn't show/);
+  assert.match(done, /<input type="checkbox" name="have" value="Zendesk Explore"> Zendesk Explore/);
+  assert.match(done, /search_query=French%20crash%20course/);
+  assert.match(sent.system, /Currently learning: /);
   assert.doesNotMatch(done, /GAPS:/);
+  // Ticking a skill adds it to their saved CV and to the next CV written.
+  await call(link, { method: "POST", form: { have: "French" } });
+  assert.match((await q("SELECT cv_text FROM subscribers WHERE id = $1", [id]))[0].cv_text, /Other skills I have: French$/);
+  assert.match(ai.at(-1).messages[0].content, /Other skills I have: French/);
 });
 
 test("members track applications: Apply links note the click, one-tap answers save only on POST, and the tracker lists them", async () => {

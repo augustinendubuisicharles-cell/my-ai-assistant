@@ -303,9 +303,16 @@ export async function handle(request, env, q) {
     const render = (extra = {}) => html(views.letterPage(ctx, { kind, sub, job, hasCv: Boolean(cv), cv, left: Math.max(0, letters.PER_DAY - used), ...extra }));
     if (method === "GET") return render();
 
-    const pasted = String((await request.formData()).get("cv") || "").trim();
+    const form = await request.formData();
+    const pasted = String(form.get("cv") || "").trim();
     if (pasted) {
       cv = pasted.slice(0, letters.MAX_CV);
+      await db.setCv(q, sub.id, cv);
+    }
+    // Skills the member ticked on the "this job asks for..." note: they confirm having them, so they join their CV.
+    const have = form.getAll("have").map((h) => String(h).trim().slice(0, 80)).filter(Boolean).slice(0, 5);
+    if (cv && have.length) {
+      cv = `${cv}\n\nOther skills I have: ${have.join(", ")}`.slice(0, letters.MAX_CV);
       await db.setCv(q, sub.id, cv);
     }
     if (!cv) return render({ error: `Paste your CV first, so the ${noun} can be about you.` });

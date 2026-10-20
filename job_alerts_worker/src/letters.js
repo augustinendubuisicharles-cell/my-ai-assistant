@@ -29,6 +29,9 @@ skills, tools and duties, and the words it uses for them. Then write the CV so t
 Use only facts from the CV: never invent experience, employers, dates, numbers, tools or qualifications, and never
 add a skill the CV doesn't show just because the advert wants it, or a reason or quality to a fact ("through a
   personable approach") that the CV doesn't state. Keep every real employer, job title, date and qualification.
+For the advert's must-haves the CV doesn't show: where the CV has related experience, name the bridge in the advert's
+words ("backend APIs in C# and ASP.NET Core, now learning Ruby on Rails"), and end KEY SKILLS with one line
+"Currently learning: " listing them, so the applicant can study them before an interview.
 Plain text, no markdown: the applicant's name and contact details on the first lines, then sections with headings
 in CAPITALS (PROFESSIONAL SUMMARY, KEY SKILLS, EXPERIENCE, EDUCATION, and any others the CV has),
 bullet points starting with "- ". At most about 700 words. Reply with the CV only, then one last line:

@@ -1079,8 +1079,11 @@ ${isCv && !letter ? `<p>We rewrite your CV for this job: a summary aimed at the 
 and the advert's own words where they're true of you. Nothing is made up.</p>` : ""}
 ${isPrep && !letter ? `<p>The questions this interviewer is likely to ask, with answers built from your CV, plus questions to ask them.</p>` : ""}
 ${error ? `<p class="card status">${esc(error)}</p>` : ""}
-${letter && gaps.length ? `<p class="card status">This job asks for <b>${gaps.map(esc).join(", ")}</b>, which your CV doesn't show.
-If you have ${gaps.length > 1 ? "any of them" : "it"}, add ${gaps.length > 1 ? "them" : "it"} to your CV below and tap "Write it again".</p>` : ""}
+${letter && gaps.length ? `<form class="card" method="post"><p style="margin-top:0">This job asks for things your CV doesn't show.
+Tick the ones you have and we'll add them. The rest are listed as "Currently learning", so study them before an interview.</p>
+${gaps.map((g) => `<label style="display:flex;gap:8px;align-items:center;margin:6px 0"><input type="checkbox" name="have" value="${esc(g)}"> ${esc(g)}
+<a href="https://www.youtube.com/results?search_query=${encodeURIComponent(`${g} crash course for beginners`)}" style="margin-left:auto;font-size:14px">Learn it</a></label>`).join("")}
+<button type="submit">Add ticked skills and rewrite</button></form>` : ""}
 ${letter ? `<div class="card"><textarea id="letter" rows="${isCv || isPrep ? 24 : 16}" readonly>${esc(letter)}</textarea>
 <div class="actions"><button type="button" id="copy" style="margin:0">Copy ${noun}</button>
 ${isCv ? `<form method="post" action="${esc(download)}" style="display:contents"><textarea name="text" hidden>${esc(letter)}</textarea>
