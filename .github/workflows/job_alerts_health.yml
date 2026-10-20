@@ -6,10 +6,27 @@ name: Job alerts -- daily check-up
 on:
   workflow_dispatch:  # started by the website's 06:30 UTC cron tick (7:30am Lagos), once the morning emails are out
 
+permissions:
+  actions: read
+  contents: read
+
 jobs:
   check:
     runs-on: ubuntu-latest
     steps:
+      # The morning emails can still be going out at 06:30 UTC (20 Oct 2026: they took 32 minutes), and checking
+      # too soon reports everyone not yet reached as "not searched". Wait for that run to finish (up to an hour).
+      - name: Wait for the morning emails to finish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for i in $(seq 1 60); do
+            busy=$(gh run list -R "$GITHUB_REPOSITORY" -w job_alerts_daily.yml -L 5 --json status --jq '[.[] | select(.status != "completed")] | length')
+            [ "$busy" = "0" ] && exit 0
+            echo "Morning emails still going out; waiting a minute."
+            sleep 60
+          done
+          echo "Still running after an hour; checking anyway."
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
