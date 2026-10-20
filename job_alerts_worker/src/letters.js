@@ -15,11 +15,20 @@ Open with "Dear Hiring Manager," and end with the applicant's name if the CV giv
 Connect two or three specific things from the CV to what the job needs. Reply with the letter only.`;
 
 const CV_SYSTEM = `You tailor CVs for job seekers, most of them in Nigeria applying to remote jobs abroad.
-Rewrite the applicant's CV for the job below so a recruiter (and their screening software) sees the fit at once.
-Use only facts from the CV: never invent experience, employers, dates, numbers, tools or qualifications.
-You may reorder, rephrase, merge and trim: open with a 2 to 3 line professional summary aimed at this role,
-put the most relevant skills and experience first, reword bullet points to show results, and use the advert's
-words wherever they truthfully describe the applicant. Keep every real employer, job title, date and qualification.
+Rewrite the applicant's CV for this one job so a recruiter, and their screening software, sees at a glance
+that this person fits THIS advert. A CV that would suit any job is a failure.
+
+First, privately read the advert and pick out what it asks for most: the exact job title, the 5 to 8 most important
+skills, tools and duties, and the words it uses for them. Then write the CV so that:
+- PROFESSIONAL SUMMARY (2 to 3 lines) names this job title and the company if known, and leads with the applicant's
+  strongest proof for this advert's top needs.
+- KEY SKILLS lists the advert's own wording first, for every skill the CV truly shows, then other relevant skills.
+- In EXPERIENCE, each role's bullets are reordered so the ones closest to this job come first, reworded in the
+  advert's language and showing results; bullets that don't help this application are shortened or dropped.
+- Sections are ordered for this job (for example, a relevant certificate moves up).
+Use only facts from the CV: never invent experience, employers, dates, numbers, tools or qualifications, and never
+add a skill the CV doesn't show just because the advert wants it, or a reason or quality to a fact ("through a
+  personable approach") that the CV doesn't state. Keep every real employer, job title, date and qualification.
 Plain text, no markdown: the applicant's name and contact details on the first lines, then sections with headings
 in CAPITALS (PROFESSIONAL SUMMARY, KEY SKILLS, EXPERIENCE, EDUCATION, and any others the CV has),
 bullet points starting with "- ". At most about 700 words. Reply with the CV only.`;
@@ -39,8 +48,8 @@ Number the questions. At most about 1,000 words. Reply with the sheet only.`;
 const SYSTEMS = { letter: SYSTEM, cv: CV_SYSTEM, prep: PREP_SYSTEM };
 
 // The advert's text (its first 12,000 characters: enough for any job description), when its
-// page can be read without a browser. Many job pages can't,
-// and then the letter is written from the title and company alone.
+// page can be read without a browser. Many job pages can't (Himalayas and Jooble's sites answer
+// "Just a moment..."), so advertFor() starts from the copy saved when the job was emailed.
 export async function advertText(url) {
   try {
     const r = await fetch(url, { headers: { "user-agent": "Mozilla/5.0 (compatible; JobAlertBot/1.0)" }, redirect: "follow" });
@@ -54,6 +63,15 @@ export async function advertText(url) {
   }
 }
 
+// The advert for a letter or CV: the saved copy, plus the live page when the saved one is short
+// (some feeds, like Jobspresso's, only give the first few lines).
+export async function advertFor(url, saved = "") {
+  saved = saved.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  if (saved.length >= 1500) return saved.slice(0, 12000);
+  const page = await advertText(url);
+  return [saved, page].filter(Boolean).join("\n\nThe advert's page:\n").slice(0, 12000);
+}
+
 // Returns the letter (kind "letter"), tailored CV (kind "cv") or interview prep (kind "prep"), or null if it couldn't be written.
 export async function write(env, { cv, title, company, advert }, kind = "letter") {
   const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY.trim() });
@@ -61,7 +79,7 @@ export async function write(env, { cv, title, company, advert }, kind = "letter"
   const response = await client.beta.messages.create({
     model: MODEL,
     max_tokens: 8000,
-    output_config: { effort: "low" },
+    output_config: { effort: kind === "cv" ? "medium" : "low" },
     betas: ["server-side-fallback-2026-07-01"],
     fallbacks: "default",
     system: SYSTEMS[kind] || SYSTEM,
