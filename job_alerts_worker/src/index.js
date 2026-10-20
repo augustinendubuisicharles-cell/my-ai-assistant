@@ -319,7 +319,8 @@ export async function handle(request, env, q) {
     if (!text) return render({ error: "We couldn't write this one just now. Please try again in a minute." });
     await db.addLetter(q, sub.id, kind);
     if (job.url) await db.markClickedByUrl(q, sub.id, job.url); // a strong sign they're applying: ask about it tomorrow
-    return render({ hasCv: true, letter: text, left: Math.max(0, letters.PER_DAY - used - 1) });
+    const { text: body, gaps } = kind === "cv" ? letters.splitGaps(text) : { text, gaps: [] };
+    return render({ hasCv: true, letter: body, gaps, left: Math.max(0, letters.PER_DAY - used - 1) });
   }
 
   // Log in with an emailed link (no passwords): /login sends it, /signin/<code> turns it into a session cookie that lasts

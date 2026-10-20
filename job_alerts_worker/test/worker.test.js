@@ -89,8 +89,9 @@ async function fakeFetch(url, init = {}) {
   }
   if (u === "https://api.anthropic.com/v1/messages?beta=true" || u === "https://api.anthropic.com/v1/messages") {
     ai.push(body);
+    const text = /GAPS: /.test(body.system) ? "Ada Obi\nPROFESSIONAL SUMMARY\nSupport agent.\nGAPS: Zendesk Explore; French." : "Dear Hiring Manager,\n\nI would love to join Acme.";
     return Response.json({ id: "msg_1", type: "message", role: "assistant", model: body.model, stop_reason: "end_turn",
-      content: [{ type: "text", text: "Dear Hiring Manager,\n\nI would love to join Acme." }],
+      content: [{ type: "text", text }],
       usage: { input_tokens: 10, output_tokens: 10 } });
   }
   if (u === "https://jobs.example/pr-1") {
@@ -757,12 +758,15 @@ test("tailored CVs use the advert saved with the emailed job when its page block
   await q(`INSERT INTO sent_jobs (subscriber_id, job_key, sent_at, title, company, url, description)
     VALUES ($1, 'k:support-9', now(), 'Customer Support Specialist', 'Dressly', $2, $3)`, [id, url, advert]);
   const link = `/cv/${token}?t=Customer%20Support%20Specialist&c=Dressly&u=${encodeURIComponent(url)}`;
-  await call(link, { method: "POST", form: { cv: "Ada Obi. Support agent at Konga, 2 years, Zendesk." } });
+  const done = await (await call(link, { method: "POST", form: { cv: "Ada Obi. Support agent at Konga, 2 years, Zendesk." } })).text();
   const sent = ai.at(-1);
   assert.match(sent.messages[0].content, /fluent in Zendesk who answers tickets within 2 hours\./);
   assert.doesNotMatch(sent.messages[0].content, /<p>|couldn't be read|Just a moment/);
   assert.match(sent.system, /A CV that would suit any job is a failure/);
   assert.equal(sent.output_config.effort, "medium");
+  // The advert's must-haves the CV doesn't show are named on the page, not slipped into the CV.
+  assert.match(done, /This job asks for <b>Zendesk Explore, French<\/b>, which your CV doesn't show/);
+  assert.doesNotMatch(done, /GAPS:/);
 });
 
 test("members track applications: Apply links note the click, one-tap answers save only on POST, and the tracker lists them", async () => {

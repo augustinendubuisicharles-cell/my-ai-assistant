@@ -1065,7 +1065,7 @@ export const ALL_JOBS = [...new Set([...JOBS, ...Object.values(RELATED).flat()])
 
 // AI cover letter or tailored CV for one job (members). Shows the result once written, and the form to (re)write it.
 // The tailored CV can also be downloaded as a Word file (.docx, docx.js), built in the browser from the text.
-export function letterPage(ctx, { kind = "letter", sub, job, hasCv, cv = "", letter = "", left, error = "" }) {
+export function letterPage(ctx, { kind = "letter", sub, job, hasCv, cv = "", letter = "", gaps = [], left, error = "" }) {
   const isCv = kind === "cv", isPrep = kind === "prep";
   const noun = isCv ? "CV" : isPrep ? "prep sheet" : "letter";
   const cvField = `<label for="cv">Your CV <span class="hint">Paste the text once; we'll remember it</span></label>
@@ -1079,6 +1079,8 @@ ${isCv && !letter ? `<p>We rewrite your CV for this job: a summary aimed at the 
 and the advert's own words where they're true of you. Nothing is made up.</p>` : ""}
 ${isPrep && !letter ? `<p>The questions this interviewer is likely to ask, with answers built from your CV, plus questions to ask them.</p>` : ""}
 ${error ? `<p class="card status">${esc(error)}</p>` : ""}
+${letter && gaps.length ? `<p class="card status">This job asks for <b>${gaps.map(esc).join(", ")}</b>, which your CV doesn't show.
+If you have ${gaps.length > 1 ? "any of them" : "it"}, add ${gaps.length > 1 ? "them" : "it"} to your CV below and tap "Write it again".</p>` : ""}
 ${letter ? `<div class="card"><textarea id="letter" rows="${isCv || isPrep ? 24 : 16}" readonly>${esc(letter)}</textarea>
 <div class="actions"><button type="button" id="copy" style="margin:0">Copy ${noun}</button>
 ${isCv ? `<form method="post" action="${esc(download)}" style="display:contents"><textarea name="text" hidden>${esc(letter)}</textarea>
