@@ -97,6 +97,9 @@ async function fakeFetch(url, init = {}) {
     return new Response("<html><body><h1>PR Associate</h1><script>x()</script><p>Write press releases.</p></body></html>",
       { headers: { "content-type": "text/html" } });
   }
+  if (u.startsWith("https://blocked.example/")) {  // like Himalayas and Jooble's sites: a bot wall, no advert
+    return new Response("<html><title>Just a moment...</title></html>", { status: 403, headers: { "content-type": "text/html" } });
+  }
   throw new Error(`unexpected fetch ${u}`);
 }
 
@@ -740,6 +743,26 @@ test("each job has its own page: the advert, how to apply, then one button to th
   assert.match(page, /Did you apply\?[\s\S]*formaction="\/job\/[\w-]+\/\d+\/applied"/);
   assert.doesNotMatch(page, /data-unlock/);
   assert.equal((await call(`/j/not-a-real-token-at-all/${id}`)).status, 404);
+});
+
+test("tailored CVs use the advert saved with the emailed job when its page blocks the Worker", async () => {
+  env.ANTHROPIC_API_KEY = "sk-test";
+  await signUp();
+  const { id, token } = await subscriber();
+  await call(`/confirm/${token}`);
+  await call(`/pay/${token}`, { method: "POST" });
+  await call("/paid?transRef=vs_1");
+  const url = "https://blocked.example/support-9";
+  const advert = "<p>We need a Customer Support Specialist fluent in Zendesk who answers tickets within 2 hours.</p> " + "Details. ".repeat(200);
+  await q(`INSERT INTO sent_jobs (subscriber_id, job_key, sent_at, title, company, url, description)
+    VALUES ($1, 'k:support-9', now(), 'Customer Support Specialist', 'Dressly', $2, $3)`, [id, url, advert]);
+  const link = `/cv/${token}?t=Customer%20Support%20Specialist&c=Dressly&u=${encodeURIComponent(url)}`;
+  await call(link, { method: "POST", form: { cv: "Ada Obi. Support agent at Konga, 2 years, Zendesk." } });
+  const sent = ai.at(-1);
+  assert.match(sent.messages[0].content, /fluent in Zendesk who answers tickets within 2 hours\./);
+  assert.doesNotMatch(sent.messages[0].content, /<p>|couldn't be read|Just a moment/);
+  assert.match(sent.system, /A CV that would suit any job is a failure/);
+  assert.equal(sent.output_config.effort, "medium");
 });
 
 test("members track applications: Apply links note the click, one-tap answers save only on POST, and the tracker lists them", async () => {

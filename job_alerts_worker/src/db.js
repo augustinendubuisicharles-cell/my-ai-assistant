@@ -93,6 +93,10 @@ export async function recordPayment(q, reference, subscriberId, amountNgn, days)
 
 export const getCv = async (q, id) => (await one(q, "SELECT cv_text FROM subscribers WHERE id = $1", [id]))?.cv_text || "";
 export const setCv = (q, id, cv) => q("UPDATE subscribers SET cv_text = $2 WHERE id = $1", [id, cv]);
+// The advert saved when the job was emailed (sent_jobs.description, kept 30 days), for AI letters and CVs:
+// many job pages (Himalayas, Jooble's sites) block the Worker, so the saved copy is the reliable one.
+export const savedAdvert = async (q, url) =>
+  (await one(q, "SELECT description FROM sent_jobs WHERE url = $1 AND description <> '' ORDER BY length(description) DESC LIMIT 1", [url]))?.description || "";
 export const lettersToday = async (q, id, kind = "letter") =>
   (await one(q, "SELECT count(*)::int AS n FROM letters WHERE subscriber_id = $1 AND kind = $2 AND created_at > now() - interval '1 day'", [id, kind]))?.n || 0;
 export const addLetter = (q, id, kind = "letter") => q("INSERT INTO letters (subscriber_id, created_at, kind) VALUES ($1, now(), $2)", [id, kind]);

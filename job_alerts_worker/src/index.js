@@ -312,7 +312,7 @@ export async function handle(request, env, q) {
     if (used >= letters.PER_DAY) return render({ error: `That's today's 10 ${plural}. You can write more tomorrow.` });
     let text = null;
     try {
-      text = await letters.write(env, { cv, ...job, advert: job.url ? await letters.advertText(job.url) : "" }, kind);
+      text = await letters.write(env, { cv, ...job, advert: job.url ? await letters.advertFor(job.url, await db.savedAdvert(q, job.url)) : "" }, kind);
     } catch (e) {
       console.log(`[${kind}] failed for subscriber ${sub.id}: ${e}`);
     }
