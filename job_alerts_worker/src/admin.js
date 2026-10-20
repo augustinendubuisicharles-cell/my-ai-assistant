@@ -380,7 +380,7 @@ function aiSpend(rows) {
   return { kinds: Object.entries(kinds), usd: Object.values(kinds).reduce((n, k) => n + k.usd, 0) };
 }
 
-const usd = (n) => `$${n < 10 ? n.toFixed(2) : Math.round(n)}`;
+const usd = (n) => (n > 0 && n < 0.01 ? "under 1¢" : `$${n < 10 ? n.toFixed(2) : Math.round(n)}`);
 
 function aiCard(a, active) {
   return `<div class="card"><h2>AI spend, last 30 days</h2>

@@ -899,7 +899,10 @@ def says_open_to(job: dict, country: str) -> bool:
 # (sent_jobs.eligibility, eligibility_note) and shown on its page. "high": the advert names their country (or says
 # any country); "medium": "Worldwide"/"Anywhere" or a region that includes it; "low": it doesn't say.
 ELIGIBILITY_POINTS = {"high": 1, "medium": 0, "low": -3}
-_ANY_COUNTRY = r"anywhere in the world|from any country|any country|any location|all countries|worldwide|work from anywhere"
+_ANY_COUNTRY = r"anywhere in the world|from any country|any country in the world|work from anywhere"
+# A sentence counts only when it is about who can apply: a hiring word close before the place ("open to candidates
+# in Nigeria", "based in one of our markets: Kenya / Nigeria"), not just a mention ("Nigeria's largest bank").
+_WHO = r"open to|hiring|hire|candidates?|applicants?|talent|based|located|living|residing|reside|work(?:ing)? from|remote(?:ly)? from"
 _AFRICAN = r"\b(?:algeria|angola|benin|botswana|burkina faso|cameroon|egypt|ethiopia|ghana|kenya|morocco|rwanda|senegal|tanzania|uganda)\b"
 _NOT_OPEN = re.compile(r"\b(?:not|except|excluding|unable|cannot|can't|outside of)\b")
 
@@ -912,9 +915,10 @@ def eligibility(job: dict, country: str) -> tuple[str, str]:
         return "high", f'The advert lists {country}: "{loc[:120]}"'
     if job["source"] == "Freelancer.com":
         return "high", "Freelance project open to freelancers in any country"
-    words = "|".join(re.escape(n) for n in names) + "|" + _ANY_COUNTRY
+    places = "|".join(re.escape(n) for n in names) + "|worldwide|any country|anywhere"
+    said = re.compile(rf"\b(?:{_ANY_COUNTRY})\b|\b(?:{_WHO})\b[^.!?]{{0,60}}\b(?:{places})\b")
     for sentence in re.split(r"(?<=[.!?])\s+|\n", job["desc"][:6000]):
-        if re.search(rf"\b(?:{words})\b", sentence.lower()) and not _NOT_OPEN.search(sentence.lower()) and len(sentence) < 300:
+        if said.search(sentence.lower()) and not _NOT_OPEN.search(sentence.lower()) and len(sentence) < 300:
             return "high", f'The advert says: "{sentence.strip()[:160]}"'
     regions = COUNTRIES.get(country, ("", "", []))[2]
     hit = next((r for r in regions if re.search(rf"\b{re.escape(r)}\b", loc.lower().replace("south africa", ""))), "")
@@ -1038,7 +1042,7 @@ def score(job: dict, keywords: list[str], country: str, remote_only: bool, level
     pts += max(0, 3 - (datetime.now(timezone.utc) - job["posted"]).days // 2)  # newest first: fewer applicants yet
     reasons.append(f"posted {job['posted']:%d %b}")
     if job["source"] in SIGNUP_BOARDS:
-        pts -= SIGNUP_PENALTY
+        pts -= SIGNUP_PENALTY + (5 if job["source"] == "Freelancer.com" else 0)  # real part-time jobs before freelance bids
         reasons.append("sign-up needed to apply")
     return pts, reasons
 
