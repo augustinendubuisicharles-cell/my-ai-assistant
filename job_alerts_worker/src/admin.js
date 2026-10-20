@@ -8,7 +8,8 @@ import * as telegram from "./telegram.js";
 import * as firstSearch from "./firstsearch.js";
 import * as letters from "./letters.js";
 
-const MIN_KEY = 12; // shorter keys leave the dashboard off
+const MIN_KEY = 12;
+const SHARE_CAP = 25; // job_alerts/search.py SHARE_CAP: a job sent to this many people steps back for others // shorter keys leave the dashboard off
 
 const COOKIE = "ja_admin";
 const adminKey = (env) => (env.ADMIN_KEY || "").trim();
@@ -97,7 +98,9 @@ async function recentRuns(env) {
 
 export async function load(env, q, now = new Date()) {
   const since = runWindow(now);
-  const [users, money, runs] = await Promise.all([
+  const inStatus = (status) => `status IN (${status.map((x) => `'${x}'`).join(", ")})`;
+  const APPLIED = ["applied", "interview", "offer", "no_reply"];
+  const [users, money, runs, variety, top, funnel, groups, employers, ai] = await Promise.all([
     q(`SELECT s.id, s.email, s.keywords, s.country, s.remote_only, s.city, s.confirmed, s.created_at, s.paid_until,
               s.last_run_at, s.last_run_result, s.telegram_chat_id IS NOT NULL AS telegram, s.heard,
               (SELECT count(*) FROM sent_jobs j WHERE j.subscriber_id = s.id)::int AS jobs_sent,
@@ -109,6 +112,28 @@ export async function load(env, q, now = new Date()) {
               count(*) FILTER (WHERE amount_ngn > 0)::int AS paid_count
          FROM payments`),
     recentRuns(env),
+    // Job variety this morning: how many different adverts the sends covered, and which went to the most people.
+    q(`SELECT count(*)::int AS sends, count(DISTINCT job_key)::int AS jobs, count(DISTINCT subscriber_id)::int AS people,
+              (SELECT count(*) FROM (SELECT 1 FROM sent_jobs WHERE sent_at > now() - interval '14 days'
+                 GROUP BY job_key HAVING count(DISTINCT subscriber_id) >= ${SHARE_CAP}) x)::int AS crowded
+         FROM sent_jobs WHERE sent_at >= $1`, [since.toISOString()]),
+    q(`SELECT min(title) AS title, min(company) AS company, count(DISTINCT subscriber_id)::int AS n
+         FROM sent_jobs WHERE sent_at >= $1 GROUP BY job_key ORDER BY n DESC, title LIMIT 3`, [since.toISOString()]),
+    // What happened to the last 30 days' jobs, as members report it in the application tracker.
+    q(`SELECT count(*)::int AS sent, count(clicked_at)::int AS clicked,
+              count(*) FILTER (WHERE ${inStatus(APPLIED)})::int AS applied,
+              count(*) FILTER (WHERE ${inStatus(["interview", "offer"])})::int AS interview,
+              count(*) FILTER (WHERE status = 'offer')::int AS offer,
+              count(DISTINCT subscriber_id) FILTER (WHERE ${inStatus(APPLIED)})::int AS appliers
+         FROM sent_jobs WHERE sent_at > now() - interval '30 days'`),
+    // Opens and applications by kind of job and by plan, last 30 days; and who applied this week.
+    q(`SELECT j.title, j.clicked_at IS NOT NULL AS opened, ${inStatus(APPLIED)} AS applied,
+              j.status_at > now() - interval '7 days' AND ${inStatus(APPLIED)} AS this_week, j.subscriber_id,
+              EXISTS (SELECT 1 FROM payments p WHERE p.subscriber_id = j.subscriber_id) AS member
+         FROM sent_jobs j WHERE j.sent_at > now() - interval '30 days'`),
+    q(`SELECT company, evidence, url, first_seen FROM employers WHERE last_seen > now() - interval '90 days' ORDER BY first_seen DESC, company`),
+    q(`SELECT kind, model, count(*)::int AS calls, coalesce(sum(input_tokens), 0)::int AS input, coalesce(sum(output_tokens), 0)::int AS output
+         FROM ai_usage WHERE created_at > now() - interval '30 days' GROUP BY kind, model ORDER BY kind`),
   ]);
   for (const u of users) {
     const active = u.paid_until && new Date(u.paid_until) > now;
@@ -140,7 +165,8 @@ export async function load(env, q, now = new Date()) {
     failed: today.filter((u) => u.failed).length,
     missed: active.filter((u) => !u.ranToday && !u.newToday).length, due: active.filter((u) => !u.newToday).length,
     neverSearched: active.filter((u) => u.neverSearched).length,
-    revenue: money[0], runs, lastRun, services,
+    revenue: money[0], runs, lastRun, services, variety: { ...variety[0], top }, funnel: funnel[0],
+    outcomes: outcomes(groups), employers, ai: aiSpend(ai),
   };
   stats.health = health(stats);
   return { users, stats };
@@ -199,6 +225,11 @@ const STYLE = `
   .health ul { margin:10px 0 0; padding-left:18px; } .health li { margin:4px 0; }
   .bar { display:flex; height:12px; border-radius:99px; overflow:hidden; background:var(--card2); margin:16px 0 10px; }
   .bar i { display:block; height:100%; }
+  .cols.two { grid-template-columns:minmax(0,1fr) minmax(0,1fr); }
+  .card .big { font-size:24px; font-weight:700; margin:0 0 4px; } .card .big span { font-size:14px; font-weight:500; }
+  .funnel div { display:grid; grid-template-columns:76px 1fr 52px 40px; align-items:center; gap:10px; padding:6px 0; }
+  .funnel span { color:var(--muted); font-size:12.5px; } .funnel i { display:block; height:14px; border-radius:6px; background:var(--accent); }
+  .funnel b { text-align:right; font-variant-numeric:tabular-nums; } .funnel em { font-style:normal; color:var(--muted); font-size:12px; text-align:right; }
   .legend { display:flex; flex-wrap:wrap; gap:6px 16px; font-size:12.5px; color:var(--muted); }
   .mini { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-top:18px; }
   .mini div { background:var(--card2); border-radius:10px; padding:10px 12px; } .mini b { display:block; font-size:18px; } .mini span { font-size:12px; color:var(--muted); }
@@ -272,6 +303,94 @@ const SCRIPT = `
 })();
 `;
 
+function varietyCard(v) {
+  const share = v.sends ? Math.round((v.jobs / v.sends) * 100) : 0;
+  return `<div class="card"><h2>Job variety this morning</h2>
+<p class="big">${v.jobs} <span class="muted">different jobs across ${v.sends} sends to ${v.people} people</span></p>
+<div class="mini"><div><b class="${share && share < 20 ? "warn" : ""}">${share}%</b><span>of sends were a different job</span></div>
+<div><b>${v.people ? (v.sends / v.people).toFixed(1) : 0}</b><span>jobs per person</span></div>
+<div><b>${v.top[0]?.n || 0}</b><span>most people given one job</span></div>
+<div><b>${v.crowded}</b><span>jobs sent to ${SHARE_CAP}+ people (14 days)</span></div></div>
+${v.top.length ? `<table class="services" style="margin-top:14px"><thead><tr><th>Most shared today</th><th class="num">People</th></tr></thead><tbody>${v.top
+    .map((t) => `<tr><td>${esc(t.title)} <span class="muted">· ${esc(t.company)}</span></td><td class="num">${t.n}</td></tr>`).join("")}</tbody></table>` : ""}
+<p class="muted small">A job already sent to ${SHARE_CAP} people steps back so others get different ones.</p></div>`;
+}
+
+function funnelCard(f) {
+  const steps = [["Sent", f.sent], ["Opened", f.clicked], ["Applied", f.applied], ["Interview", f.interview], ["Offer", f.offer]];
+  const top = Math.max(f.sent, 1);
+  return `<div class="card"><h2>Results, last 30 days</h2>
+<div class="funnel">${steps.map(([label, n], i) => `<div><span>${label}</span><i style="width:${Math.max((n / top) * 100, n ? 1.5 : 0)}%"></i><b>${n}</b>${i ? `<em>${steps[i - 1][1] ? Math.round((n / steps[i - 1][1]) * 100) : 0}%</em>` : "<em></em>"}</div>`).join("")}</div>
+<p class="muted small">${f.appliers} ${f.appliers === 1 ? "person" : "people"} said they applied. Applied, interview and offer come from members' tracker answers, not from employers.</p></div>`;
+}
+
+// Kinds of job, from the title. The first match wins.
+const KINDS = [["Customer support", /support|customer|service|success|help ?desk|call cent|client/i],
+  ["Virtual assistant and admin", /assistant|admin|secretar|receptionist|office|operations|coordinator/i],
+  ["Data entry", /data entry|data|transcri|typist|annotat/i],
+  ["Sales and marketing", /sales|marketing|social media|seo|growth|account (?:exec|manager)|business develop/i],
+  ["Writing and content", /writer|writing|content|copy|editor/i],
+  ["Tech", /engineer|developer|software|devops|data scien|analyst|product|design/i]];
+const kindOf = (title) => (KINDS.find(([, re]) => re.test(title || "")) || ["Other"])[0];
+
+function outcomes(rows) {
+  const kinds = {}, plan = { member: { sent: 0, opened: 0 }, trial: { sent: 0, opened: 0 } }, week = new Set();
+  for (const r of rows) {
+    const k = (kinds[kindOf(r.title)] ||= { sent: 0, opened: 0, applied: 0 });
+    k.sent++; k.opened += r.opened; k.applied += r.applied;
+    const p = plan[r.member ? "member" : "trial"];
+    p.sent++; p.opened += r.opened;
+    if (r.this_week) week.add(r.subscriber_id);
+  }
+  return { kinds: Object.entries(kinds).sort((a, b) => b[1].opened - a[1].opened), plan, appliedThisWeek: week.size };
+}
+
+const pctOf = (n, d) => (d ? `${Math.round((n / d) * 100)}%` : "–");
+
+function outcomesCard(o) {
+  return `<div class="card"><h2>What people act on, last 30 days</h2>
+<div class="mini" style="margin-top:0;grid-template-columns:repeat(3,minmax(0,1fr))"><div><b>${o.appliedThisWeek}</b><span>people applied this week</span></div>
+<div><b>${pctOf(o.plan.member.opened, o.plan.member.sent)}</b><span>of members' jobs opened</span></div>
+<div><b>${pctOf(o.plan.trial.opened, o.plan.trial.sent)}</b><span>of trial users' jobs opened</span></div></div>
+<table class="services" style="margin-top:14px"><thead><tr><th>Kind of job</th><th class="num">Sent</th><th class="num">Opened</th><th class="num">Applied</th></tr></thead><tbody>${o.kinds
+    .map(([k, r]) => `<tr><td>${esc(k)}</td><td class="num">${r.sent}</td><td class="num">${r.opened} <span class="muted small">${pctOf(r.opened, r.sent)}</span></td><td class="num">${r.applied}</td></tr>`).join("")}</tbody></table></div>`;
+}
+
+function employersCard(list) {
+  const week = list.filter((e) => Date.now() - new Date(e.first_seen) < 7 * 864e5).length;
+  return `<div class="card"><h2>Employers hiring in Nigeria</h2>
+<p class="big">${list.length} <span class="muted">verified from their own adverts${week ? `, ${week} new this week` : ""}</span></p>
+${list.length ? `<table class="services"><tbody>${list.slice(0, 6).map((e) => `<tr><td><b>${esc(e.company)}</b><div class="small muted">${esc(e.evidence || "")}</div></td></tr>`).join("")}</tbody></table>`
+    : `<p class="muted small">Filled in by the next morning run.</p>`}
+<p class="muted small">Their other remote jobs rank a little higher. Each job is still checked on its own.</p></div>`;
+}
+
+// Dollars per million tokens (input, output). Unknown models are priced as Opus, the dearest.
+const PRICES = { "claude-opus-5-5": [4, 20], "claude-haiku-5-5": [0.1, 0.5] };
+const KIND_WORDS = { cv: "Tailored CVs", letter: "Cover letters", prep: "Interview preps", rerank: "Job matching" };
+
+function aiSpend(rows) {
+  const kinds = {};
+  for (const r of rows) {
+    const [i, o] = PRICES[Object.keys(PRICES).find((m) => r.model.startsWith(m))] || PRICES["claude-opus-5-5"];
+    const k = (kinds[r.kind] ||= { calls: 0, usd: 0 });
+    k.calls += r.calls;
+    k.usd += (r.input * i + r.output * o) / 1e6;
+  }
+  return { kinds: Object.entries(kinds), usd: Object.values(kinds).reduce((n, k) => n + k.usd, 0) };
+}
+
+const usd = (n) => (n > 0 && n < 0.01 ? "under 1¢" : `$${n < 10 ? n.toFixed(2) : Math.round(n)}`);
+
+function aiCard(a, active) {
+  return `<div class="card"><h2>AI spend, last 30 days</h2>
+<p class="big">${usd(a.usd)} <span class="muted">${active ? `≈ ${usd(a.usd / active)} per active user` : ""}</span></p>
+${a.kinds.length ? `<table class="services"><thead><tr><th>Used for</th><th class="num">Times</th><th class="num">Cost</th><th class="num">Each</th></tr></thead><tbody>${a.kinds
+    .map(([k, r]) => `<tr><td>${esc(KIND_WORDS[k] || k)}</td><td class="num">${r.calls}</td><td class="num">${usd(r.usd)}</td><td class="num">${usd(r.usd / r.calls)}</td></tr>`).join("")}</tbody></table>`
+    : `<p class="muted small">Counting starts now: each CV, letter, prep and job match is logged with its real token use.</p>`}
+<p class="muted small">From Claude's own token counts, at list prices.</p></div>`;
+}
+
 // Sign-ups and paying members per "How did you hear about us?" answer, most sign-ups first.
 function heardTable(users) {
   const rows = {};
@@ -329,6 +448,10 @@ ${h.notes.length ? `<ul>${h.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul
 <div class="card"><h2>Services</h2><table class="services"><tbody>${s.services.map(([name, on]) => `<tr><td>${esc(name)}</td><td class="num"><span class="pill" style="--c:var(${on ? "--green" : "--gray"})">${on ? "On" : "Off"}</span></td></tr>`).join("")}</tbody></table>
 </div>
 </section>
+
+<section class="cols two">${varietyCard(s.variety)}${funnelCard(s.funnel)}</section>
+
+<section class="cols">${outcomesCard(s.outcomes)}${employersCard(s.employers)}${aiCard(s.ai, s.active)}</section>
 
 <section class="card">
 <div class="toolbar"><div class="tabs">${tab("all", "All users", users.length, true)}${tab("active", "Active", s.active)}${tab("attention", "Needs attention", attention)}${tab("member", "Members", s.member)}${tab("trial", "Trial", s.trial)}${tab("unconfirmed", "Unconfirmed", s.unconfirmed)}${tab("expired", "Expired", s.expired)}</div>

@@ -59,6 +59,11 @@ def rerank(jobs: list[dict], keywords: list[str], level: str, country: str, cv: 
             messages=[{"role": "user", "content": _prompt(head, keywords, level, country, (cv or "").strip())}],
             output_config={"effort": "low", "format": {"type": "json_schema", "schema": SCHEMA}},
         )
+        try:
+            from . import db
+            db.log_ai("rerank", MODEL, response.usage)
+        except Exception as e:
+            print(f"  AI usage not logged: {e}")
         text = next(b.text for b in response.content if b.type == "text")
         scores = {s["n"]: s for s in json.loads(text)["jobs"] if isinstance(s.get("n"), int)}
     except Exception as e:

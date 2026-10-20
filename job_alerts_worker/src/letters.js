@@ -90,7 +90,8 @@ export async function advertFor(url, saved = "") {
 }
 
 // Returns the letter (kind "letter"), tailored CV (kind "cv") or interview prep (kind "prep"), or null if it couldn't be written.
-export async function write(env, { cv, title, company, advert }, kind = "letter") {
+// onUsage(usage, model) gets the call's real token use (the owner's AI spend on the dashboard).
+export async function write(env, { cv, title, company, advert }, kind = "letter", onUsage = null) {
   const client = new Anthropic({ apiKey: env.ANTHROPIC_API_KEY.trim() });
   const job = `Job title: ${title}\nCompany: ${company || "not stated"}\n\nAdvert:\n${advert || "(the advert's page couldn't be read; use the title and company)"}`;
   const response = await client.beta.messages.create({
@@ -102,6 +103,7 @@ export async function write(env, { cv, title, company, advert }, kind = "letter"
     system: SYSTEMS[kind] || SYSTEM,
     messages: [{ role: "user", content: `<cv>\n${cv}\n</cv>\n\n<job>\n${job}\n</job>` }],
   });
+  if (onUsage) await onUsage(response.usage, response.model || MODEL);
   if (response.stop_reason === "refusal") return null;
   const text = response.content.filter((b) => b.type === "text").map((b) => b.text).join("").trim();
   return text || null;

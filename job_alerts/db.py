@@ -79,6 +79,8 @@ sent_jobs = Table(
     Column("status", String(20)),                        # STATUSES below; NULL = no answer yet
     Column("status_at", DateTime(timezone=True)),
     Column("on_board", Boolean, nullable=False, server_default=text("false")),  # one of the 5 on their dashboard now
+    Column("eligibility", String(10)),                   # search.eligibility: high / medium / low
+    Column("eligibility_note", String(300)),             # the advert's words that show who can apply
     UniqueConstraint("subscriber_id", "job_key"),
 )
 
@@ -99,6 +101,35 @@ spare_jobs = Table(
     Column("pay", String(120)),
     Column("matched", String(500)),
     Column("description", Text),
+    Column("eligibility", String(10)),
+    Column("eligibility_note", String(300)),
+)
+
+# Employers whose own advert said a remote job is open to Nigeria (search.nigeria_employers), with that evidence.
+# Refreshed every morning; their other remote jobs rank a little higher (search.VERIFIED).
+employers = Table(
+    "employers", metadata,
+    Column("id", Integer, primary_key=True),
+    Column("name_key", String(200), nullable=False, unique=True),  # search._words(company)
+    Column("company", String(200), nullable=False),
+    Column("evidence", String(300)),
+    Column("url", String(1000)),
+    Column("source", String(60)),
+    Column("first_seen", DateTime(timezone=True), nullable=False),
+    Column("last_seen", DateTime(timezone=True), nullable=False),
+)
+
+# Every Claude call and its real token use (the Worker's CVs, letters and preps; ai_match's reranking), so the
+# owner's dashboard shows actual AI spend.
+ai_usage = Table(
+    "ai_usage", metadata,
+    Column("id", Integer, primary_key=True),
+    Column("created_at", DateTime(timezone=True), nullable=False),
+    Column("kind", String(10), nullable=False),           # cv, letter, prep, rerank
+    Column("model", String(60), nullable=False),
+    Column("input_tokens", Integer, nullable=False, server_default="0"),
+    Column("output_tokens", Integer, nullable=False, server_default="0"),
+    Column("subscriber_id", Integer, ForeignKey("subscribers.id", ondelete="SET NULL")),
 )
 
 
@@ -130,7 +161,9 @@ SENT_JOB_COLUMNS = {"title": "VARCHAR(300)", "company": "VARCHAR(200)", "url": "
                     "posted_at": "TIMESTAMP WITH TIME ZONE", "location": "VARCHAR(200)", "pay": "VARCHAR(120)",
                     "matched": "VARCHAR(500)", "description": "TEXT", "clicked_at": "TIMESTAMP WITH TIME ZONE",
                     "asked_count": "INTEGER NOT NULL DEFAULT 0", "status": "VARCHAR(20)", "status_at": "TIMESTAMP WITH TIME ZONE",
-                    "on_board": "BOOLEAN NOT NULL DEFAULT FALSE"}
+                    "on_board": "BOOLEAN NOT NULL DEFAULT FALSE", "eligibility": "VARCHAR(10)",
+                    "eligibility_note": "VARCHAR(300)"}
+SPARE_JOB_COLUMNS = {"eligibility": "VARCHAR(10)", "eligibility_note": "VARCHAR(300)"}
 # Tracker answers. "not_yet" jobs come back each morning while they're fresh; "skip" ones never do.
 STATUSES = ("applied", "not_yet", "skip", "interview", "offer", "no_reply")
 ASK_MORNINGS = 2      # how many mornings we ask "Did you apply?" about a job they opened
@@ -161,6 +194,10 @@ def init_db() -> None:
                 if engine.dialect.name == "sqlite":
                     sql_type = sql_type.replace("TIMESTAMP WITH TIME ZONE", "DATETIME")
                 conn.execute(text(f"ALTER TABLE sent_jobs ADD COLUMN {name} {sql_type}"))
+        have_spares = {c["name"] for c in inspect(engine).get_columns("spare_jobs")}
+        for name, sql_type in SPARE_JOB_COLUMNS.items():
+            if name not in have_spares:
+                conn.execute(text(f"ALTER TABLE spare_jobs ADD COLUMN {name} {sql_type}"))
         if engine.dialect.name == "postgresql":
             # Jobs sent before the tracker stored job details: rebuild them from job_key ("t:<title>|<company>\t<link>"),
             # so they show on the members' area and their Apply links work. Titles come back in Title Case.
@@ -355,7 +392,45 @@ def _job_row(j: dict) -> dict:
     return dict(job_key=j["key"][:500], title=(j.get("title") or "")[:300], company=(j.get("company") or "")[:200],
                 url=(j.get("url") or "")[:1000], source=(j.get("source") or "")[:60], posted_at=j.get("posted"),
                 location=(j.get("location") or "")[:200], pay=(j.get("pay") or "")[:120],
-                matched=" · ".join(j.get("matched") or [])[:500], description=(j.get("desc") or "")[:DESCRIPTION_MAX] or None)
+                matched=" · ".join(j.get("matched") or [])[:500], description=(j.get("desc") or "")[:DESCRIPTION_MAX] or None,
+                eligibility=j.get("eligibility"), eligibility_note=(j.get("eligibility_note") or "")[:300] or None)
+
+
+def share_counts(days: int = 14) -> dict[str, int]:
+    """How many people each job was sent to in the last `days` days (search.SHARED, for fair rotation)."""
+    since = now() - timedelta(days=days)
+    q = (select(sent_jobs.c.job_key, func.count(func.distinct(sent_jobs.c.subscriber_id)))
+         .where(sent_jobs.c.sent_at >= since).group_by(sent_jobs.c.job_key))
+    with engine.connect() as conn:
+        return {k: n for k, n in conn.execute(q)}
+
+
+def save_employers(found: dict[str, dict]) -> None:
+    """Adds today's Nigeria-open employers (search.nigeria_employers) and refreshes the ones seen before."""
+    t = now()
+    with engine.begin() as conn:
+        have = {r.name_key for r in conn.execute(select(employers.c.name_key))}
+        for key, e in found.items():
+            row = dict(company=e["company"][:200], evidence=e["evidence"][:300], url=(e["url"] or "")[:1000],
+                       source=(e["source"] or "")[:60], last_seen=t)
+            if key in have:
+                conn.execute(update(employers).where(employers.c.name_key == key).values(**row))
+            else:
+                conn.execute(insert(employers).values(name_key=key[:200], first_seen=t, **row))
+
+
+def verified_employers(days: int = 90) -> set[str]:
+    """Employers seen hiring in Nigeria in the last `days` days (search.VERIFIED)."""
+    with engine.connect() as conn:
+        return {r.name_key for r in conn.execute(select(employers.c.name_key).where(employers.c.last_seen >= now() - timedelta(days=days)))}
+
+
+def log_ai(kind: str, model: str, usage, subscriber_id: int | None = None) -> None:
+    """One Claude call's token use (ai_usage)."""
+    with engine.begin() as conn:
+        conn.execute(insert(ai_usage).values(created_at=now(), kind=kind, model=model, subscriber_id=subscriber_id,
+                                             input_tokens=getattr(usage, "input_tokens", 0) or 0,
+                                             output_tokens=getattr(usage, "output_tokens", 0) or 0))
 
 
 def record_sent(subscriber_id: int, jobs: list[dict], board: bool = False) -> list[int]:

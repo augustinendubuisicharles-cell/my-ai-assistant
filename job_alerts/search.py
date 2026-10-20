@@ -81,7 +81,7 @@ REMOTE_WORDS = ["remote", "work from home", "home based", "home-based", "anywher
 # Boards that make people create an account (or upgrade) before they can apply (checked 15 Oct 2026).
 # They're no longer searched (the owner's call, 15 Oct 2026): people only get jobs they can apply to
 # directly. If they're ever switched back on, their jobs only fill gaps and are tagged "sign-up needed".
-SIGNUP_BOARDS = {"We Work Remotely", "Himalayas", "Jobicy", "RemoteOK"}
+SIGNUP_BOARDS = {"We Work Remotely", "Himalayas", "Jobicy", "RemoteOK", "Freelancer.com"}
 # The owner's call (15 Oct 2026): open remote VA and support jobs for Nigeria are rare, so for these titles only,
 # sign-up boards fill the gap after open jobs, tagged "sign-up needed to apply".
 SIGNUP_ROLES = re.compile(r"assistant|support|customer|admin|receptionist|data entry|help ?desk|call cent", re.I)
@@ -561,6 +561,39 @@ def from_local_pages() -> tuple:
     return _pool()[1]
 
 
+FREELANCE_CURRENCIES = {"USD", "EUR", "GBP", "AUD", "CAD"}
+FREELANCE_MAX_BIDS = 60  # projects with more bids than this are already crowded
+
+
+@lru_cache(maxsize=64)
+def from_freelancer(keyword: str) -> tuple:
+    """Freelance projects on Freelancer.com, open to freelancers in any country (Nigerians included).
+    Bidding needs a Freelancer.com account, so they count as a sign-up board. Off: the owner chose (20 Oct 2026)
+    to keep topping up part-time users with full-time jobs instead."""
+    try:
+        data = _get("https://www.freelancer.com/api/projects/0.1/projects/active/", query=keyword, limit=50,
+                    full_description="true", job_details="true", sort_field="time_updated")
+    except Exception as e:
+        print(f"[Freelancer.com] {keyword!r} skipped: {e}")
+        return ()
+    out = []
+    for p in (data.get("result") or {}).get("projects", []):
+        cur, budget = (p.get("currency") or {}).get("code", ""), p.get("budget") or {}
+        lo, hi = budget.get("minimum") or 0, budget.get("maximum") or budget.get("minimum") or 0
+        if (cur not in FREELANCE_CURRENCIES or hi < 50 or p.get("local") or not p.get("seo_url")
+                or (p.get("bid_stats") or {}).get("bid_count", 0) > FREELANCE_MAX_BIDS):
+            continue
+        hourly = p.get("type") == "hourly"
+        hours = ((p.get("hourly_project_info") or {}).get("commitment") or {}).get("hours") or 0
+        kind = "hourly contract, full-time hours" if hourly and hours >= 35 else "hourly freelance" if hourly else "freelance project"
+        pay = f"{cur} {lo:g}-{hi:g} {'an hour' if hourly else 'fixed price'}" if lo else f"{cur} {hi:g} {'an hour' if hourly else 'fixed price'}"
+        out.append(_raw(p.get("title"), "Freelancer.com client", "Worldwide (freelance)",
+                        f"https://www.freelancer.com/projects/{p['seo_url']}", "Freelancer.com",
+                        datetime.fromtimestamp(p["time_submitted"], timezone.utc) if p.get("time_submitted") else None,
+                        _clean(p.get("description") or "")[:DESC_MAX], True, pay=pay, job_type=kind))
+    return tuple(out)
+
+
 @lru_cache(maxsize=None)
 def from_jooble(keyword: str, where: str) -> tuple:
     """Jooble: a job search engine like Indeed that gathers adverts from thousands of sites, including
@@ -863,6 +896,65 @@ def says_open_to(job: dict, country: str) -> bool:
     return any(n in loc for n in names) or any(w in loc for w in ANYWHERE)
 
 
+# How sure we are that someone in a country can take a remote job, with the words that show it. Saved with each job
+# (sent_jobs.eligibility, eligibility_note) and shown on its page. "high": the advert names their country (or says
+# any country); "medium": "Worldwide"/"Anywhere" or a region that includes it; "low": it doesn't say.
+ELIGIBILITY_POINTS = {"high": 1, "medium": 0, "low": -3}
+_ANY_COUNTRY = r"anywhere in the world|from any country|any country in the world|work from anywhere"
+# A sentence counts only when it is about who can apply: a hiring word close before the place ("open to candidates
+# in Nigeria", "based in one of our markets: Kenya / Nigeria"), not just a mention ("Nigeria's largest bank").
+_WHO = r"open to|hiring|hire|candidates?|applicants?|talent|based|located|living|residing|reside|work(?:ing)? from|remote(?:ly)? from"
+_AFRICAN = r"\b(?:algeria|angola|benin|botswana|burkina faso|cameroon|egypt|ethiopia|ghana|kenya|morocco|rwanda|senegal|tanzania|uganda)\b"
+_NOT_OPEN = re.compile(r"\b(?:not|except|excluding|unable|cannot|can't|outside of)\b")
+
+
+def eligibility(job: dict, country: str) -> tuple[str, str]:
+    country = country or DEFAULT_COUNTRY
+    loc = (job["location"] or "").strip()
+    names = [country.lower()] + PLACE_ALIASES.get(country, [])
+    if any(n in loc.lower() for n in names):
+        return "high", f'The advert lists {country}: "{loc[:120]}"'
+    if job["source"] == "Freelancer.com":
+        return "high", "Freelance project open to freelancers in any country"
+    places = "|".join(re.escape(n) for n in names) + "|worldwide|any country|anywhere"
+    said = re.compile(rf"\b(?:{_ANY_COUNTRY})\b|\b(?:{_WHO})\b[^.!?]{{0,60}}\b(?:{places})\b")
+    for sentence in re.split(r"(?<=[.!?])\s+|\n", job["desc"][:6000]):
+        if said.search(sentence.lower()) and not _NOT_OPEN.search(sentence.lower()) and len(sentence) < 300:
+            return "high", f'The advert says: "{sentence.strip()[:160]}"'
+    regions = COUNTRIES.get(country, ("", "", []))[2]
+    hit = next((r for r in regions if re.search(rf"\b{re.escape(r)}\b", loc.lower().replace("south africa", ""))), "")
+    if hit:
+        return "medium", f'Open to {hit.upper() if len(hit) <= 4 else hit.title()}, which includes {country}: "{loc[:120]}"'
+    if country == "Nigeria" and len(re.findall(_AFRICAN, loc.lower())) >= 3:  # long country lists get cut at 200 characters
+        return "medium", f'Open to many African countries: "{loc[:80]}..."'
+    if any(w in loc.lower() for w in ANYWHERE):
+        return "medium", f'Location "{loc[:80]}", and the advert names no country limit'
+    return "low", "The advert doesn't say where applicants must live"
+
+
+# Companies that have advertised a remote job open to Nigeria (db.employers, loaded by send_daily): their other
+# remote jobs rank a little higher. Each job still has to pass every check on its own.
+VERIFIED: set[str] = set()
+
+
+def set_verified(names: set[str]) -> None:
+    VERIFIED.clear()
+    VERIFIED.update(names)
+
+
+def nigeria_employers() -> dict[str, dict]:
+    """Employers in today's open feeds whose advert names Nigeria (or Africa with Nigeria listed), with the evidence."""
+    found = {}
+    for j in remote_feeds():
+        if j["source"] in SIGNUP_BOARDS or not j["company"] or not j["remote"]:
+            continue
+        level, note = eligibility(j, "Nigeria")
+        if level == "high" and re.search(r"nigeria|lagos|abuja|africa", f"{j['location']} {note}".lower()) and open_to(j, "Nigeria"):
+            found.setdefault(_words(j["company"]), {"company": j["company"], "evidence": f"{j['title']}: {note}"[:300],
+                                                   "url": j["url"], "source": j["source"]})
+    return found
+
+
 PART_TIME = re.compile(r"\bpart[\s_-]?time\b")
 
 
@@ -951,7 +1043,7 @@ def score(job: dict, keywords: list[str], country: str, remote_only: bool, level
     pts += max(0, 3 - (datetime.now(timezone.utc) - job["posted"]).days // 2)  # newest first: fewer applicants yet
     reasons.append(f"posted {job['posted']:%d %b}")
     if job["source"] in SIGNUP_BOARDS:
-        pts -= SIGNUP_PENALTY
+        pts -= SIGNUP_PENALTY + (5 if job["source"] == "Freelancer.com" else 0)  # real part-time jobs before freelance bids
         reasons.append("sign-up needed to apply")
     return pts, reasons
 
@@ -983,6 +1075,10 @@ def job_keys(job: dict) -> set[str]:
     keys = {f"t:{_words(job['title'])}|{_words(job['company'])}"}
     if job.get("url"):
         keys |= {job["url"], _clean_url(job["url"])}
+    # The same advert reposted by an aggregator under another title or link: same company, same opening text.
+    desc = _words(job.get("desc") or "")
+    if len(desc) >= 300 and job.get("company"):
+        keys.add(f"d:{_words(job['company'])}|{desc[:300]}")
     return keys
 
 
@@ -1044,13 +1140,40 @@ def _search(keywords: list[str], country: str, remote_only: bool, level: str, ci
         result = score(job, keywords, country, remote_only, level, city, why, hours, max_age, any_title)
         if result:
             seen |= keys
+            level_, note = eligibility(job, country)
+            pts = result[0] + ELIGIBILITY_POINTS[level_]
             matched = list(result[1])
+            if _words(job["company"]) in VERIFIED and job["source"] != "Freelancer.com":
+                pts += 2
+                matched.insert(1, "Nigeria-friendly employer")
             if country == "Nigeria" and job["pay"] and (naira := in_naira(job.get("pay_month"))):
                 matched = [f"{m} ({naira})" if m == job["pay"] else m for m in matched]
-            ranked.append({**job, "score": result[0], "matched": matched,
+            ranked.append({**job, "score": pts, "matched": matched, "eligibility": level_, "eligibility_note": note,
                            "hit": "other role" if any_title else title_hit(job["title"], keywords)})
     ranked.sort(key=lambda j: j["score"], reverse=True)
     return ranked, Counter("Earlier matches" if j.get("backlog") else j["source"].split(" (")[0] for j in pool)
+
+
+# Fair rotation: how many people have had each job (job_key) in the last 14 days, kept up to date during the run.
+# A job already sent to SHARE_CAP people steps back behind every other fitting job (own titles, similar roles,
+# 8-14 days old), so one advert doesn't go to everyone; it still comes before part-time users' full-time top-ups
+# and unrelated roles, so nobody gets fewer jobs because of it. Set JOB_SHARE_CAP=0 to switch it off.
+SHARE_CAP = int(os.environ.get("JOB_SHARE_CAP") or 25)
+SHARED: Counter = Counter()
+
+
+def set_shared(counts: dict) -> None:
+    SHARED.clear()
+    SHARED.update(counts)
+
+
+def note_shared(jobs: list[dict]) -> None:
+    for j in jobs:
+        SHARED[job_key(j)] += 1
+
+
+def crowded(job: dict) -> bool:
+    return SHARE_CAP > 0 and SHARED[job_key(job)] >= SHARE_CAP
 
 
 def _copy_of(job: dict, others: list[dict]) -> bool:
@@ -1065,8 +1188,11 @@ def _copy_of(job: dict, others: list[dict]) -> bool:
     return False
 
 
-def _pick(ranked: list[dict], keywords: list[str], n: int) -> list[dict]:
-    """Up to n working jobs, taking turns between the titles so one busy title doesn't fill every email."""
+def _pick(ranked: list[dict], keywords: list[str], n: int, held: list[dict]) -> list[dict]:
+    """Up to n working jobs, taking turns between the titles so one busy title doesn't fill every email.
+    Jobs already shared with SHARE_CAP people go to `held` instead (see crowded)."""
+    held.extend(j for j in ranked if crowded(j))
+    ranked = [j for j in ranked if not crowded(j)]
     picked, used = [], {k: 0 for k in keywords}
     while len(picked) < n and ranked:
         fewest = min(used[j["hit"]] for j in ranked)
@@ -1106,18 +1232,22 @@ def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, ex
     open_jobs = [j for j in ranked if not signup(j)]
     if cv is not None:
         open_jobs = ai_match.rerank(open_jobs, keywords, level, country, cv)
-    picked = _pick(open_jobs, keywords, n)
+    held = []  # fitting jobs already sent to SHARE_CAP people, used only when nothing else fits
+    picked = _pick(open_jobs, keywords, n, held)
     more, near = [], neighbours(keywords)
     if len(picked) < minimum and near:
         more, _ = _search(near, country, remote_only, level, city, seen, Counter(), hours)
         for j in more:
             j["matched"] = ["similar role"] + j["matched"]
         more.sort(key=lambda j: (near.index(j["hit"]), -j["score"]))  # closest roles first
-    def fill(pool: list[dict]) -> int:
+    def fill(pool: list[dict], busy: bool = False) -> int:
         added = 0
         for j in pool:
             if len(picked) >= minimum:
                 break
+            if not busy and crowded(j):
+                held.append(j)
+                continue
             if not _copy_of(j, picked) and _link_ok(j["url"]):
                 picked.append(j)
                 added += 1
@@ -1154,9 +1284,14 @@ def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, ex
         for j in older_pool + older_gated:
             if j["hit"] not in keywords:
                 j["matched"] = ["similar role"] + j["matched"]
+            if datetime.now(timezone.utc) - j["posted"] > MAX_AGE:
+                j["matched"] = ["older advert, over a week old"] + j["matched"]
         older = fill(older_pool)
         gated += fill(older_gated)
         taken = {id(j) for j in picked}
+    # Still short: the fitting jobs held back because many people already have them, before anything less close.
+    shared = fill([j for j in dict((id(j), j) for j in held).values() if id(j) not in taken], busy=True)
+    taken = {id(j) for j in picked}
     # Part-time and still short after every part-time job with a close title (owner's rule, 18 Oct 2026):
     # their own and similar titles at any hours, marked "full-time", come before other roles.
     relaxed = 0
@@ -1185,6 +1320,7 @@ def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, ex
         for j in open_jobs + more + older_pool + other_pool:
             if id(j) not in taken and not signup(j) and not _copy_of(j, picked + rest):
                 rest.append(j)
+        rest.sort(key=crowded)  # widely shared jobs last (stable sort keeps the best-first order)
         rest = rest[:SPARES * 2]
         with ThreadPoolExecutor(max_workers=8) as pool:
             ok = list(pool.map(lambda j: _link_ok(j["url"]), rest))
@@ -1193,7 +1329,8 @@ def find_jobs(keywords_csv: str, country: str, remote_only: bool, level: str, ex
           f"{matched} matched, picked {len(picked)}{f' ({extra} from similar roles to reach the daily minimum)' if extra else ''}"
           f"{f', {gated} from sign-up boards to fill the gap' if gated else ''}"
           f"{f', {relaxed} full-time for a part-time search' if relaxed else ''}"
-          f"{f', {older} posted 8-14 days ago' if older else ''}{f', {other} from other roles' if other else ''}"
+          f"{f', {older} posted 8-14 days ago' if older else ''}"
+          f"{f', {shared} already sent to {SHARE_CAP}+ people' if shared else ''}{f', {other} from other roles' if other else ''}"
           f"{f', {len(spares)} spare for More jobs' if spares is not None else ''}; "
           f"left out: {', '.join(f'{c} {r}' for r, c in why.most_common()) or 'none'}")
     return picked
