@@ -908,16 +908,31 @@ _AFRICAN = r"\b(?:algeria|angola|benin|botswana|burkina faso|cameroon|egypt|ethi
 _NOT_OPEN = re.compile(r"\b(?:not|except|excluding|unable|cannot|can't|outside of)\b")
 
 
+@lru_cache(maxsize=64)
+def _said(country: str) -> re.Pattern:
+    """A sentence about who can apply that names `country` (or any country)."""
+    names = [country.lower()] + PLACE_ALIASES.get(country, [])
+    places = "|".join(re.escape(n) for n in names) + "|worldwide|any country|anywhere"
+    return re.compile(rf"\b(?:{_ANY_COUNTRY})\b|\b(?:{_WHO})\b[^.!?]{{0,60}}\b(?:{places})\b")
+
+
 def eligibility(job: dict, country: str) -> tuple[str, str]:
+    """Cached on the job: the same listing is rated for many people with the same country each morning."""
     country = country or DEFAULT_COUNTRY
+    cache = job.setdefault("_eligibility", {})
+    if country not in cache:
+        cache[country] = _eligibility(job, country)
+    return cache[country]
+
+
+def _eligibility(job: dict, country: str) -> tuple[str, str]:
     loc = (job["location"] or "").strip()
     names = [country.lower()] + PLACE_ALIASES.get(country, [])
     if any(n in loc.lower() for n in names):
         return "high", f'The advert lists {country}: "{loc[:120]}"'
     if job["source"] == "Freelancer.com":
         return "high", "Freelance project open to freelancers in any country"
-    places = "|".join(re.escape(n) for n in names) + "|worldwide|any country|anywhere"
-    said = re.compile(rf"\b(?:{_ANY_COUNTRY})\b|\b(?:{_WHO})\b[^.!?]{{0,60}}\b(?:{places})\b")
+    said = _said(country)
     for sentence in re.split(r"(?<=[.!?])\s+|\n", job["desc"][:6000]):
         if said.search(sentence.lower()) and not _NOT_OPEN.search(sentence.lower()) and len(sentence) < 300:
             return "high", f'The advert says: "{sentence.strip()[:160]}"'
@@ -1072,14 +1087,17 @@ def _clean_url(url: str) -> str:
 def job_keys(job: dict) -> set[str]:
     """Ways we recognise a job we've sent before: its link, and its title + company (the same
     advert is often on several job boards under different links)."""
+    if "_keys" in job:  # every search of the morning checks the same listings: work them out once
+        return job["_keys"]
     keys = {f"t:{_words(job['title'])}|{_words(job['company'])}"}
     if job.get("url"):
         keys |= {job["url"], _clean_url(job["url"])}
     # The same advert reposted by an aggregator under another title or link: same company, same opening text.
-    desc = _words(job.get("desc") or "")
+    desc = _words((job.get("desc") or "")[:500])  # only the opening: this runs for every listing in every search
     if len(desc) >= 300 and job.get("company"):
         keys.add(f"d:{_words(job['company'])}|{desc[:300]}")
-    return keys
+    job["_keys"] = frozenset(keys)
+    return job["_keys"]
 
 
 def job_key(job: dict) -> str:
