@@ -21,7 +21,7 @@ from job_alerts import db
 print(';'.join(str(CreateTable(t).compile(dialect=postgresql.dialect())) for t in db.metadata.sorted_tables) + ';')
 "`, { cwd: repo }).toString();
 
-let pg, q, sent, txs, env, tg, gh, ai;
+let pg, q, sent, txs, env, tg, gh, ai, fb;
 const BASE = "https://job-alerts.example.workers.dev";
 
 beforeEach(async () => {
@@ -33,6 +33,7 @@ beforeEach(async () => {
   tg = [];
   gh = [];
   ai = [];
+  fb = [];
   env = { BREVO_API_KEY: "brevo", FROM_EMAIL: "hi@jobs.test", CREDO_PUBLIC_KEY: "0PUBkey", CREDO_SECRET_KEY: "secret", LAUNCH_SPOTS: "0" };
   globalThis.fetch = fakeFetch;
 });
@@ -40,6 +41,10 @@ beforeEach(async () => {
 async function fakeFetch(url, init = {}) {
   const u = String(url);
   const body = init.body ? JSON.parse(init.body) : null;
+  if (u.startsWith("https://graph.facebook.com/v23.0/123456789/events?access_token=CAPI")) {
+    fb.push(body);
+    return Response.json({ events_received: 1 });
+  }
   if (u.startsWith("https://api.brevo.com/")) {
     sent.push(body);
     return Response.json({ messageId: "x" }, { status: 201 });
@@ -1022,4 +1027,60 @@ test("a first search that never started is started again by the hourly check", a
   assert.deepEqual(gh.at(-1), { ref: "main", inputs: { only_email: "ada@example.com", first: "1" } });
   await q("UPDATE subscribers SET last_run_at = now()");
   assert.deepEqual(await retryFirstSearches(env, q), []); // searched: nothing to do
+});
+
+test("Meta Pixel and Conversions API: PageView, CompleteRegistration and Purchase, each counted once", async () => {
+  assert.doesNotMatch(await (await call("/")).text(), /fbq\(/, "no Pixel until META_PIXEL_ID is set");
+  Object.assign(env, { META_PIXEL_ID: "123456789", META_CAPI_TOKEN: "CAPI", META_TEST_EVENT_CODE: "TEST42" });
+  const home = await (await call("/")).text();
+  assert.match(home, /fbq\('init','123456789'\);fbq\('track','PageView'\)/);
+  assert.match(await (await call("/terms")).text(), /Meta Pixel/);
+  assert.equal(fb.length, 0, "page views are browser-only");
+
+  await signUp();
+  const { id, token, email } = await subscriber();
+  const hit = { "cf-connecting-ip": "102.89.1.2", "user-agent": "Phone", cookie: "_fbp=fb.1.1.2; ja_x=1" };
+  const welcome = await (await call(`/confirm/${token}`, { headers: hit })).text();
+  assert.equal(fb.length, 1);
+  const [reg] = fb[0].data;
+  assert.equal(fb[0].test_event_code, "TEST42");
+  assert.equal(reg.event_name, "CompleteRegistration");
+  assert.equal(reg.event_id, `reg-${id}`);
+  assert.equal(reg.action_source, "website");
+  assert.deepEqual(reg.user_data.em, [createHash("sha256").update(email.trim().toLowerCase()).digest("hex")]);
+  assert.equal(reg.user_data.client_ip_address, "102.89.1.2");
+  assert.equal(reg.user_data.fbp, "fb.1.1.2");
+  assert.ok(!JSON.stringify(fb).includes(email), "the email is only sent hashed");
+  assert.match(welcome, new RegExp(`once\\("CompleteRegistration",\\{\\},"reg-${id}"\\)`), "browser event with the same ID");
+  await call(`/confirm/${token}`, { headers: hit });
+  assert.equal(fb.length, 1, "confirming again isn't a new registration");
+  assert.doesNotMatch(await (await call(`/found/${token}`)).text(), /CompleteRegistration/);
+
+  await call(`/pay/${token}`, { method: "POST" });
+  const done = await call("/paid?transRef=vs_1", { headers: hit });
+  const ref = (await q("SELECT reference FROM payments"))[0].reference;
+  const purchases = () => fb.flatMap((b) => b.data).filter((e) => e.event_name === "Purchase");
+  assert.equal(purchases().length, 1);
+  assert.equal(purchases()[0].event_id, `pay-${ref}`);
+  assert.deepEqual(purchases()[0].custom_data, { value: 5000, currency: "NGN" });
+  assert.equal(purchases()[0].user_data.client_ip_address, "102.89.1.2");
+  const body = JSON.stringify({ event: "transaction.successful", data: { transRef: "vs_1", businessCode: "700607001" } });
+  env.CREDO_BUSINESS_CODE = "700607001";
+  await call("/payments/webhook", { method: "POST", body,
+    headers: { "x-credo-signature": createHash("sha512").update("secret700607001").digest("hex") } });
+  assert.equal(purchases().length, 1, "the webhook for the same payment doesn't send it again");
+  const dash = await (await call("/me?saved=paid", { headers: { cookie: done.headers.get("set-cookie").split(";")[0] } })).text();
+  assert.match(dash, new RegExp(`once\\("Purchase",\\{"value":5000,"currency":"NGN"\\},"pay-${ref}"\\)`));
+});
+
+test("Meta server events are skipped without a token, and a Meta outage doesn't stop a sign-up", async () => {
+  env.META_PIXEL_ID = "123456789";
+  await signUp();
+  const { token } = await subscriber();
+  assert.equal((await call(`/confirm/${token}`)).status, 200);
+  assert.equal(fb.length, 0);
+  env.META_CAPI_TOKEN = "BROKEN";  // fakeFetch throws for this URL, like a network error
+  await call("/subscribe", { method: "POST", form: { email: "b@example.com", keywords: "virtual assistant, pr, sales, marketing, editor", country: "Nigeria" } });
+  const b = (await q("SELECT token FROM subscribers WHERE email = 'b@example.com'"))[0];
+  assert.equal((await call(`/confirm/${b.token}`)).status, 200);
 });
