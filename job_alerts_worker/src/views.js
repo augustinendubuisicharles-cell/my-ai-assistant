@@ -1,6 +1,7 @@
 // HTML pages, ported from job_alerts/templates (the Python site). Every value
 // that comes from a user or the database goes through esc().
 import COUNTRIES from "./countries.js";
+import { pixelScript } from "./meta.js";
 
 export const esc = (s) =>
   String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
@@ -478,7 +479,7 @@ export function page(ctx, body, { landing = false, og = null } = {}) {
 <meta property="og:image:alt" content="${esc(ctx.siteName)}: remote jobs that actually hire Nigerians, in your inbox every morning">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="${esc(ctx.baseUrl)}/og.jpg">
-<style>${STYLE}${landing ? LANDING_STYLE : ""}</style>${landing ? `
+<style>${STYLE}${landing ? LANDING_STYLE : ""}</style>${pixelScript(ctx.metaPixel, ctx.metaEvents)}${landing ? `
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">` : ""}
 </head>
@@ -1033,6 +1034,9 @@ export function terms(ctx) {
     the CV you paste. Your CV is only used to write your letters and tailored CVs (it's sent to our AI provider, Anthropic, for that).
     We never share your details otherwise, and unsubscribing deletes your email, preferences and CV (payment records
     are kept for accounting).</p>
+  ${ctx.metaPixel ? `<p><b>Ads.</b> We use the Meta Pixel to see which of our Facebook and Instagram ads bring sign-ups and payments.
+    It tells Meta that you visited, confirmed your email or paid (with the amount), along with a scrambled (hashed) copy of your email.
+    Nothing else about you or your CV is sent.</p>` : ""}
   ${ctx.contact ? `<p><b>Contact.</b> <a href="mailto:${esc(ctx.contact)}">${esc(ctx.contact)}</a></p>` : ""}
 </div>
 <p class="small"><a href="/">Back to sign-up</a></p>`);
