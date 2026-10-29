@@ -104,6 +104,7 @@ jobs:
           SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
           FROM_EMAIL: ${{ secrets.FROM_EMAIL }}
           FROM_NAME: JobAlert
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}   # same sender as the website; SMTP is the fallback
           ONLY_EMAIL: ${{ inputs.only_email }}
           FIRST_SEARCH: ${{ inputs.first }}

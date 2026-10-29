@@ -24,6 +24,7 @@ jobs:
           BASE_URL: ${{ secrets.JOB_ALERTS_BASE_URL }}
           FROM_EMAIL: ${{ secrets.FROM_EMAIL }}
           FROM_NAME: JobAlert
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
           ONLY_EMAIL: ${{ inputs.test_email }}
           SEND_ALL: ${{ inputs.test_email == '' && inputs.send_to_everyone || '' }}

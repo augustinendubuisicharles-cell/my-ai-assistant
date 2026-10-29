@@ -83,6 +83,7 @@ jobs:
         name: Copy secrets from GitHub to the Worker (only the ones that are set)
         env:
           DATABASE_URL: ${{ secrets.JOB_ALERTS_DATABASE_URL }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
           FROM_EMAIL: ${{ secrets.FROM_EMAIL }}
           CONTACT_EMAIL: ${{ secrets.CONTACT_EMAIL }}
@@ -96,11 +97,14 @@ jobs:
           ANTHROPIC_API_KEY: ${{ secrets.JOB_ALERTS_ANTHROPIC_KEY }}
           ADMIN_KEY: ${{ secrets.JOB_ALERTS_ADMIN_KEY }}
           WHATSAPP_PHONE_ID: ${{ secrets.WHATSAPP_PHONE_ID }}
+          META_PIXEL_ID: ${{ secrets.META_PIXEL_ID }}
+          META_CAPI_TOKEN: ${{ secrets.META_CAPI_TOKEN }}
+          META_TEST_EVENT_CODE: ${{ secrets.META_TEST_EVENT_CODE }}
         run: |
           node -e '
-            const names = ["DATABASE_URL", "BREVO_API_KEY", "FROM_EMAIL", "CONTACT_EMAIL", "CREDO_PUBLIC_KEY",
+            const names = ["DATABASE_URL", "RESEND_API_KEY", "BREVO_API_KEY", "FROM_EMAIL", "CONTACT_EMAIL", "CREDO_PUBLIC_KEY",
                            "CREDO_SECRET_KEY", "CREDO_LIVE", "CREDO_BUSINESS_CODE", "PAYSTACK_SECRET_KEY", "TELEGRAM_TOKEN", "GH_TOKEN", "ANTHROPIC_API_KEY", "ADMIN_KEY",
-                           "WHATSAPP_PHONE_ID"];
+                           "WHATSAPP_PHONE_ID", "META_PIXEL_ID", "META_CAPI_TOKEN", "META_TEST_EVENT_CODE"];
             const out = Object.fromEntries(names.filter((n) => (process.env[n] || "").trim()).map((n) => [n, process.env[n].trim()]));
             console.error("Setting: " + Object.keys(out).join(", "));
             if (out.ADMIN_KEY && out.ADMIN_KEY.length < 12) console.log("::warning::JOB_ALERTS_ADMIN_KEY is under 12 characters, so the dashboard stays off");
@@ -108,6 +112,10 @@ jobs:
           '
           npx wrangler secret bulk /tmp/secrets.json
           rm -f /tmp/secrets.json
+          # Meta's test code only for testing: once the GitHub secret is removed, live events go to the real data again.
+          if [ -z "$(echo "$META_TEST_EVENT_CODE" | tr -d '[:space:]')" ]; then
+            yes | npx wrangler secret delete META_TEST_EVENT_CODE >/dev/null 2>&1 || true
+          fi
       - if: steps.check.outputs.ready == 'true'
         name: Point the Telegram bot at the site (only when JOB_ALERTS_TELEGRAM_TOKEN and JOB_ALERTS_BASE_URL are set)
         env:

@@ -3,8 +3,9 @@
 // change or cancel their alerts. The daily search and emails still run from GitHub
 // Actions (job_alerts/send_daily.py) against the same Neon database.
 //
-// Secrets/vars: DATABASE_URL, BREVO_API_KEY, FROM_EMAIL, CONTACT_EMAIL, and the
-// payment keys in payments.js. ADMIN_KEY turns on the owner's dashboard at /admin. Optional: BASE_URL, SITE_NAME, PRICE_NGN, PERIOD_DAYS.
+// Secrets/vars: DATABASE_URL, RESEND_API_KEY (or BREVO_API_KEY), FROM_EMAIL, CONTACT_EMAIL, and the
+// payment keys in payments.js. ADMIN_KEY turns on the owner's dashboard at /admin. Optional: BASE_URL, SITE_NAME, PRICE_NGN, PERIOD_DAYS,
+// and META_PIXEL_ID / META_CAPI_TOKEN / META_TEST_EVENT_CODE for the Meta Pixel and Conversions API (meta.js).
 import { neon } from "@neondatabase/serverless";
 import * as db from "./db.js";
 import * as mail from "./mail.js";
@@ -15,6 +16,7 @@ import * as telegram from "./telegram.js";
 import * as firstSearch from "./firstsearch.js";
 import * as letters from "./letters.js";
 import * as admin from "./admin.js";
+import * as meta from "./meta.js";
 import { FEATURED } from "./featured.js";
 import { cvDocx, cvFileName } from "./docx.js";
 
@@ -38,6 +40,8 @@ function context(env, request) {
     trialDays: payments.trialDays(env),
     contact: (env.CONTACT_EMAIL || env.FROM_EMAIL || "").trim(),
     fromEmail: (env.FROM_EMAIL || "").trim(),
+    metaPixel: meta.pixelId(env),
+    metaEvents: [], // Pixel events this page reports (views.page)
   };
 }
 
@@ -197,10 +201,17 @@ export async function handle(request, env, q) {
     if (!sub) return notFound();
     const justConfirmed = sub.justConfirmed;
     if (!sub.paid_until) sub = await db.startTrial(q, sub.id, ctx.trialDays);
+    // A new account: Meta hears it from the server now, and from the browser on the page they land on (same event ID).
+    const reg = justConfirmed && ctx.metaPixel ? "&r=1" : "";
+    if (justConfirmed) {
+      await meta.sendEvent(env, { name: "CompleteRegistration", eventId: meta.registrationId(sub.id), email: sub.email,
+        subscriberId: sub.id, url: `${ctx.baseUrl}/confirm`, request });
+      ctx.metaEvents.push(registrationEvent(sub));
+    }
     const job = url.searchParams.get("job");
     if (job && Object.hasOwn(FEATURED, job)) {
       if (justConfirmed && db.isPaid(sub)) await firstSearch.start(env, sub.email);
-      return redirect(`/job/${job}?t=${sub.token}`);
+      return redirect(`/job/${job}?t=${sub.token}${reg}`);
     }
     if (!db.isPaid(sub)) { // trial (or paid time) already used up
       if (ctx.paidService) return html(views.pay(ctx, { sub, heading: "Email confirmed. Pick up where you left off", status: status(ctx, sub) }));
@@ -209,7 +220,7 @@ export async function handle(request, env, q) {
     // First confirmation only: start their first search now instead of waiting for the morning run,
     // and show the jobs as they arrive.
     const soon = justConfirmed ? await firstSearch.start(env, sub.email) : false;
-    if (soon) return redirect(`/found/${sub.token}`);
+    if (soon) return redirect(`/found/${sub.token}${reg.replace("&", "?")}`);
     return html(views.welcome(ctx, { sub, until: fmtDate(sub.paid_until), trial: !(await db.isMember(q, sub)), soon,
       refLink: await refLink(sub), joined: await db.confirmedReferrals(q, sub.id), paid: await db.paidReferrals(q, sub.id) }));
   }
@@ -218,6 +229,7 @@ export async function handle(request, env, q) {
     const sub = await db.byToken(q, m[1]);
     if (!sub?.confirmed) return notFound();
     if (await db.isMember(q, sub)) return redirect("/me");
+    if (url.searchParams.get("r") === "1") ctx.metaEvents.push(registrationEvent(sub));
     const jobs = await q(`SELECT title, company, location, pay, matched FROM sent_jobs
       WHERE subscriber_id = $1 AND on_board ORDER BY id LIMIT 3`, [sub.id]);
     const tries = Math.min(99, Number(url.searchParams.get("n")) || 0);
@@ -346,6 +358,7 @@ export async function handle(request, env, q) {
     if (!job) return notFound();
     const t = url.searchParams.get("t");
     const sub = t ? await db.byToken(q, t) : await me();
+    if (sub?.confirmed && url.searchParams.get("r") === "1") ctx.metaEvents.push(registrationEvent(sub));
     return html(views.featuredJob(ctx, job, m[1], { unlocked: Boolean(sub?.confirmed) }));
   }
 
@@ -406,6 +419,11 @@ export async function handle(request, env, q) {
       return html(views.cvPage(ctx, { cv: await db.getCv(q, sub.id), member }));
     }
     if (method !== "GET") return notFound();
+    if (url.searchParams.get("saved") === "paid") { // back from paying: the browser half of Meta's Purchase event
+      const [p] = await q(`SELECT reference, amount_ngn FROM payments WHERE subscriber_id = $1 AND amount_ngn > 0
+        AND paid_at > now() - interval '6 hours' ORDER BY paid_at DESC LIMIT 1`, [sub.id]);
+      if (p) ctx.metaEvents.push({ name: "Purchase", eventId: meta.purchaseId(p.reference), params: { value: p.amount_ngn, currency: "NGN" } });
+    }
     const apps = member ? await db.applications(q, sub.id) : [];
     const spares = member ? await db.sparesLeft(q, sub.id) : 0;
     return html(views.memberHome(ctx, { sub, member, until: db.isPaid(sub) ? fmtDate(sub.paid_until) : "", jobs: await db.latestJobs(q, sub.id),
@@ -487,7 +505,7 @@ export async function handle(request, env, q) {
     const ref = url.searchParams.get("transRef") || url.searchParams.get("reference") || url.searchParams.get("trxref") || "";
     let sub = null;
     try {
-      sub = await applyPayment(env, q, ref, ctx);
+      sub = await applyPayment(env, q, ref, ctx, request);
     } catch (e) {
       console.log(`[paid] ${ref}: ${e}`);
     }
@@ -550,6 +568,8 @@ export async function handle(request, env, q) {
   return msg("Page not found", "There's nothing at this address.", { link: "/", linkText: "Go to sign-up", status: 404 });
 }
 
+const registrationEvent = (sub) => ({ name: "CompleteRegistration", eventId: meta.registrationId(sub.id), params: {} });
+
 // Gives the inviter any free months they've newly earned, and tells them by email.
 async function rewardReferrer(env, q, ctx, referrerId) {
   const months = await db.rewardReferrer(q, referrerId);
@@ -590,12 +610,18 @@ export async function catchUpPayments(env, q) {
   return added;
 }
 
-async function applyPayment(env, q, ref, ctx) {
+// `request` is the buyer's own visit (/paid), when that's how we heard; webhooks and catch-up leave it out.
+async function applyPayment(env, q, ref, ctx, request = null) {
   const paid = await payments.verify(env, ref);
   if (!paid) return null;
   const sub = await db.recordPayment(q, paid.reference, paid.subscriberId, paid.amount, payments.periodDays(env));
   // A friend they invited just became a member: the inviter earns a free month.
   if (sub?.justPaid && sub.referred_by && paid.amount > 0) await rewardReferrer(env, q, ctx, sub.referred_by);
+  if (sub?.justPaid && paid.amount > 0) {
+    // Meta's Purchase event, once per payment (justPaid), with what was actually paid; the browser sends the same event ID.
+    await meta.sendEvent(env, { name: "Purchase", eventId: meta.purchaseId(paid.reference), email: sub.email, subscriberId: sub.id,
+      url: `${ctx.baseUrl}/paid`, request, value: paid.amount, currency: "NGN" });
+  }
   if (sub?.justPaid) {
     // Our own receipt, once per payment, so the member hears from JobAlert rather than only the payment provider.
     try {

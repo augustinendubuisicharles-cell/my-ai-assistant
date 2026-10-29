@@ -24,6 +24,7 @@ jobs:
       - env:
           PAYSTACK_TEST_SECRET_KEY: ${{ secrets.PAYSTACK_TEST_SECRET_KEY }}
           EMAIL: ${{ inputs.email }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
           FROM_EMAIL: ${{ secrets.FROM_EMAIL }}
           CONTACT_EMAIL: ${{ secrets.CONTACT_EMAIL }}

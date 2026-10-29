@@ -37,6 +37,7 @@ jobs:
           DATABASE_URL: ${{ secrets.JOB_ALERTS_DATABASE_URL }}
           BASE_URL: ${{ secrets.JOB_ALERTS_BASE_URL }}
           PAYSTACK_SECRET_KEY: ${{ secrets.PAYSTACK_SECRET_KEY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
           FROM_EMAIL: ${{ secrets.FROM_EMAIL }}
           SMTP_USER: ${{ secrets.SMTP_USER }}
