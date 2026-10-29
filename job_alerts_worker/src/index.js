@@ -3,7 +3,7 @@
 // change or cancel their alerts. The daily search and emails still run from GitHub
 // Actions (job_alerts/send_daily.py) against the same Neon database.
 //
-// Secrets/vars: DATABASE_URL, BREVO_API_KEY, FROM_EMAIL, CONTACT_EMAIL, and the
+// Secrets/vars: DATABASE_URL, RESEND_API_KEY (or BREVO_API_KEY), FROM_EMAIL, CONTACT_EMAIL, and the
 // payment keys in payments.js. ADMIN_KEY turns on the owner's dashboard at /admin. Optional: BASE_URL, SITE_NAME, PRICE_NGN, PERIOD_DAYS,
 // and META_PIXEL_ID / META_CAPI_TOKEN / META_TEST_EVENT_CODE for the Meta Pixel and Conversions API (meta.js).
 import { neon } from "@neondatabase/serverless";

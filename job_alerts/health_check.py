@@ -122,6 +122,9 @@ def check_site(problems: list) -> None:
 
 
 def check_brevo(problems: list, notes: list) -> None:
+    if os.environ.get("RESEND_API_KEY", "").strip():
+        notes.append("Email: sent through Resend.")
+        return
     key = os.environ.get("BREVO_API_KEY", "").strip()
     if not key:
         return

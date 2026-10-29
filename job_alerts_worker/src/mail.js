@@ -1,14 +1,25 @@
-// Sends email through Brevo's web API (Workers can't open SMTP connections).
+// Sends email through Resend's web API when RESEND_API_KEY is set, otherwise Brevo's (Workers can't open SMTP connections).
 // The confirmation and manage-link emails match job_alerts/emails.py (same branded layout:
 // tables and inline styles, which is what mail apps reliably display).
 import { esc } from "./views.js";
 
 export async function send(env, to, subject, text, html) {
+  const from = (env.FROM_EMAIL || "").trim(), name = env.FROM_NAME || "JobAlert";
+  const resend = (env.RESEND_API_KEY || "").trim();
+  if (resend) {
+    const r = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { authorization: `Bearer ${resend}`, "content-type": "application/json" },
+      body: JSON.stringify({ from: `${name} <${from}>`, to: [to], subject, html, text }),
+    });
+    if (r.status >= 300) throw new Error(`Resend API ${r.status}: ${(await r.text()).slice(0, 300)}`);
+    return;
+  }
   const r = await fetch("https://api.brevo.com/v3/smtp/email", {
     method: "POST",
     headers: { "api-key": (env.BREVO_API_KEY || "").trim(), "content-type": "application/json", accept: "application/json" },
     body: JSON.stringify({
-      sender: { name: env.FROM_NAME || "JobAlert", email: (env.FROM_EMAIL || "").trim() },
+      sender: { name, email: from },
       to: [{ email: to }], subject, htmlContent: html, textContent: text,
     }),
   });

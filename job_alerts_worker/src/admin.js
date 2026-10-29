@@ -150,7 +150,8 @@ export async function load(env, q, now = new Date()) {
   const count = (s) => users.filter((u) => u.status === s).length;
   const today = active.filter((u) => u.ranToday);
   const services = [
-    ["Email (Brevo)", Boolean((env.BREVO_API_KEY || "").trim() && (env.FROM_EMAIL || "").trim())],
+    [(env.RESEND_API_KEY || "").trim() ? "Email (Resend)" : "Email (Brevo)",
+      Boolean(((env.RESEND_API_KEY || "").trim() || (env.BREVO_API_KEY || "").trim()) && (env.FROM_EMAIL || "").trim())],
     [`Payments${payments.provider(env) ? ` (${payments.provider(env)})` : ""}`, Boolean(payments.provider(env))],
     ["On-time morning run and first search (GitHub token)", firstSearch.enabled(env)],
     ["Cover letters (Claude)", letters.enabled(env)],

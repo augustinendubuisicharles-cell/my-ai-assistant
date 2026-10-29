@@ -45,6 +45,11 @@ async function fakeFetch(url, init = {}) {
     fb.push(body);
     return Response.json({ events_received: 1 });
   }
+  if (u === "https://api.resend.com/emails") {
+    assert.equal(init.headers.authorization, "Bearer re_key");
+    sent.push({ resend: true, ...body, textContent: body.text });
+    return Response.json({ id: "x" });
+  }
   if (u.startsWith("https://api.brevo.com/")) {
     sent.push(body);
     return Response.json({ messageId: "x" }, { status: 201 });
@@ -185,6 +190,17 @@ test("sign up stores preferences and emails a confirmation link", async () => {
   assert.equal(s.confirmed, false);
   assert.equal(sent.length, 1);
   assert.ok(sent[0].textContent.includes(`${BASE}/confirm/${s.token}`));
+});
+
+test("with RESEND_API_KEY set, emails go through Resend instead of Brevo", async () => {
+  env.RESEND_API_KEY = " re_key ";
+  await signUp();
+  const s = await subscriber();
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].resend, true);
+  assert.equal(sent[0].from, "JobAlert <hi@jobs.test>");
+  assert.deepEqual(sent[0].to, ["ada@example.com"]);
+  assert.ok(sent[0].text.includes(`${BASE}/confirm/${s.token}`) && sent[0].html.includes("Confirm"));
 });
 
 test("on-site needs a city; bots and bad input are refused", async () => {

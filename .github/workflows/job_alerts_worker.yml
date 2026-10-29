@@ -83,6 +83,7 @@ jobs:
         name: Copy secrets from GitHub to the Worker (only the ones that are set)
         env:
           DATABASE_URL: ${{ secrets.JOB_ALERTS_DATABASE_URL }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
           BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
           FROM_EMAIL: ${{ secrets.FROM_EMAIL }}
           CONTACT_EMAIL: ${{ secrets.CONTACT_EMAIL }}
@@ -101,7 +102,7 @@ jobs:
           META_TEST_EVENT_CODE: ${{ secrets.META_TEST_EVENT_CODE }}
         run: |
           node -e '
-            const names = ["DATABASE_URL", "BREVO_API_KEY", "FROM_EMAIL", "CONTACT_EMAIL", "CREDO_PUBLIC_KEY",
+            const names = ["DATABASE_URL", "RESEND_API_KEY", "BREVO_API_KEY", "FROM_EMAIL", "CONTACT_EMAIL", "CREDO_PUBLIC_KEY",
                            "CREDO_SECRET_KEY", "CREDO_LIVE", "CREDO_BUSINESS_CODE", "PAYSTACK_SECRET_KEY", "TELEGRAM_TOKEN", "GH_TOKEN", "ANTHROPIC_API_KEY", "ADMIN_KEY",
                            "WHATSAPP_PHONE_ID", "META_PIXEL_ID", "META_CAPI_TOKEN", "META_TEST_EVENT_CODE"];
             const out = Object.fromEntries(names.filter((n) => (process.env[n] || "").trim()).map((n) => [n, process.env[n].trim()]));
