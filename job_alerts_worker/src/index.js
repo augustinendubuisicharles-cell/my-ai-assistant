@@ -17,6 +17,7 @@ import * as firstSearch from "./firstsearch.js";
 import * as letters from "./letters.js";
 import * as admin from "./admin.js";
 import * as meta from "./meta.js";
+import * as seo from "./seo.js";
 import { FEATURED } from "./featured.js";
 import { cvDocx, cvFileName } from "./docx.js";
 
@@ -120,6 +121,20 @@ export async function handle(request, env, q) {
   let m;
 
   if (path === "/healthz") return Response.json({ ok: true });
+
+  // Public pages for search engines: remote jobs open to Nigerians, by category, with Google for Jobs markup.
+  const pub = (type, body, status = 200) => new Response(body, { status, headers: { "content-type": type, "cache-control": "public, max-age=3600" } });
+  if (path === "/robots.txt") return pub("text/plain; charset=utf-8", seo.ROBOTS(ctx.baseUrl));
+  if (path === "/sitemap.xml") return pub("application/xml; charset=utf-8", seo.sitemap(ctx, await seo.jobs(q)));
+  if (path === "/remote-jobs") return pub("text/html; charset=utf-8", seo.indexPage(ctx, await seo.jobs(q)));
+  if ((m = path.match(/^\/remote-jobs\/job\/([0-9a-f]{12})$/))) {
+    const job = (await seo.jobs(q)).find((j) => j.key === m[1]);
+    if (!job) return msg("This job has closed", "It is no longer listed. See the newest remote jobs open to Nigerians below.",
+      { status: 410, link: "/remote-jobs", linkText: "See remote jobs" });
+    return pub("text/html; charset=utf-8", seo.jobPage(ctx, job));
+  }
+  if ((m = path.match(/^\/remote-jobs\/([a-z-]+)$/)) && seo.CATEGORIES.some(([s]) => s === m[1]))
+    return pub("text/html; charset=utf-8", seo.categoryPage(ctx, m[1], await seo.jobs(q)));
 
   // Owner's dashboard: /admin asks for the password (ADMIN_KEY) once per browser; /admin/<key>
   // opens it directly. Without ADMIN_KEY, or with a wrong key in the link, it is "not found".
