@@ -834,6 +834,7 @@ def location_fits(job_location: str, country: str, remote: bool) -> bool:
     loc = job_location.lower()
     # "Anywhere in France" means France, and "South Africa" isn't the "Africa" region.
     loc = re.sub(r"anywhere in (?!the world)", "in ", loc)
+    loc = re.sub(r"\banywhere\s*[,(\-–]\s*(?=usa|us\b|u\.s|united states|canada|uk\b|united kingdom|europe|eu\b)", "", loc)  # "Anywhere, USA"
     if not loc or any(w in loc for w in ANYWHERE):
         return True
     names = [country.lower()] + PLACE_ALIASES.get(country, [])
@@ -841,6 +842,8 @@ def location_fits(job_location: str, country: str, remote: bool) -> bool:
         return True
     # Remote jobs open to a region the person lives in ("EMEA", "Africa"...)
     region = loc.replace("south africa", "southafrica")
+    if remote and "africa" in COUNTRIES.get(country, ("", "", []))[2] and len(re.findall(_AFRICAN, loc)) >= 3:
+        return True  # a long list of African countries, cut off at 200 characters before reaching theirs
     return remote and any(re.search(rf"\b{re.escape(r)}\b", region) for r in COUNTRIES.get(country, ("", "", []))[2])
 
 
@@ -853,11 +856,14 @@ _PLACES = {
     r"(?:the )?(?:eu|european union|europe|eea)": {c for c, v in COUNTRIES.items() if "europe" in v[2]},
     r"australia": {"Australia"}, r"india": {"India"}, r"germany": {"Germany"}, r"latin america|latam": {
         c for c, v in COUNTRIES.items() if "latam" in v[2]},
+    **{re.escape(c.lower()): {c} for c in COUNTRIES
+       if c not in ("United States", "United Kingdom", "Canada", "Australia", "India", "Germany")},
 }
 _LIMITS = [
     r"\b(?:must|need to|needs to|required to|should) (?:be )?(?:currently )?(?:based|located|living|residing|resident|reside) in {p}\b",
     r"\b(?:candidates|applicants) (?:must be )?(?:based|located|residing) in {p}\b",
-    r"\b(?:authori[sz]ed|eligible|legally able|permitted) to work in {p}\b",
+    r"\b(?:authori[sz]ed|eligible|legally able|permitted) to work (?:in|within) {p}\b",
+    r"\b(?:hiring|recruiting) (?:only )?for (?:positions|roles) (?:based )?in {p}\b",
     r"\bright to work in {p}\b",
     r"\b{p}[- ](?:based )?(?:candidates|applicants|residents|citizens) only\b",
     r"\bonly (?:open to|accepting|hiring) (?:candidates |applicants )?(?:in|from|based in) {p}\b",
@@ -874,7 +880,16 @@ _LIMIT_RES = [(re.compile(t.replace("{p}\\b", "{p}(?![a-z])").format(p=f"(?:{pla
               for place, allowed in _PLACES.items() for t in _LIMITS]
 # North American working hours named in the title ("Support Specialist, Pacific/Mountain Time", "... (EST)").
 _US_HOURS = re.compile(r"\b(?:pacific|mountain|eastern|central)(?:\s*time\b|\s*/)|\b(?:pst|pdt|est|edt|cst|cdt|mst|mdt)\b")
-_CITIZENS = re.compile(r"\b(?:us|u\.s\.) citizen(?:s|ship)?\b|\bsecurity clearance\b|\bw-2\b")
+_CITIZENS = re.compile(r"\b(?:us|u\.s\.) citizen(?:s|ship)?\b|\bsecurity clearance\b|\bw-2\b"
+                       r"|\b(?:located|based|reside|live) in one of the following (?:u\.?s\.? )?states\b")
+# Government employers ("Arizona Department of Economic Security") and public-sector sales ("..., Federal Civilian")
+# hire only their own residents, whatever the job board says.
+_GOVERNMENT = re.compile(r"\b(?:department of|state of|county|city of|commonwealth of|government|ministry of|public schools|school district)\b")
+# A place named in the title ("Sales Development Representative, Singapore", "UK Account Manager", "(Midwest)").
+_TITLE_PLACES = {**{re.escape(c.lower()): {c} for c in COUNTRIES}, r"usa|u\.s\.|united states|midwest|northeast|southeast": {"United States"},
+                 r"uk": {"United Kingdom"}, r"north america|namer|amer|americas": {"United States", "Canada", "Mexico", "Brazil"},
+                 **{re.escape(r): {c for c, v in COUNTRIES.items() if r in v[2]} for r in ("africa", "emea", "europe", "apac", "asia", "latam", "middle east")}}
+_TITLE_PLACE_RES = [(re.compile(rf"(?<![a-z]){p}(?![a-z])"), allowed) for p, allowed in _TITLE_PLACES.items()]
 
 
 def open_to(job: dict, country: str) -> bool:
@@ -886,6 +901,13 @@ def open_to(job: dict, country: str) -> bool:
         return False
     if country not in ("United States", "Canada") and _US_HOURS.search(job["title"].lower()):
         return False
+    names = [country.lower()] + PLACE_ALIASES.get(country, [])
+    if not any(n in job["location"].lower() for n in names):
+        if _GOVERNMENT.search(job.get("company", "").lower()) or re.search(r"\bfederal\b", job["title"].lower()):
+            return False
+        named = [allowed for rx, allowed in _TITLE_PLACE_RES if rx.search(job["title"].lower())]
+        if named and not any(country in allowed for allowed in named):
+            return False
     return all(country in allowed for rx, allowed in _LIMIT_RES if rx.search(text))
 
 
