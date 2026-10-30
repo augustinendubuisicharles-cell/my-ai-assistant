@@ -1100,3 +1100,54 @@ test("Meta server events are skipped without a token, and a Meta outage doesn't 
   const b = (await q("SELECT token FROM subscribers WHERE email = 'b@example.com'"))[0];
   assert.equal((await call(`/confirm/${b.token}`)).status, 200);
 });
+
+test("public job pages list recent jobs open to Nigeria, with Google for Jobs markup, a sitemap and robots.txt", async () => {
+  await signUp();
+  const sub0 = await subscriber();
+  await signUp({ email: "uk@example.com", country: "United Kingdom" });
+  const uk = (await q("SELECT id FROM subscribers WHERE email = 'uk@example.com'"))[0];
+  const add = (subId, title, url, extra = "", sentAgo = "1 hour") => q(`INSERT INTO sent_jobs (subscriber_id, job_key, sent_at, title, company, url, location, matched, description, eligibility, eligibility_note)
+    VALUES ($1, $2, now() - interval '${sentAgo}', $3, 'Acme', $2, 'Remote, Global', 'part-time', 'Answer tickets.\n</script><b>x</b>', $4, 'No country limit')`, [subId, url, title, extra || null]);
+  await add(sub0.id, "Customer Support Agent", "https://jobs.example/support");
+  await add(sub0.id, "Virtual Assistant", "https://jobs.example/va", "low");
+  await add(sub0.id, "Senior Software Engineer", "https://jobs.example/old", "", "20 days");
+  await add(uk.id, "UK Account Manager", "https://jobs.example/uk");
+
+  const index = await (await call("/remote-jobs")).text();
+  assert.match(index, /<h1>Remote jobs open to Nigerians<\/h1>/);
+  assert.match(index, /Customer Support Agent/);
+  assert.doesNotMatch(index, /Virtual Assistant|Software Engineer|UK Account Manager/, "low eligibility, old, and not-for-Nigeria jobs are left out");
+  assert.doesNotMatch(index, new RegExp(sub0.token), "no subscriber tokens on public pages");
+  assert.match(index, /<link rel="canonical" href="https:\/\/job-alerts.example.workers.dev\/remote-jobs">/);
+
+  const cat = await call("/remote-jobs/customer-support");
+  assert.equal(cat.status, 200);
+  const catHtml = await cat.text();
+  assert.match(catHtml, /Remote customer support jobs open to Nigerians/);
+  const key = catHtml.match(/href="\/remote-jobs\/job\/([0-9a-f]{12})"/)[1];
+
+  const job = await (await call(`/remote-jobs/job/${key}`)).text();
+  const ld = JSON.parse(job.match(/<script type="application\/ld\+json">(.*?)<\/script>/s)[1]);
+  assert.equal(ld["@type"], "JobPosting");
+  assert.equal(ld.jobLocationType, "TELECOMMUTE");
+  assert.equal(ld.applicantLocationRequirements.name, "Nigeria");
+  assert.equal(ld.employmentType, "PART_TIME");
+  assert.equal(ld.hiringOrganization.name, "Acme");
+  assert.doesNotMatch(job.match(/<script type="application\/ld\+json">(.*?)<\/script>/s)[1], /<\/script>/i);
+  assert.match(job, /href="https:\/\/jobs.example\/support" rel="nofollow noopener"/);
+  assert.match(job, /&lt;b&gt;x&lt;\/b&gt;/, "advert text is escaped");
+
+  assert.equal((await call("/remote-jobs/job/000000000000")).status, 410);
+  assert.equal((await call("/remote-jobs/not-a-category")).status, 404);
+
+  const map = await call("/sitemap.xml");
+  assert.match(map.headers.get("content-type"), /xml/);
+  const xml = await map.text();
+  assert.match(xml, new RegExp(`/remote-jobs/job/${key}</loc>`));
+  assert.match(xml, /\/remote-jobs\/customer-support<\/loc>/);
+  assert.equal((xml.match(/\/remote-jobs\/job\//g) || []).length, 1);
+
+  const robots = await (await call("/robots.txt")).text();
+  assert.match(robots, /Disallow: \/manage\//);
+  assert.match(robots, /Sitemap: https:\/\/job-alerts.example.workers.dev\/sitemap.xml/);
+});

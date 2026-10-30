@@ -454,8 +454,8 @@ ${ctx.paidService ? `<section class="wrap trust-wrap">${trust(ctx)}</section>` :
 
 const DESCRIPTION = "Remote jobs from companies abroad that actually hire Nigerians, checked for scams and never repeated, in your inbox every morning. 3 days free.";
 
-export function page(ctx, body, { landing = false, og = null } = {}) {
-  const footer = `<footer><a href="/terms">Terms and pricing</a>${
+export function page(ctx, body, { landing = false, og = null, head = "" } = {}) {
+  const footer = `<footer><a href="/remote-jobs">Remote jobs</a> &middot; <a href="/terms">Terms and pricing</a>${
     ctx.contact ? ` &middot; <a href="mailto:${esc(ctx.contact)}">Contact</a>` : ""}</footer>`;
   return `<!doctype html>
 <html lang="en">
@@ -463,7 +463,7 @@ export function page(ctx, body, { landing = false, og = null } = {}) {
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(og?.title || ctx.siteName)}</title>
-<meta name="description" content="${esc(DESCRIPTION)}">
+<meta name="description" content="${esc(og?.description || DESCRIPTION)}">${head}
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="icon" href="/favicon.png" type="image/png" sizes="48x48">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
