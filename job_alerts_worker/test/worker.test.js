@@ -173,7 +173,7 @@ test("home page shows the trial, the price and the form", async () => {
   assert.match(page, /What you get/);
   assert.match(page, /<b>3 jobs<\/b>[\s\S]*<b>₦5,000<\/b> for 3 months[\s\S]*<b>5 best jobs<\/b>/);
   assert.match(page, /₦5,000/);
-  assert.match(page, /7 days free/);
+  assert.match(page, /3 days free/);
   // Sign-up is four cards: jobs, country, experience, then email last.
   assert.match(page, /Pick 5 jobs you'd do[\s\S]*Where do you live\?[\s\S]*How much experience\?[\s\S]*Where should we send your jobs\?/);
   assert.match(page, /action="\/subscribe"/);
@@ -234,13 +234,13 @@ test("a new address gets the confirm-your-email page", async () => {
   assert.ok(!page.includes("Welcome back"));
 });
 
-test("confirming starts a 7-day free trial, once", async () => {
+test("confirming starts a 3-day free trial, once", async () => {
   await signUp();
   const { token } = await subscriber();
   assert.match(await (await call(`/confirm/${token}`)).text(), /Free trial until .*2026/);
   const first = (await subscriber()).paid_until;
   const days = (new Date(first) - Date.now()) / 86400000;
-  assert.ok(days > 6.9 && days < 7.1, `trial days ${days}`);
+  assert.ok(days > 2.9 && days < 3.1, `trial days ${days}`);
   await call(`/confirm/${token}`);
   assert.equal(String((await subscriber()).paid_until), String(first));
   assert.match(await (await call(`/manage/${token}`)).text(), /Active until/);
@@ -270,7 +270,7 @@ test("trial then pay with Credo -> 90 days added on top, counted once", async ()
   assert.match(receipts()[0].htmlContent, new RegExp(`/login/${token}"[^>]*>Open my dashboard`));
   assert.equal(receipts()[0].sender.name, "JobAlert");
   const days = (new Date(s.paid_until) - Date.now()) / 86400000;
-  assert.ok(days > 96.9 && days < 97.1, `paid days ${days}`);
+  assert.ok(days > 92.9 && days < 93.1, `paid days ${days}`);
 
   // The webhook reports the same payment: valid signature, but no double count.
   const body = JSON.stringify({ event: "transaction.successful", data: { transRef: "vs_1", businessCode: "700607001" } });
@@ -347,7 +347,7 @@ test("a Paystack payment we never heard about is picked up by the 15-minute chec
   assert.deepEqual(await catchUpPayments(env, q), [ref]);
   assert.equal((await q("SELECT reference FROM payments"))[0].reference, ref);
   const days = (new Date((await subscriber()).paid_until) - Date.now()) / 86400000;
-  assert.ok(days > 96 && days < 98, `paid days ${days}`); // 90 days on top of the 7-day trial
+  assert.ok(days > 92 && days < 94, `paid days ${days}`); // 90 days on top of the 3-day trial
   assert.equal(sent.length, before + 1); // our receipt
   assert.deepEqual(await catchUpPayments(env, q), []); // already recorded: nothing twice
   assert.equal(sent.length, before + 1);
@@ -391,7 +391,7 @@ test("opening the confirm link twice at once starts only one first search", asyn
 test("without payment keys the site is free", async () => {
   env = { BREVO_API_KEY: "b", FROM_EMAIL: "hi@jobs.test" };
   const home = await (await call("/")).text();
-  assert.match(home, /7 days free/);
+  assert.match(home, /3 days free/);
   assert.doesNotMatch(home, /₦5,000/);
   await signUp();
   const { token } = await subscriber();
@@ -1017,8 +1017,8 @@ test("after confirming, new sign-ups wait for their first jobs, then see 3 with 
   assert.match(ready, /✓ open to Nigeria/);
   assert.match(ready, /\+12 more jobs/);
   assert.doesNotMatch(ready, /Secret Job|Hidden Co/); // the blurred jobs aren't the real ones
-  assert.match(ready, new RegExp(`href="/pay/${s.token}">Unlock all, ₦5,000<small>Get a tailored CV and cover letter for each job`));
-  assert.match(ready, new RegExp(`href="/login/${s.token}">start the free trial`));
+  assert.match(ready, new RegExp(`href="/pay/${s.token}">Unlock now, ₦5,000<small>3 months · paid once · nothing renews`));
+  assert.match(ready, new RegExp(`href="/login/${s.token}">Try 3 days free</a> \\(3 jobs a day\\)`));
   assert.match(ready, /Is this real\?[\s\S]*Every job is checked[\s\S]*Nothing renews automatically/);
 
   await q("DELETE FROM sent_jobs");

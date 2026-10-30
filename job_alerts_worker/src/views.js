@@ -452,7 +452,7 @@ ${ctx.paidService ? `<section class="wrap trust-wrap">${trust(ctx)}</section>` :
 </script>`;
 }
 
-const DESCRIPTION = "Remote jobs from companies abroad that actually hire Nigerians, checked for scams and never repeated, in your inbox every morning. 7 days free.";
+const DESCRIPTION = "Remote jobs from companies abroad that actually hire Nigerians, checked for scams and never repeated, in your inbox every morning. 3 days free.";
 
 export function page(ctx, body, { landing = false, og = null } = {}) {
   const footer = `<footer><a href="/terms">Terms and pricing</a>${
@@ -607,6 +607,9 @@ const FOUND_STYLE = `<style>
   .blurred em span { background:var(--card); border-radius:99px; padding:8px 16px; font-weight:800; box-shadow:0 6px 20px #0b153033; }
   a.unlock { display:block; text-align:center; text-decoration:none; margin-top:16px; padding:15px; border-radius:14px; background:#ffc75a; color:#1b2440; font-weight:800; font-size:1.1rem; }
   a.unlock small { display:block; font-size:.85rem; font-weight:600; margin-top:3px; }
+  .paybox { margin-top:16px; border:2px solid #ffc75a; border-radius:16px; padding:16px; background:color-mix(in srgb, #ffc75a 8%, var(--card)); }
+  .paybox > b { font-size:1.15rem; } .paybox ul { margin:8px 0 0; padding-left:20px; color:var(--muted); font-size:.92rem; }
+  .paybox a.unlock { margin-top:14px; }
   .found .trial { text-align:center; color:var(--muted); font-size:.92rem; margin-top:12px; }
   .found .trial a { font-weight:700; }
   .spin { width:44px; height:44px; border-radius:50%; border:4px solid var(--border); border-top-color:var(--accent); animation:spin 1s linear infinite; margin:10px 0 18px; }
@@ -637,8 +640,11 @@ export function found(ctx, { sub, jobs, spares, state, tries = 0 }) {
 ${jobs.map(card).join("")}
 ${spares ? `<div class="blurred" aria-hidden="true"><div class="fjob"><b>Customer Success Associate</b><span>Remote · Worldwide</span></div>
 <div class="fjob"><b>Operations Assistant</b><span>Remote · EMEA</span></div><em><span>+${spares} more job${spares === 1 ? "" : "s"}</span></em></div>` : ""}
-${ctx.paidService ? `<a class="unlock" href="/pay/${t}">${spares ? "Unlock all" : "Get 5 jobs a day"}, ${esc(ctx.price)}<small>Get a tailored CV and cover letter for each job</small></a>` : ""}
-<p class="trial">or <a href="/login/${t}">start the free trial</a></p>
+${ctx.paidService ? `<div class="paybox"><b>${spares ? `See all ${total} jobs` : "Get 5 jobs a day"}</b>
+<ul><li>The 5 best jobs every morning, from all 5 of your job titles</li><li>A tailored CV and cover letter for each job</li><li>New jobs on Telegram during the day</li></ul>
+<a class="unlock" href="/pay/${t}">Unlock now, ${esc(ctx.price)}<small>${ctx.months} months · paid once · nothing renews</small></a></div>
+<p class="trial">Not sure yet? <a href="/login/${t}">Try ${ctx.trialDays} days free</a> (3 jobs a day)</p>` :
+  `<p class="trial"><a href="/login/${t}">Go to my jobs</a></p>`}
 ${ctx.paidService ? trust(ctx) : ""}</div>`);
 }
 

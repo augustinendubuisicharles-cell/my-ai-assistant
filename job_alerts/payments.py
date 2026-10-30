@@ -7,7 +7,7 @@ Works with Credo (eTranzact) or Paystack, whichever has keys set (Credo wins if 
             Webhooks: <BASE_URL>/payments/webhook
   Paystack: PAYSTACK_SECRET_KEY (sk_test_... or sk_live_...). Dashboard → Settings
             → API Keys & Webhooks: <BASE_URL>/payments/webhook
-Also: PRICE_NGN (default 5000), PERIOD_DAYS (default 90), TRIAL_DAYS (default 7).
+Also: PRICE_NGN (default 5000), PERIOD_DAYS (default 90), TRIAL_DAYS (default 3).
 
 Every payment is re-checked with the provider's API before it counts; the
 browser return and the webhook are only hints to go and check.
@@ -27,7 +27,7 @@ PERIOD_DAYS = int(os.environ.get("PERIOD_DAYS", "90"))
 # Launch offer (matches the website's payments.js): the first LAUNCH_SPOTS paying members pay LAUNCH_PRICE_NGN.
 LAUNCH_PRICE_NGN = int(os.environ.get("LAUNCH_PRICE_NGN", "3500"))
 LAUNCH_SPOTS = int(os.environ.get("LAUNCH_SPOTS", "100"))
-TRIAL_DAYS = int(os.environ.get("TRIAL_DAYS", "7"))  # free days everyone gets when they confirm their email
+TRIAL_DAYS = int(os.environ.get("TRIAL_DAYS", "3"))  # free days everyone gets when they confirm their email
 # What each plan gets per daily email: (jobs, job titles searched). Paid members also get Telegram alerts.
 TRIAL_LIMITS = (3, 2)  # jobs a day, job titles searched
 PAID_LIMITS = (5, 5)  # members: the 5 best jobs each morning, more on request from their dashboard

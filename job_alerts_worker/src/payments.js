@@ -6,7 +6,7 @@ const v = (env, k) => (env[k] || "").trim();
 
 export const priceNgn = (env) => parseInt(env.PRICE_NGN || "5000", 10);
 export const periodDays = (env) => parseInt(env.PERIOD_DAYS || "90", 10);
-export const trialDays = (env) => parseInt(env.TRIAL_DAYS || "7", 10); // free days on confirming
+export const trialDays = (env) => parseInt(env.TRIAL_DAYS || "3", 10); // free days on confirming
 // Launch offer: the first LAUNCH_SPOTS paying members pay LAUNCH_PRICE_NGN (0 spots turns it off).
 export const launchPrice = (env) => parseInt(env.LAUNCH_PRICE_NGN || "3500", 10);
 export const launchSpots = (env) => parseInt(env.LAUNCH_SPOTS ?? "100", 10);
