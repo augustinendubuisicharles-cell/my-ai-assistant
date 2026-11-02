@@ -1049,9 +1049,19 @@ test("Meta Pixel and Conversions API: PageView, CompleteRegistration and Purchas
   assert.doesNotMatch(await (await call("/")).text(), /fbq\(/, "no Pixel until META_PIXEL_ID is set");
   Object.assign(env, { META_PIXEL_ID: "123456789", META_CAPI_TOKEN: "CAPI", META_TEST_EVENT_CODE: "TEST42" });
   const home = await (await call("/")).text();
-  assert.match(home, /fbq\('init','123456789'\);fbq\('track','PageView'\)/);
+  assert.match(home, /fbq\('init','123456789'\);fbq\('track','PageView',\{\}\);/);
   assert.match(await (await call("/terms")).text(), /Meta Pixel/);
-  assert.equal(fb.length, 0, "page views are browser-only");
+  assert.equal(fb.length, 0, "page views without an ad click are browser-only");
+  // An ad click: the server reports the visit at once, and the browser's PageView carries the same ID.
+  const ad = await (await call("/?fbclid=AbC_1&utm_source=facebook", { headers: { "user-agent": "Phone", "cf-connecting-ip": "102.89.1.3" } })).text();
+  await new Promise((r) => setTimeout(r, 20));
+  assert.equal(fb.length, 1);
+  const [pv] = fb.pop().data;
+  assert.equal(pv.event_name, "PageView");
+  assert.match(pv.event_id, /^pv-[0-9a-f-]{36}$/);
+  assert.match(pv.user_data.fbc, /^fb\.1\.\d+\.AbC_1$/);
+  assert.equal(pv.user_data.client_ip_address, "102.89.1.3");
+  assert.ok(ad.includes(`fbq('track','PageView',{},{eventID:"${pv.event_id}"})`), "same ID in the browser");
 
   await signUp();
   const { id, token, email } = await subscriber();

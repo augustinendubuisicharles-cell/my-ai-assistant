@@ -97,7 +97,7 @@ const STATIC = {
   "/og.jpg": ["image/jpeg", () => bytes(assets.OG_JPG)],
 };
 
-export async function handle(request, env, q) {
+export async function handle(request, env, q, later = (p) => p) {
   const url = new URL(request.url);
   const path = url.pathname.replace(/\/+$/, "") || "/";
   if (STATIC[path]) {
@@ -106,6 +106,11 @@ export async function handle(request, env, q) {
   }
   const method = request.method;
   const ctx = context(env, request);
+  const visit = method === "GET" && ctx.metaPixel ? meta.adVisit(url) : null;
+  if (visit) {
+    ctx.pageViewId = visit.eventId;
+    later(meta.sendEvent(env, { name: "PageView", eventId: visit.eventId, url: request.url, request, fbc: visit.fbc }));
+  }
   // Launch offer: while fewer than LAUNCH_SPOTS people have paid, the price is the launch price everywhere.
   if (ctx.paidService && payments.launchSpots(env) > 0 && path !== "/healthz") {
     const left = payments.launchSpots(env) - (await db.payingMembers(q).catch(() => Infinity));
@@ -650,9 +655,9 @@ async function applyPayment(env, q, ref, ctx, request = null) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ectx) {
     try {
-      return await handle(request, env, makeQuery(env));
+      return await handle(request, env, makeQuery(env), (p) => ectx?.waitUntil(p));
     } catch (e) {
       console.log(`[error] ${request.method} ${new URL(request.url).pathname}: ${e.stack || e}`);
       return html("<h1>Something went wrong</h1><p>Please try again in a minute.</p>", 500);
