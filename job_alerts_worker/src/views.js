@@ -479,9 +479,9 @@ export function page(ctx, body, { landing = false, og = null, head = "" } = {}) 
 <meta property="og:image:alt" content="${esc(ctx.siteName)}: remote jobs that actually hire Nigerians, in your inbox every morning">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="${esc(ctx.baseUrl)}/og.jpg">
-<style>${STYLE}${landing ? LANDING_STYLE : ""}</style>${pixelScript(ctx.metaPixel, ctx.metaEvents)}${landing ? `
+<style>${STYLE}${landing ? LANDING_STYLE : ""}</style>${pixelScript(ctx.metaPixel, ctx.metaEvents, ctx.pageViewId)}${landing ? `
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">` : ""}
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" media="print" onload="this.media='all'">` : ""}
 </head>
 ${landing ? `<body class="landing">${body}<div class="wrap">${footer}</div></body>` : `<body><main><a class="brand" href="/"><img src="/favicon.svg" alt="" width="36" height="36"><span>Job<b>Alert</b></span></a>
 ${body}

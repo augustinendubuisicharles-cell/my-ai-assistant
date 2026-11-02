@@ -14,13 +14,14 @@ export const registrationId = (subscriberId) => `reg-${subscriberId}`;
 export const purchaseId = (reference) => `pay-${reference}`;
 
 // The Pixel for a page: PageView, then any events the page reports (each once per browser, by event ID).
-export function pixelScript(id, events = []) {
+// pageViewId: the event ID of the server's own PageView for this visit (sendEvent), so Meta counts the visit once.
+export function pixelScript(id, events = [], pageViewId = "") {
   if (!id) return "";
   const track = events.map((e) => `once(${JSON.stringify(e.name)},${JSON.stringify(e.params || {})},${JSON.stringify(e.eventId)});`).join("");
   return `<script>!function(f,b,e,v,n,t,s){if(f.fbq)return;n=f.fbq=function(){n.callMethod?n.callMethod.apply(n,arguments):n.queue.push(arguments)};
 if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';n.queue=[];t=b.createElement(e);t.async=!0;t.src=v;s=b.getElementsByTagName(e)[0];
 s.parentNode.insertBefore(t,s)}(window,document,'script','https://connect.facebook.net/en_US/fbevents.js');
-fbq('init','${id}');fbq('track','PageView');
+fbq('init','${id}');fbq('track','PageView',{}${pageViewId ? `,{eventID:${JSON.stringify(pageViewId)}}` : ""});
 function once(n,p,id){try{if(localStorage.getItem('fbq_'+id))return;localStorage.setItem('fbq_'+id,'1')}catch(x){}fbq('track',n,p,{eventID:id})}
 ${track}</script>
 <noscript><img height="1" width="1" style="display:none" alt="" src="https://www.facebook.com/tr?id=${id}&ev=PageView&noscript=1"></noscript>`;
@@ -36,7 +37,7 @@ const cookie = (request, name) => (request?.headers.get("cookie") || "").match(n
 // One server event. `request` is the visitor's own request (for their IP, browser and Meta cookies); leave it out
 // for events we learn about from elsewhere (a payment webhook), so Paystack's server isn't sent as the buyer.
 // Never throws: tracking must not break a sign-up or a payment.
-export async function sendEvent(env, { name, eventId, email, subscriberId, url, request = null, value = null, currency = null }) {
+export async function sendEvent(env, { name, eventId, email, subscriberId, url, request = null, value = null, currency = null, fbc = "" }) {
   const id = pixelId(env);
   const token = String(env.META_CAPI_TOKEN || "").trim();
   if (!id || !token) return false;
@@ -52,6 +53,7 @@ export async function sendEvent(env, { name, eventId, email, subscriberId, url, 
       if (cookie(request, "_fbp")) user.fbp = cookie(request, "_fbp");
       if (cookie(request, "_fbc")) user.fbc = cookie(request, "_fbc");
     }
+    if (fbc && !user.fbc) user.fbc = fbc;
     const event = { event_name: name, event_time: Math.floor(Date.now() / 1000), event_id: eventId, action_source: "website",
       event_source_url: url, user_data: user };
     if (value !== null) event.custom_data = { value, currency };
@@ -65,4 +67,13 @@ export async function sendEvent(env, { name, eventId, email, subscriberId, url, 
     console.log(`[meta] ${name} ${eventId}: ${e}`);
     return false;
   }
+}
+
+// A visit from an ad click (the link carries fbclid). The browser Pixel only counts it once Facebook's script has
+// downloaded, which takes 3 to 9 seconds on a slow phone connection, so many real visits went uncounted. The
+// server reports the same visit straight away, with the same event ID; Meta keeps one of the two.
+export function adVisit(url) {
+  const click = (url.searchParams.get("fbclid") || "").replace(/[^\w-]/g, "").slice(0, 500);
+  if (!click) return null;
+  return { eventId: `pv-${crypto.randomUUID()}`, fbc: `fb.1.${Date.now()}.${click}` };
 }
