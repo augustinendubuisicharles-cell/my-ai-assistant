@@ -4,7 +4,7 @@ import os
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import (Boolean, Column, DateTime, ForeignKey, Integer, MetaData, String, Table, Text,
+from sqlalchemy import (Boolean, Column, Date, DateTime, ForeignKey, Integer, MetaData, String, Table, Text,
                         UniqueConstraint, create_engine, delete, func, insert, inspect, select, text, update)
 
 metadata = MetaData()
@@ -121,6 +121,16 @@ employers = Table(
 
 # Every Claude call and its real token use (the Worker's CVs, letters and preps; ai_match's reranking), so the
 # owner's dashboard shows actual AI spend.
+# How far visitors get through the home page sign-up cards, counted per day (no personal data).
+# step: page, job, card2, card3, card4, send, stuck5 (pressed Next with fewer than 5 jobs). source: ad or other.
+signup_steps = Table(
+    "signup_steps", metadata,
+    Column("day", Date, primary_key=True),
+    Column("step", String(10), primary_key=True),
+    Column("source", String(10), primary_key=True),
+    Column("n", Integer, nullable=False, server_default="0"),
+)
+
 ai_usage = Table(
     "ai_usage", metadata,
     Column("id", Integer, primary_key=True),
