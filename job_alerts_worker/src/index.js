@@ -105,6 +105,13 @@ export async function handle(request, env, q, later = (p) => p) {
     return new Response(body(), { headers: { "content-type": type, "cache-control": "public, max-age=86400" } });
   }
   const method = request.method;
+  if (path === "/t" && method === "POST") {  // a sign-up card step (views.SIGNUP_SCRIPT); never fails the visitor
+    const step = url.searchParams.get("s");
+    if (db.STEPS.includes(step)) {
+      await db.countStep(q, step, url.searchParams.get("src") === "ad" ? "ad" : "other").catch((e) => console.log(`[steps] ${e}`));
+    }
+    return new Response(null, { status: 204 });
+  }
   const ctx = context(env, request);
   const visit = method === "GET" && ctx.metaPixel ? meta.adVisit(url) : null;
   if (visit) {

@@ -100,7 +100,7 @@ export async function load(env, q, now = new Date()) {
   const since = runWindow(now);
   const inStatus = (status) => `status IN (${status.map((x) => `'${x}'`).join(", ")})`;
   const APPLIED = ["applied", "interview", "offer", "no_reply"];
-  const [users, money, runs, variety, top, funnel, groups, employers, ai] = await Promise.all([
+  const [users, money, runs, variety, top, funnel, groups, employers, ai, steps] = await Promise.all([
     q(`SELECT s.id, s.email, s.keywords, s.country, s.remote_only, s.city, s.confirmed, s.created_at, s.paid_until,
               s.last_run_at, s.last_run_result, s.telegram_chat_id IS NOT NULL AS telegram, s.heard,
               (SELECT count(*) FROM sent_jobs j WHERE j.subscriber_id = s.id)::int AS jobs_sent,
@@ -134,6 +134,8 @@ export async function load(env, q, now = new Date()) {
     q(`SELECT company, evidence, url, first_seen FROM employers WHERE last_seen > now() - interval '90 days' ORDER BY first_seen DESC, company`),
     q(`SELECT kind, model, count(*)::int AS calls, coalesce(sum(input_tokens), 0)::int AS input, coalesce(sum(output_tokens), 0)::int AS output
          FROM ai_usage WHERE created_at > now() - interval '30 days' GROUP BY kind, model ORDER BY kind`),
+    q(`SELECT step, source, sum(n)::int AS n FROM signup_steps WHERE day > (now() AT TIME ZONE 'Africa/Lagos')::date - 7
+         GROUP BY step, source`).catch(() => []),  // the table appears after the first visit or morning run
   ]);
   for (const u of users) {
     const active = u.paid_until && new Date(u.paid_until) > now;
@@ -167,7 +169,7 @@ export async function load(env, q, now = new Date()) {
     missed: active.filter((u) => !u.ranToday && !u.newToday).length, due: active.filter((u) => !u.newToday).length,
     neverSearched: active.filter((u) => u.neverSearched).length,
     revenue: money[0], runs, lastRun, services, variety: { ...variety[0], top }, funnel: funnel[0],
-    outcomes: outcomes(groups), employers, ai: aiSpend(ai),
+    outcomes: outcomes(groups), employers, ai: aiSpend(ai), steps,
   };
   stats.health = health(stats);
   return { users, stats };
@@ -405,6 +407,20 @@ function heardTable(users) {
     .map(([k, r]) => `<tr><td>${esc(k)}</td><td class="num">${r.n}</td><td class="num">${r.members}</td></tr>`).join("")}</tbody></table>`;
 }
 
+// How far home page visitors got through the sign-up cards in the last 7 days, from ads and from elsewhere.
+const STEP_NAMES = [["page", "Opened the home page"], ["job", "Picked a job"], ["stuck5", "Pressed Next with under 5 jobs"],
+  ["card2", "Reached card 2 (country)"], ["card3", "Reached card 3 (experience)"], ["card4", "Reached card 4 (email)"],
+  ["send", "Pressed Send me jobs"]];
+export function stepsTable(steps = []) {
+  const n = (step, source) => steps.find((r) => r.step === step && r.source === source)?.n || 0;
+  const cell = (step, source) => {
+    const top = n("page", source);
+    return `<td class="num">${n(step, source)}${step !== "page" && top ? ` <span class="muted">${Math.round((n(step, source) / top) * 100)}%</span>` : ""}</td>`;
+  };
+  return `<table class="services"><thead><tr><th>Last 7 days</th><th class="num">From ads</th><th class="num">Others</th></tr></thead><tbody>${STEP_NAMES
+    .map(([step, name]) => `<tr><td>${esc(name)}</td>${cell(step, "ad")}${cell(step, "other")}</tr>`).join("")}</tbody></table>`;
+}
+
 export function render(siteName, { users, stats: s }, now = new Date()) {
   const h = s.health;
   const kpi = (n, label, cls = "") => `<div class="card kpi ${cls}"><b>${n}</b><span>${label}</span></div>`;
@@ -443,6 +459,8 @@ ${h.notes.length ? `<ul>${h.notes.map((n) => `<li>${esc(n)}</li>`).join("")}</ul
 <div><b>${users.reduce((n, u) => n + (u.jobs_sent || 0), 0)}</b><span>jobs sent in total</span></div></div></div>
 
 <div class="card"><h2>Morning runs</h2>${runs}</div>
+
+<div class="card"><h2>Sign-up steps</h2>${stepsTable(s.steps)}</div>
 
 <div class="card"><h2>How people heard about us</h2>${heardTable(users)}</div>
 

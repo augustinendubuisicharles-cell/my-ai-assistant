@@ -250,3 +250,19 @@ export async function moreJobs(q, subscriberId) {
   await q("DELETE FROM spare_jobs WHERE id = ANY($1)", [ids]);
   return ids.length;
 }
+
+// --- sign-up steps: a daily count of how far home page visitors get (views.SIGNUP_SCRIPT sends them) ---
+export const STEPS = ["page", "job", "card2", "card3", "card4", "send", "stuck5"];
+const STEPS_TABLE = `CREATE TABLE IF NOT EXISTS signup_steps (day date NOT NULL, step varchar(10) NOT NULL,
+  source varchar(10) NOT NULL, n integer NOT NULL DEFAULT 0, PRIMARY KEY (day, step, source))`;
+export async function countStep(q, step, source) {
+  const add = () => q(`INSERT INTO signup_steps (day, step, source, n) VALUES ((now() AT TIME ZONE 'Africa/Lagos')::date, $1, $2, 1)
+    ON CONFLICT (day, step, source) DO UPDATE SET n = signup_steps.n + 1`, [step, source]);
+  try {
+    await add();
+  } catch (e) {
+    if (!/signup_steps/.test(String(e))) throw e;
+    await q(STEPS_TABLE);  // the Worker went live before the morning run created the table
+    await add();
+  }
+}

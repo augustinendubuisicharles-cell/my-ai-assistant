@@ -772,6 +772,16 @@ const SIGNUP_SCRIPT = `<script>
   (function () {
     var form = document.getElementById("prefs"), steps = form.querySelectorAll(".step"), at = 0;
     document.documentElement.classList.add("js");
+    // Counts how far people get through the cards (no personal data): each step once per visit.
+    var src = "other", seen = {};
+    try { if (/[?&]fbclid=/.test(location.search)) sessionStorage.setItem("ja_ad", "1"); if (sessionStorage.getItem("ja_ad")) src = "ad"; } catch (x) {}
+    function mark(step) {
+      if (seen[step]) return; seen[step] = 1;
+      var u = "/t?s=" + step + "&src=" + src;
+      try { if (navigator.sendBeacon && navigator.sendBeacon(u)) return; } catch (x) {}
+      try { fetch(u, { method: "POST", keepalive: true }); } catch (x) {}
+    }
+    mark("page");
     var boxes = form.querySelectorAll("input[name=job]"), other = document.getElementById("other");
     var countryBox = document.getElementById("country_box");
     function chosen() {
@@ -799,19 +809,21 @@ const SIGNUP_SCRIPT = `<script>
     }
     function show(i) {
       steps[at].classList.remove("now"); at = i; steps[at].classList.add("now");
+      if (at > 0) mark("card" + (at + 1));
       var first = steps[at].querySelector("input:not([type=hidden]):not(.hp), select");
       if (first && at === 3) first.focus();
     }
     function ok() {
       if (at === 0) {
         var n = chosen().length;
+        if (n < 5) mark("stuck5");
         other.setCustomValidity(n < 5 ? "Pick " + (5 - n) + " more, or type your own (separate with commas)" : n > 5 ? "Pick only 5 jobs" : "");
         if (!other.reportValidity()) return false;
         other.setCustomValidity("");
       }
       return true;
     }
-    form.addEventListener("input", syncJobs);
+    form.addEventListener("input", function () { syncJobs(); if (chosen().length) mark("job"); });
     form.addEventListener("change", function () {
       var c = form.querySelector("input[name=country]:checked");
       countryBox.hidden = !(c && c.value === "other");
@@ -825,6 +837,7 @@ const SIGNUP_SCRIPT = `<script>
       var email = document.getElementById("email");
       if (chosen().length < 5) { e.preventDefault(); show(0); ok(); return; }
       if (!email.checkValidity()) { e.preventDefault(); email.reportValidity(); return; }
+      mark("send");
       var b = document.getElementById("submit");
       b.disabled = true;
       b.textContent = "Sending...";

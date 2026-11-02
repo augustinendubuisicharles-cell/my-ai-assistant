@@ -1162,3 +1162,17 @@ test("public job pages list recent jobs open to Nigeria, with Google for Jobs ma
   assert.match(robots, /Disallow: \/manage\//);
   assert.match(robots, /Sitemap: https:\/\/job-alerts.example.workers.dev\/sitemap.xml/);
 });
+
+test("sign-up steps are counted per day and source, and shown on the admin page", async () => {
+  assert.match(await (await call("/")).text(), /mark\("page"\)/, "the home page reports its steps");
+  for (const s of ["page&src=ad", "page&src=ad", "card2&src=ad", "page", "bogus", "send&src=ad"]) {
+    assert.equal((await call(`/t?s=${s}`, { method: "POST" })).status, 204);
+  }
+  const rows = await q("SELECT step, source, sum(n)::int AS n FROM signup_steps GROUP BY step, source ORDER BY step, source");
+  assert.deepEqual(rows.map((r) => `${r.step}/${r.source}/${r.n}`), ["card2/ad/1", "page/ad/2", "page/other/1", "send/ad/1"]);
+  const html = admin.stepsTable(rows);
+  assert.match(html, /Reached card 2 \(country\)<\/td><td class="num">1 <span class="muted">50%<\/span>/);
+  await pg.query("DROP TABLE signup_steps");
+  assert.equal((await call("/t?s=job", { method: "POST" })).status, 204);
+  assert.equal((await q("SELECT n FROM signup_steps WHERE step = 'job'"))[0].n, 1, "the Worker creates the table if it's missing");
+});
