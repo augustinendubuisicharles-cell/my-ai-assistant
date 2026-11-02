@@ -1112,11 +1112,12 @@ test("public job pages list recent jobs open to Nigeria, with Google for Jobs ma
   await add(sub0.id, "Virtual Assistant", "https://jobs.example/va", "low");
   await add(sub0.id, "Senior Software Engineer", "https://jobs.example/old", "", "20 days");
   await add(uk.id, "UK Account Manager", "https://jobs.example/uk");
+  await q(`INSERT INTO sent_jobs (subscriber_id, job_key, sent_at, title, company, url, eligibility) VALUES ($1, 'manual:x', now(), 'Private Admin Assistant', 'Acme', 'https://jobs.example/private', 'medium')`, [sub0.id]);
 
   const index = await (await call("/remote-jobs")).text();
   assert.match(index, /<h1>Remote jobs open to Nigerians<\/h1>/);
   assert.match(index, /Customer Support Agent/);
-  assert.doesNotMatch(index, /Virtual Assistant|Software Engineer|UK Account Manager/, "low eligibility, old, and not-for-Nigeria jobs are left out");
+  assert.doesNotMatch(index, /Virtual Assistant|Software Engineer|UK Account Manager|Private Admin/, "low eligibility, old, not-for-Nigeria and hand-sent jobs are left out");
   assert.doesNotMatch(index, new RegExp(sub0.token), "no subscriber tokens on public pages");
   assert.match(index, /<link rel="canonical" href="https:\/\/job-alerts.example.workers.dev\/remote-jobs">/);
 

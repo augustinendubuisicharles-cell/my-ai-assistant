@@ -1015,6 +1015,10 @@ def fits_part_time(job: dict) -> bool:
     return bool(FLEXIBLE.search(f"{job['job_type']} {job['title']} {job['desc'][:1500]}".lower()))
 
 
+# Jobs the owner sent by hand to one member, never to be sent to anyone else (matched in the job's link).
+PRIVATE_JOBS = {"6724000000158775"}  # Transbasin, Administrative Assistant (2 Nov 2026)
+
+
 def score(job: dict, keywords: list[str], country: str, remote_only: bool, level: str,
           city: str = "", why: Counter | None = None, hours: str = "any", max_age: timedelta = MAX_AGE,
           any_title: bool = False) -> tuple[int, list[str]] | None:
@@ -1033,6 +1037,8 @@ def score(job: dict, keywords: list[str], country: str, remote_only: bool, level
         return no("title doesn't match")
     if not job["url"] or not job["posted"]:
         return no("no link or date")
+    if any(p in job["url"] for p in PRIVATE_JOBS):
+        return no("private")
     if datetime.now(timezone.utc) - job["posted"] > max_age:
         return no("too old")
     if remote_only and not job["remote"]:
