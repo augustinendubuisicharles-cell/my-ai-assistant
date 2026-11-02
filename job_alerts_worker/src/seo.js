@@ -29,6 +29,7 @@ export async function jobs(q) {
     FROM sent_jobs j JOIN subscribers s ON s.id = j.subscriber_id
     WHERE j.sent_at > now() - interval '${DAYS} days' AND s.country IN ('', 'Nigeria') AND j.url ~ '^https?://'
       AND coalesce(j.eligibility, '') <> 'low'
+      AND j.job_key NOT LIKE 'manual:%'  -- jobs the owner sent by hand to one member stay private
     ORDER BY j.url, j.sent_at DESC`);
 }
 
