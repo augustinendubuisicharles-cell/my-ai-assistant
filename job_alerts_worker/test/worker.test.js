@@ -8,7 +8,7 @@ import { createHash, createHmac } from "node:crypto";
 import { PGlite } from "@electric-sql/pglite";
 import * as admin from "../src/admin.js";
 import * as views from "../src/views.js";
-import worker, { handle, catchUpPayments, retryFirstSearches, isCheckupTick } from "../src/index.js";
+import worker, { handle, catchUpPayments, retryFirstSearches, isCheckupTick, withSkills } from "../src/index.js";
 import * as firstSearch from "../src/firstsearch.js";
 import COUNTRIES from "../src/countries.js";
 
@@ -826,6 +826,19 @@ test("tailored CVs use the advert saved with the emailed job when its page block
   await call(link, { method: "POST", form: { have: "French" } });
   assert.match((await q("SELECT cv_text FROM subscribers WHERE id = $1", [id]))[0].cv_text, /Other skills I have: French$/);
   assert.match(ai.at(-1).messages[0].content, /Other skills I have: French/);
+  // Ticking more skills later merges them into the same line instead of adding another one.
+  await call(link, { method: "POST", form: [["have", "french"], ["have", "Zendesk Explore"]] });
+  const saved = (await q("SELECT cv_text FROM subscribers WHERE id = $1", [id]))[0].cv_text;
+  assert.equal(saved.match(/Other skills I have/g).length, 1);
+  assert.match(saved, /Other skills I have: French, Zendesk Explore$/);
+  // At the daily limit, the page says when the next one can be written (Lagos time).
+  await q("INSERT INTO letters (subscriber_id, created_at, kind) SELECT $1, now() - interval '2 hours', 'cv' FROM generate_series(1, 10)", [id]);
+  assert.match(await (await call(link, { method: "POST", form: {} })).text(), /in the last 24 hours\. You can write another from \d\d:\d\d\./);
+});
+
+test("withSkills cleans up CVs that already repeat the skills line", () => {
+  const cv = "Jane Doe\nSupport agent\n\nOther skills I have: Excel\n\nOther skills I have: Excel, Zoom\n\nOther skills I have: zoom";
+  assert.equal(withSkills(cv, ["Canva"]), "Jane Doe\nSupport agent\n\nOther skills I have: Excel, Zoom, Canva");
 });
 
 test("members track applications: Apply links note the click, one-tap answers save only on POST, and the tracker lists them", async () => {

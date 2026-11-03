@@ -71,6 +71,17 @@ export function cleanPrefs(f) {
   };
 }
 
+// Adds the skills a member ticked to their saved CV as one "Other skills I have:" line, merging with the skills
+// they ticked before (each tick used to add another line, so a CV filled up with repeats).
+export function withSkills(cv, have) {
+  const LINE = /^Other skills I have: (.*)$/gm;
+  const seen = new Map();
+  for (const [, list] of cv.matchAll(LINE)) for (const k of list.split(",")) if (k.trim() && !seen.has(k.trim().toLowerCase())) seen.set(k.trim().toLowerCase(), k.trim());
+  for (const k of have) if (!seen.has(k.toLowerCase())) seen.set(k.toLowerCase(), k);
+  const base = cv.replace(LINE, "").replace(/\n{3,}/g, "\n\n").trimEnd();
+  return `${base}\n\nOther skills I have: ${[...seen.values()].join(", ")}`;
+}
+
 // Tops a title list up to 5 with similar jobs (views.RELATED), closest first.
 export function withSimilar(keywords) {
   const words = keywords.split(", ");
@@ -351,11 +362,15 @@ export async function handle(request, env, q, later = (p) => p) {
     // Skills the member ticked on the "this job asks for..." note: they confirm having them, so they join their CV.
     const have = form.getAll("have").map((h) => String(h).trim().slice(0, 80)).filter(Boolean).slice(0, 5);
     if (cv && have.length) {
-      cv = `${cv}\n\nOther skills I have: ${have.join(", ")}`.slice(0, letters.MAX_CV);
+      cv = withSkills(cv, have).slice(0, letters.MAX_CV);
       await db.setCv(q, sub.id, cv);
     }
     if (!cv) return render({ error: `Paste your CV first, so the ${noun} can be about you.` });
-    if (used >= letters.PER_DAY) return render({ error: `That's today's 10 ${plural}. You can write more tomorrow.` });
+    if (used >= letters.PER_DAY) {
+      const free = await db.nextLetterAt(q, sub.id, kind);
+      const when = free ? new Date(free).toLocaleTimeString("en-GB", { timeZone: "Africa/Lagos", hour: "2-digit", minute: "2-digit" }) : "";
+      return render({ error: `You've written 10 ${plural} in the last 24 hours.${when ? ` You can write another from ${when}.` : " You can write more tomorrow."}` });
+    }
     let text = null;
     try {
       text = await letters.write(env, { cv, ...job, advert: job.url ? await letters.advertFor(job.url, await db.savedAdvert(q, job.url)) : "" }, kind,
