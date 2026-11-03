@@ -99,6 +99,9 @@ export const savedAdvert = async (q, url) =>
   (await one(q, "SELECT description FROM sent_jobs WHERE url = $1 AND description <> '' ORDER BY length(description) DESC LIMIT 1", [url]))?.description || "";
 export const lettersToday = async (q, id, kind = "letter") =>
   (await one(q, "SELECT count(*)::int AS n FROM letters WHERE subscriber_id = $1 AND kind = $2 AND created_at > now() - interval '1 day'", [id, kind]))?.n || 0;
+// When the oldest of the last day's letters (or CVs) turns a day old, freeing a place under the daily limit.
+export const nextLetterAt = async (q, id, kind = "letter") =>
+  (await one(q, "SELECT min(created_at) + interval '1 day' AS at FROM letters WHERE subscriber_id = $1 AND kind = $2 AND created_at > now() - interval '1 day'", [id, kind]))?.at || null;
 export const addLetter = (q, id, kind = "letter") => q("INSERT INTO letters (subscriber_id, created_at, kind) VALUES ($1, now(), $2)", [id, kind]);
 // One Claude call's real token use, for the owner's AI spend (ai_usage in job_alerts/db.py).
 export const logAi = (q, id, kind, model, usage) =>
