@@ -142,6 +142,44 @@ def _job_card(j: dict, letter_url: str = "", cv_url: str = "", apply_url: str = 
             + extra + "</div></td></tr></table>")
 
 
+def is_filler(j: dict) -> bool:
+    """A job added to reach the daily minimum (a similar or other role), not one of the titles they chose."""
+    return any(m in ("similar role", "other role") for m in j.get("matched", []))
+
+
+def _top_card(j: dict, letter_url: str = "", cv_url: str = "", apply_url: str = "") -> str:
+    """Today's top pick: the best match for the titles they chose, shown big with its own button."""
+    apply_url = apply_url or j["url"]
+    company = escape(j["company"]) if j["company"] else ""
+    source = f' · via {escape(j["source"])}' if j.get("source") else ""
+    pay = j.get("pay") or ""
+    tools = "".join(f'<a href="{_a(u)}" style="color:{MUTED};font-weight:600;text-decoration:none;margin-right:16px">{label}</a>'
+                    for u, label in ((cv_url, "📄 Tailored CV"), (letter_url, "✍️ Cover letter")) if u)
+    return (f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 22px;border:2px solid {BLUE};'
+            f'border-radius:14px;background:#f5f8ff"><tr><td style="padding:18px 20px">'
+            f'<span style="display:inline-block;padding:4px 12px;border-radius:20px;background:{GOLD};color:{INK};font-size:12px;'
+            f'font-weight:800;letter-spacing:.04em">⭐ TODAY\'S TOP PICK</span>'
+            f'<div style="margin-top:12px"><a href="{_a(apply_url)}" style="color:{INK};text-decoration:none;font-size:21px;'
+            f'line-height:1.3;font-weight:800">{escape(j["title"])}</a></div>'
+            f'<div style="color:{MUTED};font-size:14px;margin-top:4px">{company}{source if company else source[3:]}</div>'
+            + (f'<div style="margin-top:10px;font-size:16px;font-weight:800;color:{GREEN}">💰 {escape(pay)}</div>' if pay else "")
+            + f'<div>{"".join(_chip(m) for m in j.get("matched", []) if m != escape(pay))}</div>'
+            + button(apply_url, "View and apply")
+            + (f'<div style="margin-top:8px">{tools}</div>' if tools else "")
+            + "</td></tr></table>")
+
+
+def _mini_card(j: dict, apply_url: str = "") -> str:
+    """A small row for jobs added to reach the daily minimum."""
+    apply_url = apply_url or j["url"]
+    company = f' <span style="color:{MUTED};font-weight:400">· {escape(j["company"])}</span>' if j["company"] else ""
+    return (f'<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-top:1px solid {LINE}"><tr>'
+            f'<td style="padding:11px 0;font-size:14px"><a href="{_a(apply_url)}" style="color:{INK};text-decoration:none;font-weight:600">'
+            f'{escape(j["title"])}</a>{company}</td>'
+            f'<td align="right" style="padding:11px 0 11px 10px;white-space:nowrap"><a href="{_a(apply_url)}" style="color:{BLUE};'
+            f'font-size:14px;font-weight:700;text-decoration:none">View &rarr;</a></td></tr></table>')
+
+
 def _last_day_box(trial: dict, pay: str, n: int) -> str:
     """The trial's last morning: what membership would add to today's jobs, the price and the places left."""
     places = trial.get("places_left") or 0
@@ -228,6 +266,10 @@ def digest(jobs: list[dict], today, base_url: str, token: str, trial: dict | Non
     apps = f"{base_url}/applications/{token}"
     ask, waiting = (ask or [], waiting or []) if tracker else ([], [])
     apply = lambda j: job_link(base_url, token, j["id"]) if j.get("id") else j["url"]
+    # Opens (Oct to Nov 2026): jobs matching their own titles 5%, fillers about 2%. So their own matches come first,
+    # the best one as "Today's top pick", and the fillers last, as a short "You might also like" list.
+    own, extra = [j for j in jobs if not is_filler(j)], [j for j in jobs if is_filler(j)]
+    jobs = own + extra
     n = len(jobs)
     lines = [f"Your first job matches" if first else f"Your job matches -- {today:%a %d %b}", ""]
     if ask:
@@ -246,6 +288,10 @@ def digest(jobs: list[dict], today, base_url: str, token: str, trial: dict | Non
         lines += ["", "New today:" if jobs else ""]
     for i, j in enumerate(jobs, 1):
         company = f" at {j['company']}" if j["company"] else ""
+        if i == 1 and own:
+            lines += ["TODAY'S TOP PICK"]
+        elif i == len(own) + 1:
+            lines += ["YOU MIGHT ALSO LIKE"]
         lines += [f"{i}. {j['title']}{company}", f"   {apply(j)}"]
         if letters:
             lines += [f"   Tailored CV: {letter_link(base_url, token, j, 'cv')}", f"   Cover letter: {letter_link(base_url, token, j)}"]
@@ -272,7 +318,14 @@ def digest(jobs: list[dict], today, base_url: str, token: str, trial: dict | Non
         body += _heading("Still waiting for you") + "".join(card(j, answers(j)) for j in waiting)
         body += _heading("New today") if jobs else ""
     last_day = bool(trial) and trial["days_left"] <= 1
-    body += "".join(card(j) for j in jobs) + ((_last_day_box(trial, pay, n) if last_day else _trial_box(trial, pay)) if trial else "")
+    if own:
+        links = (letter_link(base_url, token, own[0]), letter_link(base_url, token, own[0], "cv")) if letters else ("", "")
+        body += _top_card(own[0], *links, apply_url=apply(own[0]))
+        body += (_heading("More matches for you") + "".join(card(j) for j in own[1:])) if len(own) > 1 else ""
+    if extra:
+        body += _heading("You might also like" if own else "Closest matches today")
+        body += ("".join(_mini_card(j, apply(j)) for j in extra) + '<div style="height:18px"></div>') if own else "".join(card(j) for j in extra)
+    body += ((_last_day_box(trial, pay, n) if last_day else _trial_box(trial, pay)) if trial else "")
     body += f'<p style="color:{MUTED};font-size:13px;margin:6px 0 0">💡 Apply early. {escape(FOOTER)}</p>'
     body += button(f"{base_url}/login/{token}", "Log in")
     footer = ((f'<a href="{_a(apps)}" style="color:{MUTED}">📋 My applications</a> &middot; ' if tracker else "")
