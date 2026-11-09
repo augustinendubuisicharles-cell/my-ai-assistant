@@ -129,10 +129,10 @@ export function paymentReceipt(baseUrl, token, { amount, reference, paidOn, unti
       ["Telegram alerts", "New matches during the day, so you can apply first"]]) +
     button(link, "Open my dashboard") +
     `<p style="color:${MUTED};font-size:13px;margin:6px 0 0">Paid securely through ${esc(provider || "our payment partner")}. ` +
-    `Nothing renews automatically. Not happy? Full refund within 7 days${contact ? `: write to ${esc(contact)}` : ""}.</p>`;
+    `Nothing renews automatically.${contact ? ` Questions? Write to ${esc(contact)}.` : ""}</p>`;
   return [`Payment received: you're a JobAlert member 🎉`,
     `Thank you! Your payment went through.\n\nAmount: ${naira}\nMembership: ${months} months\nActive until: ${until}\n` +
-    `Paid on: ${paidOn}\nReference: ${reference}\n\nOpen your dashboard: ${link}\n\nNothing renews automatically. Full refund within 7 days.`,
+    `Paid on: ${paidOn}\nReference: ${reference}\n\nOpen your dashboard: ${link}\n\nNothing renews automatically.`,
     layout(baseUrl, `${naira} received. Your membership runs until ${until}.`, hero("Payment received 🎉", "You're now a JobAlert member"), body)];
 }
 
