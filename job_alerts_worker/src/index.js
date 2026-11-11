@@ -151,7 +151,7 @@ export async function handle(request, env, q, later = (p) => p) {
   if (path === "/sitemap.xml") return pub("application/xml; charset=utf-8", seo.sitemap(ctx, await seo.jobs(q)));
   if (path === "/remote-jobs") return pub("text/html; charset=utf-8", seo.indexPage(ctx, await seo.jobs(q)));
   if ((m = path.match(/^\/remote-jobs\/job\/([0-9a-f]{12})$/))) {
-    const job = (await seo.jobs(q)).find((j) => j.key === m[1]);
+    const [job] = await seo.jobs(q, m[1]);
     if (!job) return msg("This job has closed", "It is no longer listed. See the newest remote jobs open to Nigerians below.",
       { status: 410, link: "/remote-jobs", linkText: "See remote jobs" });
     return pub("text/html; charset=utf-8", seo.jobPage(ctx, job));
