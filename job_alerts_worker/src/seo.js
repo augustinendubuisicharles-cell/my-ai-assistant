@@ -23,14 +23,17 @@ export const CATEGORIES = [
 const NAME = Object.fromEntries(CATEGORIES.map(([slug, name]) => [slug, name]));
 
 // One row per advert (the newest time it was sent), with a short stable key for its public page.
-export async function jobs(q) {
-  return q(`SELECT DISTINCT ON (j.url) left(md5(j.url), 12) AS key, j.title, j.company, j.url, j.location, j.pay, j.matched,
-      j.description, j.eligibility_note, coalesce(j.posted_at, j.sent_at) AS posted
+// Lists leave out the advert text (it's most of the bytes, and each page view reads every row); a key reads just that job, in full.
+export async function jobs(q, key = "") {
+  const rows = await q(`SELECT DISTINCT ON (j.url) left(md5(j.url), 12) AS key, j.title, j.company, j.url, j.location, j.pay, j.matched,
+      ${key ? "j.description, j.eligibility_note," : ""} coalesce(j.posted_at, j.sent_at) AS posted
     FROM sent_jobs j JOIN subscribers s ON s.id = j.subscriber_id
     WHERE j.sent_at > now() - interval '${DAYS} days' AND s.country IN ('', 'Nigeria') AND j.url ~ '^https?://'
       AND coalesce(j.eligibility, '') <> 'low'
       AND j.job_key NOT LIKE 'manual:%'  -- jobs the owner sent by hand to one member stay private
-    ORDER BY j.url, j.sent_at DESC`);
+      ${key ? "AND left(md5(j.url), 12) = $1" : ""}
+    ORDER BY j.url, j.sent_at DESC`, key ? [key] : []);
+  return rows;
 }
 
 export const inCategory = (slug, list) => {
